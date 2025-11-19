@@ -1,0 +1,5 @@
+{
+  "c": ["app/layout", "app/page", "webpack"],
+  "r": [],
+  "m": ["(app-pages-browser)/./node_modules/lucide-react/dist/esm/icons/dog.js"]
+}

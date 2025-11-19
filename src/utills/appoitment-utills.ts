@@ -1,101 +1,98 @@
 import {
-    Appointment,
-    AppointmentPeriod,
-    AppointmentPeriodDay,
-} from '@/types/appointment';
+  Appointment,
+  AppointmentPeriod,
+  AppointmentPeriodDay,
+} from "@/types/appointment";
+import { formatTimeSaoPaulo, getSaoPauloTime } from "@/utills/datetime";
 
 interface AppointmentPrisma {
-    id: string;
-    petName: string;
-    description: string;
-    tutorName: string;
-    phone: string;
-    scheduleAt: Date;
-}
-
-/* ===== Helpers de timezone (São Paulo) ===== */
-
-const SAO_PAULO_TIMEZONE = 'America/Sao_Paulo';
-
-function getSaoPauloHour(date: Date): number {
-    const formatter = new Intl.DateTimeFormat('pt-BR', {
-        timeZone: SAO_PAULO_TIMEZONE,
-        hour: 'numeric',
-        hour12: false,
-    });
-
-    const parts = formatter.formatToParts(date);
-    const hourPart = parts.find((p) => p.type === 'hour');
-
-    // fallback só por segurança
-    if (!hourPart) {
-        const raw = date.getUTCHours() - 3; // SP geralmente UTC-3
-        return ((raw % 24) + 24) % 24;
-    }
-
-    return Number(hourPart.value);
-}
-
-function formatTimeSaoPaulo(date: Date): string {
-    return new Intl.DateTimeFormat('pt-BR', {
-        timeZone: SAO_PAULO_TIMEZONE,
-        hour: '2-digit',
-        minute: '2-digit',
-    }).format(date);
+  id: string;
+  description: string;
+  clientName: string;
+  phone: string;
+  scheduleAt: Date;
 }
 
 /* ===== Periodização (manhã / tarde / noite) ===== */
+/**
+ * Regra para os CARDS:
+ * - MANHÃ: agendamentos das 09:00 até 12:30 (inclusive)
+ * - TARDE: agendamentos das 13:00 até 18:30 (inclusive)
+ * - NOITE: agendamentos das 19:00 até 21:00 (inclusive)
+ *
+ * Obs.: a regra de PODER AGENDAR é contínua 09:00–21:00 (definida em isWithinBusinessHours).
+ */
+export const getPeriod = (scheduleAt: Date): AppointmentPeriodDay => {
+  const { hour, minute } = getSaoPauloTime(scheduleAt);
+  const totalMinutes = hour * 60 + minute;
 
-export const getPeriod = (hour: number): AppointmentPeriodDay => {
-    if (hour >= 9 && hour < 12) return 'morning';
-    if (hour >= 13 && hour < 18) return 'afternoon';
-    return 'evening';
+  const nineAM = 9 * 60;
+  const twelveThirty = 12 * 60 + 30;
+  const onePM = 13 * 60;
+  const sixThirtyPM = 18 * 60 + 30;
+  const sevenPM = 19 * 60;
+  const ninePM = 21 * 60;
+
+  // Manhã: 09:00 – 12:30
+  if (totalMinutes >= nineAM && totalMinutes <= twelveThirty) {
+    return "morning";
+  }
+
+  // Tarde: 13:00 – 18:30
+  if (totalMinutes >= onePM && totalMinutes <= sixThirtyPM) {
+    return "afternoon";
+  }
+
+  // Noite: 19:00 – 21:00
+  if (totalMinutes >= sevenPM && totalMinutes <= ninePM) {
+    return "evening";
+  }
+
+  // Fora dos horários de funcionamento (09h–21h) cai aqui como "evening" só para não quebrar,
+  // mas na prática não deve acontecer porque a validação já barra antes.
+  return "evening";
 };
 
 export function groupAppointmentByPeriod(
-    appointments: AppointmentPrisma[]
+  appointments: AppointmentPrisma[],
 ): AppointmentPeriod[] {
-    const transformedAppointments: Appointment[] = appointments?.map((apt) => {
-        // Hora já convertida para fuso de São Paulo
-        const saoPauloHour = getSaoPauloHour(apt.scheduleAt);
+  const transformedAppointments: Appointment[] = appointments?.map((apt) => {
+    return {
+      ...apt,
+      time: formatTimeSaoPaulo(apt.scheduleAt), // horário correto em SP
+      service: apt.description,
+      period: getPeriod(apt.scheduleAt), // classifica usando hora+min de São Paulo
+    };
+  });
 
-        return {
-            ...apt,
-            time: formatTimeSaoPaulo(apt.scheduleAt), // mostra 09:00 certinho
-            service: apt.description,
-            period: getPeriod(saoPauloHour), // classifica usando hora de São Paulo
-        };
-    });
+  const morningAppointments = transformedAppointments.filter(
+    (apt) => apt.period === "morning",
+  );
+  const afternoonAppointments = transformedAppointments.filter(
+    (apt) => apt.period === "afternoon",
+  );
+  const eveningAppointments = transformedAppointments.filter(
+    (apt) => apt.period === "evening",
+  );
 
-    const morningAppointments = transformedAppointments.filter(
-        (apt) => apt.period === 'morning'
-    );
-    const afternoonAppointments = transformedAppointments.filter(
-        (apt) => apt.period === 'afternoon'
-    );
-    const eveningAppointments = transformedAppointments.filter(
-        (apt) => apt.period === 'evening'
-    );
-
-    return [
-        {
-            title: 'Manhã',
-            type: 'morning',
-            timeRange: '09h-12h',
-            appointments: morningAppointments,
-        },
-        {
-            title: 'Tarde',
-            type: 'afternoon',
-            timeRange: '13h-18h',
-            appointments: afternoonAppointments,
-        },
-        {
-            title: 'Noite',
-            type: 'evening',
-            // se quiser alinhar com a lógica e cobrir 18h também, pode mudar para '18h-21h'
-            timeRange: '19h-21h',
-            appointments: eveningAppointments,
-        },
-    ];
+  return [
+    {
+      title: "Manhã",
+      type: "morning",
+      timeRange: "09h - 13h",
+      appointments: morningAppointments,
+    },
+    {
+      title: "Tarde",
+      type: "afternoon",
+      timeRange: "13h - 19h",
+      appointments: afternoonAppointments,
+    },
+    {
+      title: "Noite",
+      type: "evening",
+      timeRange: "19h - 21h",
+      appointments: eveningAppointments,
+    },
+  ];
 }

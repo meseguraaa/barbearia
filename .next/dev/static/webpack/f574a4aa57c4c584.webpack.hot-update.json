@@ -1,0 +1,5 @@
+{
+  "c": ["app/layout", "app/page", "webpack"],
+  "r": [],
+  "m": ["(app-pages-browser)/./src/components/ui/textarea.tsx"]
+}

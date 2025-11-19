@@ -1,0 +1,698 @@
+[00:00:03.464] Server  LOG      ✓ Ready in 3.2s
+[00:00:08.632] Server  LOG      ○ Compiling / ...
+[00:00:13.474] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:02:07.311] Server  ERROR    ⨯ PrismaClientKnownRequestError: 
+Invalid `prisma.appointment.findMany()` invocation:
+
+
+The column `appointments.tutorName` does not exist in the current database.
+[00:02:07.715] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:02:07.715] Browser ERROR   uncaughtError: PrismaClientKnownRequestError: 
+Invalid `prisma.appointment.findMany()` invocation:
+
+
+The column `appointments.tutorName` does not exist in the current database.
+[00:02:08.119] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:02:09.142] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:09:08.366] Server  ERROR    ⨯ PrismaClientValidationError: 
+Invalid `prisma.appointment.findMany()` invocation:
+
+{
+  where: {
+    scheduleAt: {
+      gte: new Date("2025-11-18T03:00:00.000Z"),
+      lte: new Date("2025-11-19T02:59:59.999Z")
+    }
+  },
+  orderBy: {
+    scheduleAt: "asc"
+  },
+  select: {
+    id: true,
+    clientName: true,
+    phone: true,
+    description: true,
+    scheduleAt: true,
+    petName: true,
+    ~~~~~~~
+    tutorName: true
+  }
+}
+
+Unknown field `petName` for select statement on model `Appointment`. Available options are marked with ?.
+[00:09:08.944] Browser ERROR   uncaughtError: PrismaClientValidationError: 
+Invalid `prisma.appointment.findMany()` invocation:
+
+{
+  where: {
+    scheduleAt: {
+      gte: new Date("2025-11-18T03:00:00.000Z"),
+      lte: new Date("2025-11-19T02:59:59.999Z")
+    }
+  },
+  orderBy: {
+    scheduleAt: "asc"
+  },
+  select: {
+    id: true,
+    clientName: true,
+    phone: true,
+    description: true,
+    scheduleAt: true,
+    petName: true,
+    ~~~~~~~
+    tutorName: true
+  }
+}
+
+Unknown field `petName` for select statement on model `Appointment`. Available options are marked with ?.
+[00:09:15.102] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:09:15.824] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:22:45.078] Server  ERROR    ⨯ ReferenceError: Bar is not defined
+[00:22:45.308] Browser ERROR   uncaughtError: ReferenceError: Bar is not defined
+[00:22:48.329] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:22:48.940] Server  ERROR    ⨯ ReferenceError: Bar is not defined
+[00:22:49.674] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:22:49.674] Browser ERROR   uncaughtError: ReferenceError: Bar is not defined
+[00:22:51.102] Server  ERROR    ⨯ ReferenceError: Barber is not defined
+[00:22:51.495] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:22:51.495] Browser ERROR   uncaughtError: ReferenceError: Barber is not defined
+[00:22:55.207] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:22:55.703] Server  ERROR    ⨯ ReferenceError: Barb is not defined
+[00:22:56.448] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:22:56.448] Browser ERROR   uncaughtError: ReferenceError: Barb is not defined
+[00:22:58.973] Browser ERROR   ./src/components/logo/logo.tsx
+Error:   × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·           ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·            ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·       ─
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Unterminated regexp literal
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/logo/logo.tsx
+./src/components/header/header.tsx
+./src/components/header/index.ts
+./src/app/layout.tsx
+[00:22:59.697] Server  ERROR    ⨯ ./src/components/logo/logo.tsx
+Error:   × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·           ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·            ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·       ─
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Unterminated regexp literal
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/logo/logo.tsx
+./src/components/header/header.tsx
+./src/components/header/index.ts
+./src/app/layout.tsx
+[00:23:02.285] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:23:03.757] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:23:04.016] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:23:04.364] Server  ERROR    ⨯ ./src/components/logo/logo.tsx
+Error:   × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·           ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·            ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·       ─
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Unterminated regexp literal
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/logo/logo.tsx
+./src/components/header/header.tsx
+./src/components/header/index.ts
+./src/app/layout.tsx
+[00:23:04.394] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:23:04.495] Server  ERROR    ⨯ ./src/components/logo/logo.tsx
+Error:   × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·           ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·            ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·       ─
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Unterminated regexp literal
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/logo/logo.tsx
+./src/components/header/header.tsx
+./src/components/header/index.ts
+./src/app/layout.tsx
+[00:23:04.569] Browser ERROR   ./src/components/logo/logo.tsx
+Error:   × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·           ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·            ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·       ─
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Unterminated regexp literal
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/logo/logo.tsx
+./src/components/header/header.tsx
+./src/components/header/index.ts
+./src/app/layout.tsx
+[00:23:04.662] Browser ERROR   ./src/components/logo/logo.tsx
+Error:   × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·           ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·            ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·       ─
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Unterminated regexp literal
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/logo/logo.tsx
+./src/components/header/header.tsx
+./src/components/header/index.ts
+./src/app/layout.tsx
+[00:23:05.548] Browser ERROR   uncaughtError: ModuleBuildError: Module build failed (from ./node_modules/next/dist/build/webpack/loaders/next-swc-loader.js):
+Error:   × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·           ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·            ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·       ─
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Unterminated regexp literal
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+
+
+Caused by:
+    Syntax Error
+[00:23:05.656] Browser ERROR   ./src/components/logo/logo.tsx
+Error:   × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·           ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
+  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+    ·            ─
+ 12 │       </div>
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·       ─
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Unterminated regexp literal
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+  × Expression expected
+    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
+  9 │     >
+ 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+ 11 │         < />
+ 12 │       </div>
+    ·        ─────
+ 13 │       <span className="text-label-large-size text-content-brand font-bold">
+ 14 │         BarberShop
+ 15 │       </span>
+    ╰────
+
+Caused by:
+    Syntax Error
+[00:23:07.439] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:23:08.549] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:23:09.940] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:23:10.565] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:23:11.285] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:23:37.416] Server  ERROR    ⨯ ReferenceError: Scissors is not defined
+[00:23:37.579] Browser ERROR   uncaughtError: ReferenceError: Scissors is not defined
+[00:23:41.834] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[00:23:42.484] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:24:55.043] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[00:46:19.971] Browser ERROR   ./src/utills/appoitment-utills.ts:6:1
+Module not found: Can't resolve '@/utils/datetime'
+  4 |     AppointmentPeriodDay,
+  5 | } from '@/types/appointment';
+> 6 | import { formatTimeSaoPaulo, getSaoPauloTime } from '@/utils/datetime';
+    | ^
+  7 |
+  8 | interface AppointmentPrisma {
+  9 |     id: string;
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+./src/app/page.tsx
+[00:46:20.034] Server  ERROR    ⨯ ./src/utills/appoitment-utills.ts:6:1
+Module not found: Can't resolve '@/utils/datetime'
+  4 |     AppointmentPeriodDay,
+  5 | } from '@/types/appointment';
+> 6 | import { formatTimeSaoPaulo, getSaoPauloTime } from '@/utils/datetime';
+    | ^
+  7 |
+  8 | interface AppointmentPrisma {
+  9 |     id: string;
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+./src/app/page.tsx
+[00:46:20.671] Server  ERROR    ⨯ ./src/utills/appoitment-utills.ts:6:1
+Module not found: Can't resolve '@/utils/datetime'
+  4 |     AppointmentPeriodDay,
+  5 | } from '@/types/appointment';
+> 6 | import { formatTimeSaoPaulo, getSaoPauloTime } from '@/utils/datetime';
+    | ^
+  7 |
+  8 | interface AppointmentPrisma {
+  9 |     id: string;
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+./src/app/page.tsx
+[00:46:20.734] Browser ERROR   ./src/utills/appoitment-utills.ts:6:1
+Module not found: Can't resolve '@/utils/datetime'
+  4 |     AppointmentPeriodDay,
+  5 | } from '@/types/appointment';
+> 6 | import { formatTimeSaoPaulo, getSaoPauloTime } from '@/utils/datetime';
+    | ^
+  7 |
+  8 | interface AppointmentPrisma {
+  9 |     id: string;
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+./src/app/page.tsx
+[00:46:21.136] Browser ERROR   uncaughtError: Error: Module not found: Can't resolve '@/utils/datetime'
+  4 |     AppointmentPeriodDay,
+  5 | } from '@/types/appointment';
+> 6 | import { formatTimeSaoPaulo, getSaoPauloTime } from '@/utils/datetime';
+    | ^
+  7 |
+  8 | interface AppointmentPrisma {
+  9 |     id: string;
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+./src/app/page.tsx
+[00:46:21.943] Browser ERROR   ./src/utills/appoitment-utills.ts:6:1
+Module not found: Can't resolve '@/utils/datetime'
+  4 |     AppointmentPeriodDay,
+  5 | } from '@/types/appointment';
+> 6 | import { formatTimeSaoPaulo, getSaoPauloTime } from '@/utils/datetime';
+    | ^
+  7 |
+  8 | interface AppointmentPrisma {
+  9 |     id: string;
+
+https://nextjs.org/docs/messages/module-not-found
+
+Import trace for requested module:
+./src/app/page.tsx
+[00:46:23.052] Server  LOG      ○ Compiling /_error ...
+[00:46:35.979] Server  WARN     ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:46:36.236] Server  WARN     ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:46:36.681] Server  WARN     ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:46:37.014] Server  WARN     ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[00:46:37.796] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:47:31.816] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[00:47:47.266] Browser WARN    Select is changing from controlled to uncontrolled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[00:48:02.531] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.

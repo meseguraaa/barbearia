@@ -1,0 +1,45 @@
+{
+  "node": {
+    "402f7a9fc182bef7ea118459d055eadda903997207": {
+      "workers": {
+        "app/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Factions.ts%22%2C%5B%7B%22id%22%3A%22402f7a9fc182bef7ea118459d055eadda903997207%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409165f004d49ed1f6a52fea4d524fa896f2274bc6%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Factions.ts%22%7D%2C%7B%22id%22%3A%226065122acde4292eed22caf50110ec14f81016b0b4%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/page": "action-browser"
+      },
+      "filename": "app/actions.ts",
+      "exportedName": "createAppointment"
+    },
+    "409165f004d49ed1f6a52fea4d524fa896f2274bc6": {
+      "workers": {
+        "app/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Factions.ts%22%2C%5B%7B%22id%22%3A%22402f7a9fc182bef7ea118459d055eadda903997207%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409165f004d49ed1f6a52fea4d524fa896f2274bc6%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Factions.ts%22%7D%2C%7B%22id%22%3A%226065122acde4292eed22caf50110ec14f81016b0b4%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/page": "action-browser"
+      },
+      "filename": "app/actions.ts",
+      "exportedName": "deleteAppointment"
+    },
+    "6065122acde4292eed22caf50110ec14f81016b0b4": {
+      "workers": {
+        "app/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Factions.ts%22%2C%5B%7B%22id%22%3A%22402f7a9fc182bef7ea118459d055eadda903997207%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409165f004d49ed1f6a52fea4d524fa896f2274bc6%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Factions.ts%22%7D%2C%7B%22id%22%3A%226065122acde4292eed22caf50110ec14f81016b0b4%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": true
+        }
+      },
+      "layer": {
+        "app/page": "action-browser"
+      },
+      "filename": "app/actions.ts",
+      "exportedName": "updateAppointment"
+    }
+  },
+  "edge": {},
+  "encryptionKey": "0mJI7KtPOK7TspV/0V8lcq4qsP9hJIE4i/P/kezOUc4="
+}
