@@ -10,8 +10,7 @@ datasource db {
 
 model Appointment {
   id          String   @id @default(cuid())
-  tutorName   String
-  petName     String
+  clientName  String
   phone       String
   description String
   scheduleAt  DateTime
