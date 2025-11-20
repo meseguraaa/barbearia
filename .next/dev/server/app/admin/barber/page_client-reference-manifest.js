@@ -142,6 +142,14 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         async: false,
       },
     },
+    "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx": {
+      "*": {
+        id: "(ssr)/./src/components/admin-nav/admin-nav.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
   },
   edgeSSRModuleMapping: {},
   clientModules: {
@@ -351,6 +359,13 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         ],
         async: false,
       },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/admin-nav/admin-nav.tsx":
+      {
+        id: "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx",
+        name: "*",
+        chunks: ["app/admin/layout", "static/chunks/app/admin/layout.js"],
+        async: false,
+      },
   },
   entryCSSFiles: {
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/": [],
@@ -358,6 +373,8 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
       { inlined: false, path: "static/css/app/layout.css" },
     ],
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/page": [],
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/admin/layout":
+      [],
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/admin/barber/page":
       [],
   },
@@ -505,6 +522,14 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
     "(app-pages-browser)/./src/components/ui/dialog.tsx": {
       "*": {
         id: "(rsc)/./src/components/ui/dialog.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
+    "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx": {
+      "*": {
+        id: "(rsc)/./src/components/admin-nav/admin-nav.tsx",
         name: "*",
         chunks: [],
         async: false,
