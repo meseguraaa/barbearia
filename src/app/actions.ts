@@ -36,7 +36,20 @@ function getSaoPauloTime(date: Date): { hour: number; minute: number } {
 }
 
 /* ---------------------------------------------------------
- * NOVA REGRA: Pode agendar das 09:00 até 21:00 (contínuo)
+ * NOVA REGRA 1: não permitir agendamento no passado
+ * ---------------------------------------------------------*/
+function validateNotInPast(scheduleAt: Date): string | null {
+  const now = new Date();
+
+  if (scheduleAt.getTime() < now.getTime()) {
+    return "Não é possível agendar para um horário no passado";
+  }
+
+  return null;
+}
+
+/* ---------------------------------------------------------
+ * NOVA REGRA 2: Pode agendar das 09:00 até 21:00 (contínuo)
  * ---------------------------------------------------------*/
 function validateBusinessHours(scheduleAt: Date): string | null {
   const { hour, minute } = getSaoPauloTime(scheduleAt);
@@ -96,7 +109,11 @@ export async function createAppointment(data: AppointmentData) {
   const parsed = appointmentSchema.parse(data);
   const { scheduleAt } = parsed;
 
-  // 🟢 NOVA VALIDAÇÃO
+  // 1️⃣ não deixar agendar no passado
+  const pastError = validateNotInPast(scheduleAt);
+  if (pastError) return { error: pastError };
+
+  // 2️⃣ respeitar faixa 09h–21h
   const scheduleError = validateBusinessHours(scheduleAt);
   if (scheduleError) return { error: scheduleError };
 
@@ -115,7 +132,11 @@ export async function updateAppointment(id: string, data: AppointmentData) {
   const parsed = appointmentSchema.parse(data);
   const { scheduleAt } = parsed;
 
-  // 🟢 NOVA VALIDAÇÃO
+  // 1️⃣ não deixar reagendar para o passado
+  const pastError = validateNotInPast(scheduleAt);
+  if (pastError) return { error: pastError };
+
+  // 2️⃣ respeitar faixa 09h–21h
   const scheduleError = validateBusinessHours(scheduleAt);
   if (scheduleError) return { error: scheduleError };
 

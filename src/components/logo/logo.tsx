@@ -5,12 +5,12 @@ export const Logo = () => {
   return (
     <Link
       href="/"
-      className="flex items-center justify-center gap-4 bg-[#2e2c30] w-full p-3 rounded-b-lg"
+      className="flex items-center justify-center gap-4 bg-background-brand w-full p-3 rounded-b-lg"
     >
-      <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
+      <div className="w-8 h-8 rounded flex items-center justify-center">
         <Scissors />
       </div>
-      <span className="text-label-large-size text-content-brand font-bold">
+      <span className="text-label-large-size text-amber-50 font-bold">
         BarberShop
       </span>
     </Link>

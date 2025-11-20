@@ -30,12 +30,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} ${interTight.variable} antialiased`}>
+        <Toaster position="top-right" richColors /> {/* único Toaster da app */}
         <Header />
         <div className="max-w-3xl mx-auto">
-          <main className="flex-1 flex flex-col mt-12">
-            {children}
-            <Toaster position="top-right" />
-          </main>
+          <main className="flex-1 flex flex-col mt-12">{children}</main>
         </div>
       </body>
     </html>

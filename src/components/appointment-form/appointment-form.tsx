@@ -15,7 +15,6 @@ import {
   FormField,
   FormItem,
   FormLabel,
-  FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import z from "zod";
@@ -31,7 +30,15 @@ import {
   User,
 } from "lucide-react";
 import { IMaskInput } from "react-imask";
-import { format, setHours, setMinutes, startOfToday } from "date-fns";
+import {
+  format,
+  setHours,
+  setMinutes,
+  startOfToday,
+  isSameDay,
+  getHours,
+  getMinutes,
+} from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
 import { Calendar } from "../ui/calendar";
@@ -48,11 +55,44 @@ import { useEffect, useState } from "react";
 import { Appointment } from "@/types/appointment";
 
 const SERVICE_OPTIONS = [
-  "BARBA",
-  "BARBA & CABELO",
-  "CABELO NA TESOURA",
-  "CABELO NA MÁQUINA",
+  "Barba - R$80,00",
+  "Barba & Cabelo - R$120,00",
+  "Cabelo na tesoura - R$100,00",
+  "Cabelo na máquina - R$90,00",
 ] as const;
+
+// ⏱ Duração de cada serviço (em minutos)
+const SERVICE_DURATION_MAP: Record<(typeof SERVICE_OPTIONS)[number], number> = {
+  "Barba - R$80,00": 30,
+  "Barba & Cabelo - R$120,00": 60,
+  "Cabelo na tesoura - R$100,00": 60,
+  "Cabelo na máquina - R$90,00": 30,
+};
+
+/**
+ * Função mais robusta para descobrir a duração do serviço
+ * a partir da descrição salva no banco.
+ */
+const getServiceDuration = (description?: string): number => {
+  if (!description) return 30;
+
+  // Garante comparação sem ruído de espaços etc.
+  const normalized = description.trim().toLowerCase();
+
+  if (normalized.startsWith("barba & cabelo")) return 60;
+  if (normalized.startsWith("cabelo na tesoura")) return 60;
+  if (normalized.startsWith("barba - r$80")) return 30;
+  if (normalized.startsWith("cabelo na máquina")) return 30;
+
+  // fallback usando o mapa original quando for exatamente o enum
+  const key = description as (typeof SERVICE_OPTIONS)[number];
+  if (key in SERVICE_DURATION_MAP) {
+    return SERVICE_DURATION_MAP[key];
+  }
+
+  // fallback final
+  return 30;
+};
 
 const appointmentFormSchema = z
   .object({
@@ -90,11 +130,17 @@ type AppointFormValues = z.infer<typeof appointmentFormSchema>;
 type AppointmentFormProps = {
   appointment?: Appointment;
   children?: React.ReactNode;
+  /**
+   * Lista de agendamentos já existentes (do dia atual ou vários dias).
+   * A função interna filtra por data.
+   */
+  appointments?: Appointment[];
 };
 
 export const AppointmentForm = ({
   appointment,
   children,
+  appointments = [],
 }: AppointmentFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -146,6 +192,21 @@ export const AppointmentForm = ({
     form.reset();
   };
 
+  // Handler que transforma erros de validação em toast
+  const handleSubmit = form.handleSubmit(onSubmit, (errors) => {
+    const firstError = Object.values(errors)[0];
+
+    if (!firstError) return;
+
+    const message = firstError?.message;
+
+    if (message) {
+      toast.error(String(message));
+    } else {
+      toast.error("Verifique os campos obrigatórios.");
+    }
+  });
+
   useEffect(() => {
     if (!appointment) {
       form.reset({
@@ -170,6 +231,21 @@ export const AppointmentForm = ({
     });
   }, [appointment, form]);
 
+  // 🕒 Observa data e serviço selecionados
+  const selectedDate = form.watch("scheduleAt");
+  const selectedService = form.watch("description");
+
+  // 🕒 Calcula horários disponíveis com base em:
+  // - data selecionada
+  // - serviço selecionado (duração)
+  // - agendamentos existentes (não pode sobrepor)
+  const availableTimes = getAvailableTimes({
+    date: selectedDate,
+    service: selectedService,
+    appointments,
+    currentAppointmentId: appointment?.id,
+  });
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {children && <DialogTrigger asChild>{children}</DialogTrigger>}
@@ -187,8 +263,8 @@ export const AppointmentForm = ({
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            {/* SEU NOME (antes: Nome do tutor) */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* SEU NOME */}
             <FormField
               control={form.control}
               name="clientName"
@@ -210,7 +286,6 @@ export const AppointmentForm = ({
                       />
                     </div>
                   </FormControl>
-                  <FormMessage />
                 </FormItem>
               )}
             />
@@ -238,12 +313,11 @@ export const AppointmentForm = ({
                       />
                     </div>
                   </FormControl>
-                  <FormMessage />
                 </FormItem>
               )}
             />
 
-            {/* DESCRIÇÃO DO SERVIÇO -> COMBO BOX */}
+            {/* DESCRIÇÃO DO SERVIÇO */}
             <FormField
               control={form.control}
               name="description"
@@ -253,7 +327,14 @@ export const AppointmentForm = ({
                     Descrição do serviço
                   </FormLabel>
                   <FormControl>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        // Quando mudar o serviço, limpamos a hora pra forçar o usuário a escolher de novo
+                        form.setValue("time", "");
+                      }}
+                      value={field.value}
+                    >
                       <SelectTrigger>
                         <div className="flex items-center gap-2">
                           <Scissors className="h-4 w-4 text-content-brand" />
@@ -269,7 +350,6 @@ export const AppointmentForm = ({
                       </SelectContent>
                     </Select>
                   </FormControl>
-                  <FormMessage />
                 </FormItem>
               )}
             />
@@ -313,12 +393,15 @@ export const AppointmentForm = ({
                         <Calendar
                           mode="single"
                           selected={field.value}
-                          onSelect={field.onChange}
+                          onSelect={(date) => {
+                            field.onChange(date);
+                            // Ao mudar a data, limpamos o horário selecionado
+                            form.setValue("time", "");
+                          }}
                           disabled={(date) => date < startOfToday()}
                         />
                       </PopoverContent>
                     </Popover>
-                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -336,23 +419,41 @@ export const AppointmentForm = ({
                       <Select
                         onValueChange={field.onChange}
                         value={field.value}
+                        disabled={!selectedDate || !selectedService}
                       >
                         <SelectTrigger>
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4 text-content-brand" />
-                            <SelectValue placeholder="--:-- --" />
+                            <SelectValue
+                              placeholder={
+                                !selectedDate
+                                  ? "Selecione uma data"
+                                  : !selectedService
+                                    ? "Selecione um serviço"
+                                    : "Selecione um horário"
+                              }
+                            />
                           </div>
                         </SelectTrigger>
                         <SelectContent>
-                          {TIME_OPTIONS.map((time) => (
-                            <SelectItem key={time} value={time}>
-                              {time}
+                          {!selectedDate || !selectedService ? (
+                            <SelectItem disabled value="no-selection">
+                              Selecione a data e o serviço
                             </SelectItem>
-                          ))}
+                          ) : availableTimes.length === 0 ? (
+                            <SelectItem disabled value="no-times">
+                              Sem horários disponíveis
+                            </SelectItem>
+                          ) : (
+                            availableTimes.map((time) => (
+                              <SelectItem key={time} value={time}>
+                                {time}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </FormControl>
-                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -394,3 +495,77 @@ const generateTimeOptions = (): string[] => {
 };
 
 const TIME_OPTIONS = generateTimeOptions();
+
+// 🔍 Calcula horários disponíveis considerando:
+// - data selecionada
+// - serviço selecionado (duração)
+// - agendamentos existentes (sem sobrepor)
+// - horários passados no dia de hoje
+const getAvailableTimes = (params: {
+  date?: Date | null;
+  service?: AppointFormValues["description"] | undefined;
+  appointments: Appointment[];
+  currentAppointmentId?: string;
+}): string[] => {
+  const { date, service, appointments, currentAppointmentId } = params;
+
+  if (!date || !service) return [];
+
+  const now = new Date();
+
+  // Duração do serviço selecionado
+  const selectedDuration = getServiceDuration(service);
+
+  let baseTimes = [...TIME_OPTIONS];
+
+  // Se for hoje, remove horários que já passaram
+  if (isSameDay(date, now)) {
+    const currentMinutes = getHours(now) * 60 + getMinutes(now);
+
+    baseTimes = baseTimes.filter((time) => {
+      const [hourStr, minuteStr] = time.split(":");
+      const hour = Number(hourStr);
+      const minute = Number(minuteStr);
+      const timeMinutes = hour * 60 + minute;
+
+      return timeMinutes > currentMinutes;
+    });
+  }
+
+  // Filtra agendamentos só desse dia
+  const dayAppointments = appointments.filter((appt) =>
+    isSameDay(new Date(appt.scheduleAt), date),
+  );
+
+  // Remove horários que colidem com qualquer agendamento existente
+  const availableTimes = baseTimes.filter((time) => {
+    const [hourStr, minuteStr] = time.split(":");
+    const hour = Number(hourStr);
+    const minute = Number(minuteStr);
+    const candidateStart = hour * 60 + minute;
+    const candidateEnd = candidateStart + selectedDuration;
+
+    for (const appt of dayAppointments) {
+      // Ignora o próprio agendamento quando estiver editando
+      if (currentAppointmentId && appt.id === currentAppointmentId) {
+        continue;
+      }
+
+      const apptDate = new Date(appt.scheduleAt);
+      const apptStart = getHours(apptDate) * 60 + getMinutes(apptDate);
+
+      const apptDuration = getServiceDuration(appt.description);
+      const apptEnd = apptStart + apptDuration;
+
+      const overlap = candidateStart < apptEnd && apptStart < candidateEnd;
+
+      if (overlap) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  return availableTimes;
+};
