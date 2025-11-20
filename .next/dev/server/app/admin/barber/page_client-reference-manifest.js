@@ -18,19 +18,19 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         async: false,
       },
     },
-    "(app-pages-browser)/./src/components/appointment-actions/appointment-actions.tsx":
+    "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx":
       {
         "*": {
-          id: "(ssr)/./src/components/appointment-actions/appointment-actions.tsx",
+          id: "(ssr)/./src/components/appointment-form/appointment-form.tsx",
           name: "*",
           chunks: [],
           async: false,
         },
       },
-    "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx":
+    "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx":
       {
         "*": {
-          id: "(ssr)/./src/components/appointment-form/appointment-form.tsx",
+          id: "(ssr)/./src/components/appoitment-card/appoitment-card.tsx",
           name: "*",
           chunks: [],
           async: false,
@@ -125,6 +125,15 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
           async: false,
         },
       },
+    "(app-pages-browser)/./src/components/appointment-actions/appointment-actions.tsx":
+      {
+        "*": {
+          id: "(ssr)/./src/components/appointment-actions/appointment-actions.tsx",
+          name: "*",
+          chunks: [],
+          async: false,
+        },
+      },
     "(app-pages-browser)/./src/components/ui/dialog.tsx": {
       "*": {
         id: "(ssr)/./src/components/ui/dialog.tsx",
@@ -133,15 +142,6 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         async: false,
       },
     },
-    "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx":
-      {
-        "*": {
-          id: "(ssr)/./src/components/appoitment-card/appoitment-card.tsx",
-          name: "*",
-          chunks: [],
-          async: false,
-        },
-      },
   },
   edgeSSRModuleMapping: {},
   clientModules: {
@@ -187,16 +187,16 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         chunks: ["app/layout", "static/chunks/app/layout.js"],
         async: false,
       },
-    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-actions/appointment-actions.tsx":
-      {
-        id: "(app-pages-browser)/./src/components/appointment-actions/appointment-actions.tsx",
-        name: "*",
-        chunks: [],
-        async: false,
-      },
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx":
       {
         id: "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx",
+        name: "*",
+        chunks: ["app/page", "static/chunks/app/page.js"],
+        async: false,
+      },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appoitment-card/appoitment-card.tsx":
+      {
+        id: "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx",
         name: "*",
         chunks: ["app/page", "static/chunks/app/page.js"],
         async: false,
@@ -334,6 +334,13 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         chunks: ["app-pages-internals", "static/chunks/app-pages-internals.js"],
         async: false,
       },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-actions/appointment-actions.tsx":
+      {
+        id: "(app-pages-browser)/./src/components/appointment-actions/appointment-actions.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/ui/dialog.tsx":
       {
         id: "(app-pages-browser)/./src/components/ui/dialog.tsx",
@@ -342,13 +349,6 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
           "app/admin/barber/page",
           "static/chunks/app/admin/barber/page.js",
         ],
-        async: false,
-      },
-    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appoitment-card/appoitment-card.tsx":
-      {
-        id: "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx",
-        name: "*",
-        chunks: ["app/page", "static/chunks/app/page.js"],
         async: false,
       },
   },
@@ -386,19 +386,19 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         async: false,
       },
     },
-    "(app-pages-browser)/./src/components/appointment-actions/appointment-actions.tsx":
+    "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx":
       {
         "*": {
-          id: "(rsc)/./src/components/appointment-actions/appointment-actions.tsx",
+          id: "(rsc)/./src/components/appointment-form/appointment-form.tsx",
           name: "*",
           chunks: [],
           async: false,
         },
       },
-    "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx":
+    "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx":
       {
         "*": {
-          id: "(rsc)/./src/components/appointment-form/appointment-form.tsx",
+          id: "(rsc)/./src/components/appoitment-card/appoitment-card.tsx",
           name: "*",
           chunks: [],
           async: false,
@@ -493,6 +493,15 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
           async: false,
         },
       },
+    "(app-pages-browser)/./src/components/appointment-actions/appointment-actions.tsx":
+      {
+        "*": {
+          id: "(rsc)/./src/components/appointment-actions/appointment-actions.tsx",
+          name: "*",
+          chunks: [],
+          async: false,
+        },
+      },
     "(app-pages-browser)/./src/components/ui/dialog.tsx": {
       "*": {
         id: "(rsc)/./src/components/ui/dialog.tsx",
@@ -501,15 +510,6 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         async: false,
       },
     },
-    "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx":
-      {
-        "*": {
-          id: "(rsc)/./src/components/appoitment-card/appoitment-card.tsx",
-          name: "*",
-          chunks: [],
-          async: false,
-        },
-      },
   },
   edgeRscModuleMapping: {},
 };

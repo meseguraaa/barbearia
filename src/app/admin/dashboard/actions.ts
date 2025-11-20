@@ -153,6 +153,7 @@ export async function createAppointment(data: AppointmentData) {
       data: {
         ...parsed,
         clientId,
+        status: "PENDING", // 👈 garante status inicial
       },
     });
   }, "Falha ao criar o agendamento");
@@ -181,6 +182,34 @@ export async function updateAppointment(id: string, data: AppointmentData) {
       data: parsed,
     });
   }, "Falha ao atualizar o agendamento");
+}
+
+/* ---------------------------------------------------------
+ * CONCLUDE (DONE)
+ * ---------------------------------------------------------*/
+export async function concludeAppointment(id: string) {
+  return withAppointmentMutation(async () => {
+    await prisma.appointment.update({
+      where: { id },
+      data: {
+        status: "DONE",
+      },
+    });
+  }, "Falha ao concluir o agendamento");
+}
+
+/* ---------------------------------------------------------
+ * CANCEL (CANCELED)
+ * ---------------------------------------------------------*/
+export async function cancelAppointment(id: string) {
+  return withAppointmentMutation(async () => {
+    await prisma.appointment.update({
+      where: { id },
+      data: {
+        status: "CANCELED",
+      },
+    });
+  }, "Falha ao cancelar o agendamento");
 }
 
 /* ---------------------------------------------------------

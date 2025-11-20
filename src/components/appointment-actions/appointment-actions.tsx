@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { deleteAppointment } from "@/app/admin/dashboard/actions";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -15,62 +13,112 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import {
+  concludeAppointment,
+  cancelAppointment,
+  deleteAppointment,
+} from "@/app/admin/dashboard/actions";
+import type { AppointmentStatus } from "@/types/appointment";
 
 type AppointmentActionsProps = {
   appointmentId: string;
+  status?: AppointmentStatus | null;
 };
 
-export function AppointmentActions({ appointmentId }: AppointmentActionsProps) {
+export function AppointmentActions({
+  appointmentId,
+  status,
+}: AppointmentActionsProps) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const router = useRouter();
+
+  function handleConclude() {
+    startTransition(async () => {
+      await concludeAppointment(appointmentId);
+    });
+  }
+
+  function handleCancel() {
+    startTransition(async () => {
+      await cancelAppointment(appointmentId);
+    });
+  }
 
   function handleConfirmDelete() {
-    const formData = new FormData();
-    formData.append("id", appointmentId);
-
     startTransition(async () => {
-      await deleteAppointment(formData);
-      router.refresh();
+      await deleteAppointment(appointmentId);
       setOpen(false);
     });
   }
 
+  const isPendingStatus = status === "PENDING";
+  const isCanceledStatus = status === "CANCELED";
+
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
-      <AlertDialogTrigger asChild>
+    <div className="flex items-center gap-2">
+      {/* CONCLUIR – só faz sentido para pendente.
+          Enquanto não passarmos o status pela página, ele vai aparecer sempre.
+          Quando a página mandar `status`, ele respeita certinho. */}
+      {(!status || isPendingStatus) && (
         <Button
-          variant="outline"
           size="sm"
-          className="border-destructive/60 text-destructive hover:bg-destructive/10"
+          className="bg-green-600 hover:bg-green-700 text-white"
+          onClick={handleConclude}
+          disabled={isPending}
         >
-          Excluir
+          Concluir
         </Button>
-      </AlertDialogTrigger>
+      )}
 
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Excluir agendamento?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Essa ação não pode ser desfeita. O agendamento será removido
-            permanentemente do sistema.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
+      {/* CANCELAR – não mostra se já estiver cancelado */}
+      {(!status || !isCanceledStatus) && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-red-300 text-red-600 hover:bg-red-50"
+          onClick={handleCancel}
+          disabled={isPending}
+        >
+          Cancelar
+        </Button>
+      )}
 
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
-          <AlertDialogAction asChild>
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={handleConfirmDelete}
-              disabled={isPending}
-            >
-              {isPending ? "Excluindo..." : "Confirmar exclusão"}
-            </Button>
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+      {/* EXCLUIR – com modal de confirmação */}
+      <AlertDialog open={open} onOpenChange={setOpen}>
+        <AlertDialogTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-destructive/60 text-destructive hover:bg-destructive/10"
+          >
+            Excluir
+          </Button>
+        </AlertDialogTrigger>
+
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir agendamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Essa ação não pode ser desfeita. O agendamento será removido
+              permanentemente do sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction asChild>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleConfirmDelete}
+                disabled={isPending}
+              >
+                {isPending ? "Excluindo..." : "Confirmar exclusão"}
+              </Button>
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
