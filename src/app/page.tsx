@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
 import { groupAppointmentByPeriod } from "@/utills/appoitment-utills";
 import { endOfDay, startOfDay } from "date-fns";
+import type { Appointment as AppointmentType } from "@/types/appointment";
+import type { Barber } from "@/types/barber";
 
 // força essa página a ser dinâmica (sem cache estático)
 export const dynamic = "force-dynamic";
@@ -40,37 +42,63 @@ export default async function Home({ searchParams }: HomeProps) {
       scheduleAt: "asc",
     },
     include: {
-      barber: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
+      // agora é o model Barber, não mais User
+      barber: true,
     },
   });
 
-  const barbers = await prisma.user.findMany({
-    where: { role: "BARBER" },
+  // barbeiros ativos vindos do model Barber
+  const barbersPrisma = await prisma.barber.findMany({
+    where: { isActive: true },
     orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-    },
   });
 
-  const appointments = rawAppointments.map((apt) => ({
-    ...apt,
-    time: apt.scheduleAt.toLocaleTimeString("pt-BR", {
+  const barbers: Barber[] = barbersPrisma.map((barber) => ({
+    id: barber.id,
+    name: barber.name,
+    email: barber.email,
+    phone: barber.phone,
+    isActive: barber.isActive,
+    role: "BARBER",
+  }));
+
+  const appointments: AppointmentType[] = rawAppointments.map((apt) => {
+    const time = apt.scheduleAt.toLocaleTimeString("pt-BR", {
       hour: "2-digit",
       minute: "2-digit",
-    }),
-    period:
-      apt.scheduleAt.getHours() < 12
+    });
+
+    const hour = apt.scheduleAt.getHours();
+    const period =
+      hour < 12
         ? ("morning" as const)
-        : apt.scheduleAt.getHours() < 18
+        : hour < 18
           ? ("afternoon" as const)
-          : ("evening" as const),
-  }));
+          : ("evening" as const);
+
+    const barberData = barbers.find((b) => b.id === apt.barberId);
+
+    return {
+      id: apt.id,
+      clientName: apt.clientName,
+      phone: apt.phone,
+      description: apt.description,
+      scheduleAt: apt.scheduleAt,
+      barberId: apt.barberId,
+      barber: apt.barber
+        ? {
+            id: apt.barber.id,
+            name: apt.barber.name,
+            email: apt.barber.email,
+            phone: null,
+            isActive: barberData?.isActive ?? true,
+            role: "BARBER",
+          }
+        : undefined,
+      time,
+      period,
+    };
+  });
 
   const periods = groupAppointmentByPeriod(appointments);
 

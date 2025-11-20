@@ -125,6 +125,14 @@ globalThis.__RSC_MANIFEST["/page"] = {
           async: false,
         },
       },
+    "(app-pages-browser)/./src/components/ui/dialog.tsx": {
+      "*": {
+        id: "(ssr)/./src/components/ui/dialog.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
     "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx":
       {
         "*": {
@@ -326,6 +334,13 @@ globalThis.__RSC_MANIFEST["/page"] = {
         chunks: ["app-pages-internals", "static/chunks/app-pages-internals.js"],
         async: false,
       },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/ui/dialog.tsx":
+      {
+        id: "(app-pages-browser)/./src/components/ui/dialog.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appoitment-card/appoitment-card.tsx":
       {
         id: "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx",
@@ -473,6 +488,14 @@ globalThis.__RSC_MANIFEST["/page"] = {
           async: false,
         },
       },
+    "(app-pages-browser)/./src/components/ui/dialog.tsx": {
+      "*": {
+        id: "(rsc)/./src/components/ui/dialog.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
     "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx":
       {
         "*": {

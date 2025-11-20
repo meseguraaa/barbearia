@@ -39,10 +39,25 @@ model User {
 
   // Relacionamentos
   appointmentsAsClient Appointment[] @relation("ClientAppointments")
-  appointmentsAsBarber Appointment[] @relation("BarberAppointments")
+  // 🔥 removi o appointmentsAsBarber, agora quem se relaciona com Appointment é o model Barber
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Barber {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 🔗 relação com Appointment
+  appointments Appointment[]
+
+  @@map("barbers")
 }
 
 model Appointment {
@@ -56,9 +71,9 @@ model Appointment {
   clientId String
   client   User   @relation("ClientAppointments", fields: [clientId], references: [id])
 
-  // Barbeiro que vai atender
+  // Barbeiro que vai atender (agora usa o model Barber)
   barberId String
-  barber   User   @relation("BarberAppointments", fields: [barberId], references: [id])
+  barber   Barber @relation(fields: [barberId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
