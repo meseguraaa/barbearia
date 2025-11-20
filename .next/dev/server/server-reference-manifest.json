@@ -3,7 +3,7 @@
     "407b55d16fbb9b3034bcea07aa4e786f4b925fe0d3": {
       "workers": {
         "app/admin/barber/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fbarber%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407b55d16fbb9b3034bcea07aa4e786f4b925fe0d3%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%224099371b5f1fcf30dd78801ea0fcdca223e322f8df%22%2C%22exportedName%22%3A%22resetBarberPassword%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240fee1ec960f8eb17c23abbb5b4b618376e60843bf%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=!",
+          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fbarber%2Fpage.tsx%22%2C%5B%7B%22id%22%3A%22401c9c33833b716aace4b996a780c82c2cdc08d314%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Fpage.tsx%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fbarber%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407b55d16fbb9b3034bcea07aa4e786f4b925fe0d3%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%224099371b5f1fcf30dd78801ea0fcdca223e322f8df%22%2C%22exportedName%22%3A%22resetBarberPassword%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240fee1ec960f8eb17c23abbb5b4b618376e60843bf%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         }
       },
@@ -16,7 +16,7 @@
     "4099371b5f1fcf30dd78801ea0fcdca223e322f8df": {
       "workers": {
         "app/admin/barber/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fbarber%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407b55d16fbb9b3034bcea07aa4e786f4b925fe0d3%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%224099371b5f1fcf30dd78801ea0fcdca223e322f8df%22%2C%22exportedName%22%3A%22resetBarberPassword%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240fee1ec960f8eb17c23abbb5b4b618376e60843bf%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=!",
+          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fbarber%2Fpage.tsx%22%2C%5B%7B%22id%22%3A%22401c9c33833b716aace4b996a780c82c2cdc08d314%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Fpage.tsx%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fbarber%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407b55d16fbb9b3034bcea07aa4e786f4b925fe0d3%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%224099371b5f1fcf30dd78801ea0fcdca223e322f8df%22%2C%22exportedName%22%3A%22resetBarberPassword%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240fee1ec960f8eb17c23abbb5b4b618376e60843bf%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         }
       },
@@ -29,7 +29,7 @@
     "40fee1ec960f8eb17c23abbb5b4b618376e60843bf": {
       "workers": {
         "app/admin/barber/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fbarber%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407b55d16fbb9b3034bcea07aa4e786f4b925fe0d3%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%224099371b5f1fcf30dd78801ea0fcdca223e322f8df%22%2C%22exportedName%22%3A%22resetBarberPassword%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240fee1ec960f8eb17c23abbb5b4b618376e60843bf%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=!",
+          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fbarber%2Fpage.tsx%22%2C%5B%7B%22id%22%3A%22401c9c33833b716aace4b996a780c82c2cdc08d314%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Fpage.tsx%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fbarber%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407b55d16fbb9b3034bcea07aa4e786f4b925fe0d3%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%224099371b5f1fcf30dd78801ea0fcdca223e322f8df%22%2C%22exportedName%22%3A%22resetBarberPassword%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240fee1ec960f8eb17c23abbb5b4b618376e60843bf%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         }
       },
@@ -157,6 +157,19 @@
       },
       "filename": "app/admin/dashboard/actions.ts",
       "exportedName": "updateAppointment"
+    },
+    "401c9c33833b716aace4b996a780c82c2cdc08d314": {
+      "workers": {
+        "app/admin/barber/page": {
+          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fbarber%2Fpage.tsx%22%2C%5B%7B%22id%22%3A%22401c9c33833b716aace4b996a780c82c2cdc08d314%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Fpage.tsx%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fbarber%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407b55d16fbb9b3034bcea07aa4e786f4b925fe0d3%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%224099371b5f1fcf30dd78801ea0fcdca223e322f8df%22%2C%22exportedName%22%3A%22resetBarberPassword%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240fee1ec960f8eb17c23abbb5b4b618376e60843bf%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fbarber%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/admin/barber/page": "rsc"
+      },
+      "filename": "app/admin/barber/page.tsx",
+      "exportedName": "$$RSC_SERVER_ACTION_0"
     }
   },
   "edge": {},

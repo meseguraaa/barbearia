@@ -126,7 +126,16 @@ function NewBarberDialog() {
           <DialogTitle>Novo barbeiro</DialogTitle>
         </DialogHeader>
 
-        <form action={createBarber} className="space-y-4">
+        <form
+          action={async (formData) => {
+            "use server";
+            await createBarber(formData);
+            // se createBarber retornar { error }, você pode tratar aqui se quiser
+            // const result = await createBarber(formData);
+            // if (result?.error) { ... }
+          }}
+          className="space-y-4"
+        >
           <div className="space-y-1">
             <label className="text-sm font-medium" htmlFor="name">
               Nome
