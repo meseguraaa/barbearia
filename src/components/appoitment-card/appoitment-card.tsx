@@ -24,6 +24,7 @@ import { useState } from "react";
 import { deleteAppointment } from "@/app/actions";
 import { toast } from "sonner";
 import { formatTimeSaoPaulo } from "@/utills/datetime";
+import { Barber } from "@/types/barber";
 
 type AppointmentCardProps = {
   appointment: Appointment;
@@ -33,12 +34,17 @@ type AppointmentCardProps = {
    * bloquear horários que encavalem ao editar.
    */
   appointments?: Appointment[];
+  /**
+   * Lista de barbeiros ativos (para o select de edição)
+   */
+  barbers: Barber[];
 };
 
 export const AppointmentCard = ({
   appointment,
   isFirstInSection = false,
   appointments = [],
+  barbers,
 }: AppointmentCardProps) => {
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -65,16 +71,20 @@ export const AppointmentCard = ({
     >
       <div className="text-left pr-4 md:pr-0">
         <span className="text-label-small text-content-primary font-semibold">
-          {/* sempre formata no fuso de São Paulo */}
           {formatTimeSaoPaulo(appointment.scheduleAt)}
         </span>
       </div>
 
       <div className="text-right md:text-left md:pr-4">
-        <div className="flex items-center justify-end md:justify-start gap-1">
+        <div className="flex flex-col items-end md:items-start gap-1">
           <span className=" text-label-small-size text-content-primary font-semibold">
             {appointment.clientName}
           </span>
+          {appointment.barber?.name && (
+            <span className="text-paragraph-small-size text-content-secondary">
+              {appointment.barber.name}
+            </span>
+          )}
         </div>
       </div>
 
@@ -85,8 +95,11 @@ export const AppointmentCard = ({
       </div>
 
       <div className="text-right mt-2 md:mt-0 col-span-2 md:col-span-1 flex justify-end items-center gap-2">
-        {/* 👉 Agora o formulário recebe todos os agendamentos */}
-        <AppointmentForm appointment={appointment} appointments={appointments}>
+        <AppointmentForm
+          appointment={appointment}
+          appointments={appointments}
+          barbers={barbers}
+        >
           <Button variant="edit" size="icon">
             <EditIcon size={16} />
           </Button>

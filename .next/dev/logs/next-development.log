@@ -1,396 +1,278 @@
-[00:00:01.482] Server  LOG      ✓ Ready in 1256ms
-[00:00:13.145] Server  LOG      ○ Compiling / ...
-[00:00:16.222] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[00:00:17.205] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[33:17:33.422] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:17:43.503] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:17:48.813] Server  LOG     prisma:query "SELECT 1"
-[33:17:48.814] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:17:50.584] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:17:58.163] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:17:59.952] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:18:16.745] Server  LOG     prisma:query "SELECT 1"
-[33:18:16.745] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:18:19.673] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:19:23.022] Server  LOG     prisma:query "SELECT 1"
-[33:19:23.027] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:19:34.644] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:19:34.911] Browser ERROR   Received `%s` for a non-boolean attribute `%s`.
-
-If you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.toString()}. true cla cla true cla
-[33:19:36.136] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:19:40.221] Server  LOG     prisma:query "SELECT 1"
-[33:19:40.223] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:19:46.286] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:19:54.871] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:19:55.872] Server  LOG     prisma:query "SELECT 1"
-[33:19:55.873] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:20:03.174] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:20:09.777] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:21:03.501] Server  LOG     prisma:query "SELECT 1"
-[33:21:03.501] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:21:04.021] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:21:04.898] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:21:27.507] Server  LOG     prisma:query "SELECT 1"
-[33:21:27.511] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:21:29.973] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:21:32.670] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:21:36.462] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:21:42.815] Server  LOG     prisma:query "SELECT 1"
-[33:21:42.816] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:21:44.897] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:21:53.438] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:21:58.015] Server  LOG     prisma:query "SELECT 1"
-[33:21:58.016] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:22:38.571] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
-[33:26:42.410] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:26:42.411] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:26:42.411] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:26:42.411] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:26:42.411] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:26:42.448] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:26:42.532] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:26:42.608] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:26:42.845] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:30:28.300] Server  LOG     prisma:query "SELECT 1"
-[33:30:28.316] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:31:04.360] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[33:31:04.360] Browser ERROR   uncaughtError: ReferenceError: Toaster is not defined
-[33:31:04.988] Server  LOG     prisma:query "SELECT 1"
-[33:31:04.995] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:31:05.227] Server  ERROR    ⨯ ReferenceError: Toaster is not defined
-[33:31:05.762] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[33:31:06.665] Browser ERROR   uncaughtError: ReferenceError: Toaster is not defined
-[33:31:29.646] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[33:31:29.666] Server  LOG     prisma:query "SELECT 1"
-[33:31:29.667] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:31:29.774] Server  ERROR    ⨯ ReferenceError: Toaster is not defined
-[33:31:30.380] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[33:31:31.661] Browser ERROR   uncaughtError: ReferenceError: Toaster is not defined
-[33:31:32.687] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:31:32.693] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[33:31:33.283] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[33:31:34.352] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:31:34.377] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[33:31:34.377] Browser ERROR   uncaughtError: ReferenceError: Toaster is not defined
-[33:31:34.417] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:31:34.485] Server  ERROR    ⨯ ReferenceError: Toaster is not defined
-[33:31:34.808] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[33:31:35.662] Browser ERROR   uncaughtError: ReferenceError: Toaster is not defined
-[33:35:51.533] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[33:35:51.622] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:35:51.755] Server  ERROR    ⨯ ReferenceError: Toaster is not defined
-[33:35:52.211] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[33:35:52.661] Browser ERROR   uncaughtError: ReferenceError: Toaster is not defined
-[33:38:27.264] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[33:38:27.842] Server  LOG     prisma:query "SELECT 1"
-[33:38:27.856] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:38:28.454] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[33:38:34.648] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
-[33:40:40.509] Server  LOG     prisma:query "SELECT 1"
-[33:40:40.512] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:45:21.013] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:54:14.945] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:54:18.736] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:54:19.418] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[33:54:33.126] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
-[33:54:43.666] Server  LOG     prisma:query "SELECT 1"
-[33:54:43.669] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
-[33:54:43.690] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[33:54:43.705] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:54:43.844] Browser WARN    Select is changing from controlled to uncontrolled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
-[33:54:52.492] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
-[33:55:13.902] Server  LOG     prisma:query "SELECT 1"
-[33:55:13.903] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
-[33:55:13.906] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[33:55:13.922] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:55:29.727] Server  LOG     prisma:query "SELECT 1"
-[33:55:29.728] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[33:55:29.930] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:04:00.915] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:04:01.101] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:07:11.250] Server  LOG     prisma:query "SELECT 1"
-[34:07:11.271] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:08:49.675] Server  LOG     prisma:query "SELECT 1"
-[34:08:49.680] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:08:53.083] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:08:53.101] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:08:54.505] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:08:54.526] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:09:08.737] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
-[34:09:08.744] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:09:08.770] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:09:09.086] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:09:21.816] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
-[34:09:21.819] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:09:21.832] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:10:29.384] Server  LOG     prisma:query "SELECT 1"
-[34:10:29.384] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:10:29.625] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:15:36.481] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:15:37.010] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:15:38.726] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:15:38.747] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:15:40.105] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:15:40.125] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:15:56.623] Server  LOG     prisma:query "SELECT 1"
-[34:15:56.626] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
-[34:15:56.637] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:15:56.670] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:16:07.297] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
-[34:16:07.300] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:16:07.315] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:20:30.015] Server  LOG     prisma:query "SELECT 1"
-[34:20:30.015] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:20:30.136] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:20:45.439] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:20:45.686] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:21:03.642] Server  LOG     prisma:query "SELECT 1"
-[34:21:03.645] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:21:10.032] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:21:10.072] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:21:11.325] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:21:11.344] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:21:20.212] Server  LOG     prisma:query "SELECT 1"
-[34:21:20.213] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
-[34:21:20.221] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:21:20.239] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:21:41.401] Server  LOG     prisma:query "SELECT 1"
-[34:21:41.403] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
-[34:21:41.406] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:21:41.459] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:22:02.456] Server  LOG     prisma:query "SELECT 1"
-[34:22:02.457] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
-[34:22:02.461] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:22:02.488] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:22:17.276] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
-[34:22:17.281] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:22:17.329] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:22:23.353] Server  LOG     prisma:query "SELECT 1"
-[34:22:23.366] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:22:23.379] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:22:24.781] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:22:24.814] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:22:26.433] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:22:26.456] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:22:27.848] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:22:27.870] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:24:01.492] Server  LOG     prisma:query "SELECT 1"
-[34:24:01.494] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:24:14.306] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:25:30.531] Server  LOG     prisma:query "SELECT 1"
-[34:25:30.531] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:25:30.655] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:27:52.549] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:27:52.930] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:30:06.984] Server  LOG     prisma:query "SELECT 1"
-[34:30:06.990] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:30:31.576] Server  LOG     prisma:query "SELECT 1"
-[34:30:31.579] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:30:36.365] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:31:00.983] Server  LOG     prisma:query "SELECT 1"
-[34:31:00.995] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:31:46.517] Server  ERROR    ⨯ ./src/components/appointment-form/schema.ts
-Error:   × Unterminated string constant
-   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
- 1 │ // components/appointment-form/schema.ts
- 2 │ import z from "zod";
- 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
- 4 │ import { SERVICE_OPTIONS } from "
-   ·                                 ─
- 5 │ 
- 6 │ export const appointmentFormSchema = z
- 7 │   .object({
-   ╰────
+[00:00:01.617] Server  LOG      ✓ Ready in 1388ms
+[00:00:06.543] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:00:06.545] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:00:07.306] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:00:22.982] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[00:02:14.359] Server  LOG     prisma:query "SELECT 1"
+[00:02:14.362] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:02:14.366] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:02:14.851] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:02:14.857] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:02:15.112] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:02:15.116] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:04:46.165] Server  LOG     prisma:query "SELECT 1"
+[00:04:46.168] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:04:46.170] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:04:56.026] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:04:56.028] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:04:56.382] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:04:56.407] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:04:56.807] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:04:56.808] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:05:33.989] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:05:33.992] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:05:49.079] Server  LOG     prisma:query "SELECT 1"
+[00:05:49.081] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:05:49.084] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:05:49.474] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:05:49.476] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:06:20.127] Server  LOG     prisma:query "SELECT 1"
+[00:06:20.129] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:06:20.131] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:06:20.318] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:06:20.319] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:06:34.969] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:06:34.972] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:07:21.017] Server  LOG     prisma:query "SELECT 1"
+[00:07:21.020] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:07:21.022] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:07:21.313] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:07:21.314] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:07:25.034] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:07:25.036] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:07:40.392] Server  LOG     prisma:query "SELECT 1"
+[00:07:40.395] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:07:40.403] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:08:07.466] Server  LOG     prisma:query "SELECT 1"
+[00:08:07.469] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" = $1 AND \"public\".\"appointments\".\"barberId\" = $2) LIMIT $3 OFFSET $4"
+[00:08:07.482] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\",\"barberId\") VALUES ($1,$2,$3,$4,$5,$6) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\""
+[00:08:07.514] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:08:07.515] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:08:07.517] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:11:20.307] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:11:20.321] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:11:20.397] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:11:20.520] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:11:20.521] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:11:20.523] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:11:28.695] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:11:28.695] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:11:28.697] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:11:29.088] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:11:29.089] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:11:29.092] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:17:24.492] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:17:24.505] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:17:24.507] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:17:41.335] Server  LOG     prisma:query "SELECT 1"
+[00:17:41.340] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:17:41.342] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:17:41.345] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:18:12.984] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[00:18:29.662] Server  LOG     prisma:query "SELECT 1"
+[00:18:29.664] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:18:29.664] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:18:29.666] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:18:30.324] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:18:53.669] Server  LOG     prisma:query "SELECT 1"
+[00:18:53.673] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:18:53.674] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:18:53.682] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:21:23.782] Server  ERROR    ⨯ ./src/components/appointment-form/appointment-form.tsx
+Error:   × Expression expected
+     ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx:371:1]
+ 368 │                         value={field.value}
+ 369 │                         disabled={!selectedService || !selectedDate}
+ 370 │                       >
+ 371 │                         <<SelectTrigger
+     ·                          ─
+ 372 │   className="
+ 373 │     w-full justify-between text-left font-normal
+ 374 │     bg-background-tertiary border-border-primary text-content-primary
+     ╰────
+  × Expected '</', got 'className'
+     ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx:372:1]
+ 369 │                         disabled={!selectedService || !selectedDate}
+ 370 │                       >
+ 371 │                         <<SelectTrigger
+ 372 │   className="
+     ·   ─────────
+ 373 │     w-full justify-between text-left font-normal
+ 374 │     bg-background-tertiary border-border-primary text-content-primary
+ 375 │     focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
+     ╰────
 
 Caused by:
     Syntax Error
 
 Import trace for requested module:
-./src/components/appointment-form/schema.ts
 ./src/components/appointment-form/appointment-form.tsx
-[34:31:46.660] Browser ERROR   ./src/components/appointment-form/schema.ts
-Error:   × Unterminated string constant
-   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
- 1 │ // components/appointment-form/schema.ts
- 2 │ import z from "zod";
- 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
- 4 │ import { SERVICE_OPTIONS } from "
-   ·                                 ─
- 5 │ 
- 6 │ export const appointmentFormSchema = z
- 7 │   .object({
-   ╰────
+./src/components/appointment-form/index.ts
+./src/components/appoitment-card/appoitment-card.tsx
+[00:21:23.913] Browser ERROR   ./src/components/appointment-form/appointment-form.tsx
+Error:   × Expression expected
+     ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx:371:1]
+ 368 │                         value={field.value}
+ 369 │                         disabled={!selectedService || !selectedDate}
+ 370 │                       >
+ 371 │                         <<SelectTrigger
+     ·                          ─
+ 372 │   className="
+ 373 │     w-full justify-between text-left font-normal
+ 374 │     bg-background-tertiary border-border-primary text-content-primary
+     ╰────
+  × Expected '</', got 'className'
+     ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx:372:1]
+ 369 │                         disabled={!selectedService || !selectedDate}
+ 370 │                       >
+ 371 │                         <<SelectTrigger
+ 372 │   className="
+     ·   ─────────
+ 373 │     w-full justify-between text-left font-normal
+ 374 │     bg-background-tertiary border-border-primary text-content-primary
+ 375 │     focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
+     ╰────
 
 Caused by:
     Syntax Error
 
 Import trace for requested module:
-./src/components/appointment-form/schema.ts
 ./src/components/appointment-form/appointment-form.tsx
-[34:31:49.462] Server  ERROR    ⨯ ./src/components/appointment-form/schema.ts
-Error:   × Unterminated string constant
-   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
- 1 │ // components/appointment-form/schema.ts
- 2 │ import z from "zod";
- 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
- 4 │ import { SERVICE_OPTIONS } from "@/
-   ·                                 ───
- 5 │ 
- 6 │ export const appointmentFormSchema = z
- 7 │   .object({
-   ╰────
+[00:21:23.913] Browser ERROR   ./src/components/appointment-form/appointment-form.tsx
+Error:   × Expression expected
+     ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx:371:1]
+ 368 │                         value={field.value}
+ 369 │                         disabled={!selectedService || !selectedDate}
+ 370 │                       >
+ 371 │                         <<SelectTrigger
+     ·                          ─
+ 372 │   className="
+ 373 │     w-full justify-between text-left font-normal
+ 374 │     bg-background-tertiary border-border-primary text-content-primary
+     ╰────
+  × Expected '</', got 'className'
+     ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx:372:1]
+ 369 │                         disabled={!selectedService || !selectedDate}
+ 370 │                       >
+ 371 │                         <<SelectTrigger
+ 372 │   className="
+     ·   ─────────
+ 373 │     w-full justify-between text-left font-normal
+ 374 │     bg-background-tertiary border-border-primary text-content-primary
+ 375 │     focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
+     ╰────
 
 Caused by:
     Syntax Error
 
 Import trace for requested module:
-./src/components/appointment-form/schema.ts
 ./src/components/appointment-form/appointment-form.tsx
-[34:31:49.661] Browser ERROR   ./src/components/appointment-form/schema.ts
-Error:   × Unterminated string constant
-   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
- 1 │ // components/appointment-form/schema.ts
- 2 │ import z from "zod";
- 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
- 4 │ import { SERVICE_OPTIONS } from "
-   ·                                 ─
- 5 │ 
- 6 │ export const appointmentFormSchema = z
- 7 │   .object({
-   ╰────
+./src/components/appointment-form/index.ts
+./src/components/appoitment-card/appoitment-card.tsx
+[00:21:23.913] Browser ERROR   ./src/components/appointment-form/appointment-form.tsx
+Error:   × Expression expected
+     ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx:371:1]
+ 368 │                         value={field.value}
+ 369 │                         disabled={!selectedService || !selectedDate}
+ 370 │                       >
+ 371 │                         <<SelectTrigger
+     ·                          ─
+ 372 │   className="
+ 373 │     w-full justify-between text-left font-normal
+ 374 │     bg-background-tertiary border-border-primary text-content-primary
+     ╰────
+  × Expected '</', got 'className'
+     ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx:372:1]
+ 369 │                         disabled={!selectedService || !selectedDate}
+ 370 │                       >
+ 371 │                         <<SelectTrigger
+ 372 │   className="
+     ·   ─────────
+ 373 │     w-full justify-between text-left font-normal
+ 374 │     bg-background-tertiary border-border-primary text-content-primary
+ 375 │     focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
+     ╰────
 
 Caused by:
     Syntax Error
 
 Import trace for requested module:
-./src/components/appointment-form/schema.ts
 ./src/components/appointment-form/appointment-form.tsx
-[34:31:49.661] Browser ERROR   ./src/components/appointment-form/schema.ts
-Error:   × Unterminated string constant
-   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
- 1 │ // components/appointment-form/schema.ts
- 2 │ import z from "zod";
- 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
- 4 │ import { SERVICE_OPTIONS } from "@/
-   ·                                 ───
- 5 │ 
- 6 │ export const appointmentFormSchema = z
- 7 │   .object({
-   ╰────
+./src/components/appointment-form/index.ts
+./src/app/page.tsx
+[00:21:30.930] Browser ERROR   ./src/components/appointment-form/appointment-form.tsx
+Error:   × Expression expected
+     ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx:371:1]
+ 368 │                         value={field.value}
+ 369 │                         disabled={!selectedService || !selectedDate}
+ 370 │                       >
+ 371 │                         <<SelectTrigger
+     ·                          ─
+ 372 │   className="
+ 373 │     w-full justify-between text-left font-normal
+ 374 │     bg-background-tertiary border-border-primary text-content-primary
+     ╰────
+  × Expected '</', got 'className'
+     ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx:372:1]
+ 369 │                         disabled={!selectedService || !selectedDate}
+ 370 │                       >
+ 371 │                         <<SelectTrigger
+ 372 │   className="
+     ·   ─────────
+ 373 │     w-full justify-between text-left font-normal
+ 374 │     bg-background-tertiary border-border-primary text-content-primary
+ 375 │     focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
+     ╰────
 
 Caused by:
     Syntax Error
 
 Import trace for requested module:
-./src/components/appointment-form/schema.ts
 ./src/components/appointment-form/appointment-form.tsx
-[34:31:49.661] Browser ERROR   ./src/components/appointment-form/schema.ts
-Error:   × Unterminated string constant
-   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
- 1 │ // components/appointment-form/schema.ts
- 2 │ import z from "zod";
- 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
- 4 │ import { SERVICE_OPTIONS } from "@/
-   ·                                 ───
- 5 │ 
- 6 │ export const appointmentFormSchema = z
- 7 │   .object({
-   ╰────
-
-Caused by:
-    Syntax Error
-
-Import trace for requested module:
-./src/components/appointment-form/schema.ts
-./src/components/appointment-form/appointment-form.tsx
-[34:31:54.077] Server  ERROR    ⨯ ./src/components/appointment-form/schema.ts
-Error:   × Unterminated string constant
-   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
- 1 │ // components/appointment-form/schema.ts
- 2 │ import z from "zod";
- 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
- 4 │ import { SERVICE_OPTIONS } from "@/components
-   ·                                 ─────────────
- 5 │ 
- 6 │ export const appointmentFormSchema = z
- 7 │   .object({
-   ╰────
-
-Caused by:
-    Syntax Error
-
-Import trace for requested module:
-./src/components/appointment-form/schema.ts
-./src/components/appointment-form/appointment-form.tsx
-[34:31:54.668] Browser ERROR   ./src/components/appointment-form/schema.ts
-Error:   × Unterminated string constant
-   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
- 1 │ // components/appointment-form/schema.ts
- 2 │ import z from "zod";
- 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
- 4 │ import { SERVICE_OPTIONS } from "@/
-   ·                                 ───
- 5 │ 
- 6 │ export const appointmentFormSchema = z
- 7 │   .object({
-   ╰────
-
-Caused by:
-    Syntax Error
-
-Import trace for requested module:
-./src/components/appointment-form/schema.ts
-./src/components/appointment-form/appointment-form.tsx
-[34:31:54.668] Browser ERROR   ./src/components/appointment-form/schema.ts
-Error:   × Unterminated string constant
-   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
- 1 │ // components/appointment-form/schema.ts
- 2 │ import z from "zod";
- 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
- 4 │ import { SERVICE_OPTIONS } from "@/components
-   ·                                 ─────────────
- 5 │ 
- 6 │ export const appointmentFormSchema = z
- 7 │   .object({
-   ╰────
-
-Caused by:
-    Syntax Error
-
-Import trace for requested module:
-./src/components/appointment-form/schema.ts
-./src/components/appointment-form/appointment-form.tsx
-[34:31:55.666] Browser ERROR   ./src/components/appointment-form/schema.ts
-Error:   × Unterminated string constant
-   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
- 1 │ // components/appointment-form/schema.ts
- 2 │ import z from "zod";
- 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
- 4 │ import { SERVICE_OPTIONS } from "@/components
-   ·                                 ─────────────
- 5 │ 
- 6 │ export const appointmentFormSchema = z
- 7 │   .object({
-   ╰────
-
-Caused by:
-    Syntax Error
-
-Import trace for requested module:
-./src/components/appointment-form/schema.ts
-./src/components/appointment-form/appointment-form.tsx
-[34:31:56.114] Server  LOG     prisma:query "SELECT 1"
-[34:31:56.129] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:32:07.407] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
-[34:32:07.427] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
-[34:32:07.442] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:35:30.978] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:35:31.072] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:35:31.285] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:41:02.507] Server  WARN     ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
-[34:41:02.644] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:41:04.462] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
-[34:41:05.424] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[34:43:44.660] Server  LOG     prisma:query "SELECT 1"
-[34:43:44.662] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+./src/components/appointment-form/index.ts
+./src/components/appoitment-card/appoitment-card.tsx
+[00:21:31.393] Server  LOG     prisma:query "SELECT 1"
+[00:21:31.404] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:21:31.409] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:21:31.412] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:21:55.673] Server  LOG     prisma:query "SELECT 1"
+[00:21:55.684] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:21:55.685] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:21:55.691] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:22:01.365] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:22:01.366] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:22:01.367] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:22:02.012] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[00:22:11.588] Server  LOG     prisma:query "SELECT 1"
+[00:22:11.590] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:22:11.591] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:22:11.594] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:22:55.560] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:22:55.561] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:22:55.562] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:22:58.759] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:22:58.761] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:22:58.764] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:24:56.723] Server  LOG     prisma:query "SELECT 1"
+[00:24:56.737] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:24:56.753] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:24:56.755] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:25:11.816] Server  LOG     prisma:query "SELECT 1"
+[00:25:11.820] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:25:11.821] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1) OFFSET $2"
+[00:25:11.832] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:25:22.755] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[00:25:43.422] Server  LOG     prisma:query "SELECT 1"
+[00:25:43.427] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" = $1 AND \"public\".\"appointments\".\"barberId\" = $2) LIMIT $3 OFFSET $4"
+[00:25:43.493] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\",\"barberId\") VALUES ($1,$2,$3,$4,$5,$6) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\""
+[00:25:43.499] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:25:43.502] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1,$2) OFFSET $3"
+[00:25:43.505] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:25:43.647] Browser WARN    Select is changing from controlled to uncontrolled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[00:26:20.892] Server  LOG     prisma:query "SELECT 1"
+[00:26:20.897] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:26:20.898] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1,$2) OFFSET $3"
+[00:26:20.900] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"
+[00:26:21.255] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\", \"public\".\"appointments\".\"barberId\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:26:21.255] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"id\" IN ($1,$2) OFFSET $3"
+[00:26:21.257] Server  LOG     prisma:query "SELECT \"public\".\"barbers\".\"id\", \"public\".\"barbers\".\"name\", \"public\".\"barbers\".\"isActive\" FROM \"public\".\"barbers\" WHERE \"public\".\"barbers\".\"isActive\" = $1 ORDER BY \"public\".\"barbers\".\"name\" ASC OFFSET $2"

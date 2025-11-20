@@ -1,4 +1,3 @@
-// components/appointment-form/constants-and-utils.ts
 import { getHours, getMinutes, isSameDay } from "date-fns";
 import { Appointment } from "@/types/appointment";
 
@@ -94,7 +93,7 @@ export const getAvailableTimes = (params: {
     });
   }
 
-  // Filtra agendamentos só desse dia
+  // Filtra agendamentos só desse dia (independente do barbeiro)
   const dayAppointments = appointments.filter((appt) =>
     isSameDay(new Date(appt.scheduleAt), date),
   );

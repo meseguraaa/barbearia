@@ -27,6 +27,7 @@ import {
   Phone,
   Scissors,
   User,
+  UserCircle,
 } from "lucide-react";
 import { IMaskInput } from "react-imask";
 import { format, setHours, setMinutes, startOfToday } from "date-fns";
@@ -44,24 +45,35 @@ import { toast } from "sonner";
 import { createAppointment, updateAppointment } from "@/app/actions";
 import { useEffect, useState } from "react";
 import { Appointment } from "@/types/appointment";
-
+import { Barber } from "@/types/barber";
 import {
   SERVICE_OPTIONS,
-  TIME_OPTIONS,
   getAvailableTimes,
-} from "./constants-and-utils";
-import { AppointFormValues, appointmentFormSchema } from "./schema";
+} from "@/components/appointment-form/constants-and-utils";
+import {
+  appointmentFormSchema,
+  AppointFormValues,
+} from "@/components/appointment-form/schema";
 
 type AppointmentFormProps = {
   appointment?: Appointment;
   children?: React.ReactNode;
+  /**
+   * Lista de agendamentos já existentes (do dia atual ou vários dias).
+   * A função interna filtra por data.
+   */
   appointments?: Appointment[];
+  /**
+   * Lista de barbeiros ativos
+   */
+  barbers: Barber[];
 };
 
 export const AppointmentForm = ({
   appointment,
   children,
   appointments = [],
+  barbers,
 }: AppointmentFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -73,6 +85,7 @@ export const AppointmentForm = ({
       description: undefined,
       scheduleAt: undefined,
       time: "",
+      barberId: "",
     },
   });
 
@@ -84,21 +97,19 @@ export const AppointmentForm = ({
       Number(minute),
     );
 
+    const payload = {
+      clientName: data.clientName,
+      phone: data.phone,
+      description: data.description,
+      scheduleAt,
+      barberId: data.barberId,
+    };
+
     const isEdit = !!appointment?.id;
 
     const result = isEdit
-      ? await updateAppointment(appointment.id, {
-          clientName: data.clientName,
-          phone: data.phone,
-          description: data.description,
-          scheduleAt,
-        })
-      : await createAppointment({
-          clientName: data.clientName,
-          phone: data.phone,
-          description: data.description,
-          scheduleAt,
-        });
+      ? await updateAppointment(appointment.id, payload)
+      : await createAppointment(payload);
 
     if (result?.error) {
       toast.error(result.error);
@@ -113,13 +124,17 @@ export const AppointmentForm = ({
     form.reset();
   };
 
+  // Handler que transforma erros de validação em toast
   const handleSubmit = form.handleSubmit(onSubmit, (errors) => {
     const firstError = Object.values(errors)[0];
+
+    if (!firstError) return;
+
     const message = firstError?.message;
 
     if (message) {
       toast.error(String(message));
-    } else if (firstError) {
+    } else {
       toast.error("Verifique os campos obrigatórios.");
     }
   });
@@ -132,6 +147,7 @@ export const AppointmentForm = ({
         description: undefined,
         scheduleAt: undefined,
         time: "",
+        barberId: "",
       });
       return;
     }
@@ -145,11 +161,15 @@ export const AppointmentForm = ({
       description: appointment.description as AppointFormValues["description"],
       scheduleAt: date,
       time,
+      barberId: appointment.barberId,
     });
   }, [appointment, form]);
 
-  const selectedDate = form.watch("scheduleAt");
+  // 🕒 Observa campos que mandam no fluxo
   const selectedService = form.watch("description");
+  const selectedDate = form.watch("scheduleAt");
+  const selectedTime = form.watch("time");
+  const selectedBarberId = form.watch("barberId");
 
   const availableTimes = getAvailableTimes({
     date: selectedDate,
@@ -176,7 +196,7 @@ export const AppointmentForm = ({
 
         <Form {...form}>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* CLIENTE */}
+            {/* SEU NOME */}
             <FormField
               control={form.control}
               name="clientName"
@@ -229,20 +249,23 @@ export const AppointmentForm = ({
               )}
             />
 
-            {/* SERVIÇO */}
+            {/* SERVIÇO (1º passo) */}
             <FormField
               control={form.control}
               name="description"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-label-medium-size text-content-primary">
-                    Descrição do serviço
+                    Serviço
                   </FormLabel>
                   <FormControl>
                     <Select
                       onValueChange={(value) => {
                         field.onChange(value);
+                        // Mudou serviço → limpa data, hora e barbeiro
+                        form.setValue("scheduleAt", undefined as any);
                         form.setValue("time", "");
+                        form.setValue("barberId", "");
                       }}
                       value={field.value}
                     >
@@ -265,6 +288,7 @@ export const AppointmentForm = ({
               )}
             />
 
+            {/* DATA & HORA (2º passo) */}
             <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
               {/* DATA */}
               <FormField
@@ -280,8 +304,9 @@ export const AppointmentForm = ({
                         <FormControl>
                           <Button
                             variant="outline"
+                            disabled={!selectedService}
                             className={cn(
-                              "w-full justify-between text-left font-normal bg-background-tertiary border-border-primary text-content-primary hover:bg-background-tertiary hover:border-border-secondary hover:text-content-primary focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand focus:border-border-brand focus-visible:border-border-brand",
+                              "w-full justify-between text-left font-normal bg-background-tertiary border-border-primary text-content-primary hover:bg-background-tertiary hover:border-border-secondary hover:text-content-primary focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand focus:border-border-brand focus-visible:border-border-brand disabled:opacity-60 disabled:cursor-not-allowed",
                               !field.value && "text-content-secondary",
                             )}
                           >
@@ -293,7 +318,11 @@ export const AppointmentForm = ({
                               {field.value ? (
                                 format(field.value, "dd/MM/yyyy")
                               ) : (
-                                <span>Selecione uma data</span>
+                                <span>
+                                  {!selectedService
+                                    ? "Selecione um serviço"
+                                    : "Selecione uma data"}
+                                </span>
                               )}
                             </div>
                             <ChevronDownIcon className="opacity-50 h-4 w-4" />
@@ -305,10 +334,14 @@ export const AppointmentForm = ({
                           mode="single"
                           selected={field.value}
                           onSelect={(date) => {
-                            field.onChange(date);
+                            field.onChange(date ?? undefined);
+                            // Mudou data → limpa hora e barbeiro
                             form.setValue("time", "");
+                            form.setValue("barberId", "");
                           }}
-                          disabled={(date) => date < startOfToday()}
+                          disabled={(date) =>
+                            !selectedService || date < startOfToday()
+                          }
                         />
                       </PopoverContent>
                     </Popover>
@@ -327,28 +360,41 @@ export const AppointmentForm = ({
                     </FormLabel>
                     <FormControl>
                       <Select
-                        onValueChange={field.onChange}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          // Mudou horário → limpa barbeiro
+                          form.setValue("barberId", "");
+                        }}
                         value={field.value}
-                        disabled={!selectedDate || !selectedService}
+                        disabled={!selectedService || !selectedDate}
                       >
-                        <SelectTrigger>
+                        <SelectTrigger
+                          className="
+    w-full justify-between text-left font-normal
+    bg-background-tertiary border-border-primary text-content-primary
+    focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
+    focus:border-border-brand focus-visible:border-border-brand
+    disabled:opacity-60 disabled:cursor-not-allowed disabled:pointer-events-none
+  "
+                        >
                           <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4 text-content-brand" />
                             <SelectValue
                               placeholder={
-                                !selectedDate
-                                  ? "Selecione uma data"
-                                  : !selectedService
-                                    ? "Selecione um serviço"
+                                !selectedService
+                                  ? "Selecione um serviço"
+                                  : !selectedDate
+                                    ? "Selecione uma data"
                                     : "Selecione um horário"
                               }
                             />
                           </div>
                         </SelectTrigger>
+
                         <SelectContent>
-                          {!selectedDate || !selectedService ? (
+                          {!selectedService || !selectedDate ? (
                             <SelectItem disabled value="no-selection">
-                              Selecione a data e o serviço
+                              Selecione o serviço e a data
                             </SelectItem>
                           ) : availableTimes.length === 0 ? (
                             <SelectItem disabled value="no-times">
@@ -368,6 +414,65 @@ export const AppointmentForm = ({
                 )}
               />
             </div>
+
+            {/* BARBEIRO (3º passo) */}
+            <FormField
+              control={form.control}
+              name="barberId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-label-medium-size text-content-primary">
+                    Barbeiro
+                  </FormLabel>
+                  <FormControl>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      disabled={
+                        !selectedService || !selectedDate || !selectedTime
+                      }
+                    >
+                      <SelectTrigger
+                        className="
+    w-full justify-between text-left font-normal
+    bg-background-tertiary border-border-primary text-content-primary
+    focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
+    focus:border-border-brand focus-visible:border-border-brand
+    disabled:opacity-60 disabled:cursor-not-allowed disabled:pointer-events-none
+  "
+                      >
+                        <div className="flex items-center gap-2">
+                          <UserCircle className="h-4 w-4 text-content-brand" />
+                          <SelectValue
+                            placeholder={
+                              !selectedService
+                                ? "Selecione um serviço"
+                                : !selectedDate || !selectedTime
+                                  ? "Selecione data e horário"
+                                  : "Selecione o barbeiro"
+                            }
+                          />
+                        </div>
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {!selectedService || !selectedDate || !selectedTime ? (
+                          <SelectItem disabled value="no-selection">
+                            Selecione o serviço, data e horário
+                          </SelectItem>
+                        ) : (
+                          barbers.map((barber) => (
+                            <SelectItem key={barber.id} value={barber.id}>
+                              {barber.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                </FormItem>
+              )}
+            />
 
             <div className="flex justify-end">
               <Button

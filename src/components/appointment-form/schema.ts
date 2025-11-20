@@ -1,4 +1,3 @@
-// components/appointment-form/schema.ts
 import z from "zod";
 import { startOfToday, setHours, setMinutes } from "date-fns";
 import { SERVICE_OPTIONS } from "@/components/appointment-form/constants-and-utils";
@@ -18,6 +17,7 @@ export const appointmentFormSchema = z
         message: "A data não pode ser no passado",
       }),
     time: z.string().min(1, "A hora é obrigatória"),
+    barberId: z.string().min(1, "O barbeiro é obrigatório"),
   })
   .refine(
     (data) => {

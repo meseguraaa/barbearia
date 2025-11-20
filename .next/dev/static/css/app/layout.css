@@ -957,6 +957,9 @@
   .items-center {
     align-items: center;
   }
+  .items-end {
+    align-items: flex-end;
+  }
   .justify-between {
     justify-content: space-between;
   }
@@ -1089,9 +1092,6 @@
   }
   .bg-accent-primary {
     background-color: var(--color-accent-primary);
-  }
-  .bg-amber-50 {
-    background-color: var(--color-amber-50);
   }
   .bg-background-brand {
     background-color: var(--color-background-brand);
@@ -1774,6 +1774,11 @@
       opacity: 50%;
     }
   }
+  .disabled\:opacity-60 {
+    &:disabled {
+      opacity: 60%;
+    }
+  }
   .has-focus\:ring-\[3px\] {
     &:has(*:focus) {
       --tw-ring-shadow: var(--tw-ring-inset,) 0 0 0
@@ -2009,9 +2014,9 @@
       flex-direction: row;
     }
   }
-  .md\:justify-start {
+  .md\:items-start {
     @media (width >= 48rem) {
-      justify-content: flex-start;
+      align-items: flex-start;
     }
   }
   .md\:gap-4 {
