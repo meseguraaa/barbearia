@@ -16,11 +16,9 @@ type HomeProps = {
 };
 
 export default async function Home({ searchParams }: HomeProps) {
-  // 👉 searchParams agora é uma Promise, então precisamos dar await
   const resolvedSearchParams = await searchParams;
   const dateParam = resolvedSearchParams.date;
 
-  // Data base vinda da URL (?date=yyyy-MM-dd) ou hoje
   const baseDate = (() => {
     if (!dateParam) return new Date();
 
@@ -41,6 +39,14 @@ export default async function Home({ searchParams }: HomeProps) {
     orderBy: {
       scheduleAt: "asc",
     },
+    include: {
+      barber: true,
+    },
+  });
+
+  const barbers = await prisma.barber.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
   });
 
   const appointments = rawAppointments.map((apt) => ({
@@ -81,7 +87,7 @@ export default async function Home({ searchParams }: HomeProps) {
 
       <div className="pb-24 md:pb-0">
         {periods.map((period, index) => (
-          <PeriodSection period={period} key={index} />
+          <PeriodSection period={period} key={index} barbers={barbers} />
         ))}
       </div>
 
@@ -91,8 +97,7 @@ export default async function Home({ searchParams }: HomeProps) {
           bg-[#333333] py-[18px] px-6
         "
       >
-        {/* 🔥 Agora o formulário de NOVO agendamento recebe todos os agendamentos do dia */}
-        <AppointmentForm appointments={appointments}>
+        <AppointmentForm appointments={appointments} barbers={barbers}>
           <Button variant="brand">Agendar</Button>
         </AppointmentForm>
       </div>

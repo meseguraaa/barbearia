@@ -1,18 +1,24 @@
-export type AppointmentPeriodDay = "morning" | "afternoon" | "evening";
+import type { Barber } from "./barber";
 
 export type Appointment = {
   id: string;
-  time: string;
   clientName: string;
   phone: string;
   description: string;
   scheduleAt: Date;
-  period: AppointmentPeriodDay;
+
+  // relacionamento com barbeiro
+  barberId: string;
+  barber?: Barber;
+
+  // campos calculados no front
+  time?: string;
+  period?: "morning" | "afternoon" | "evening";
 };
 
 export type AppointmentPeriod = {
+  type: "morning" | "afternoon" | "evening";
   title: string;
-  type: AppointmentPeriodDay;
   timeRange: string;
   appointments: Appointment[];
 };

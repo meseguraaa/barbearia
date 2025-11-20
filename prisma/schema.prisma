@@ -7,6 +7,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model Barber {
+  id           String        @id @default(cuid())
+  name         String
+  isActive     Boolean       @default(true)
+  appointments Appointment[]
+
+  @@map("barbers")
+}
+
 model Appointment {
   id          String   @id @default(cuid())
   clientName  String
@@ -14,5 +23,9 @@ model Appointment {
   description String
   scheduleAt  DateTime
 
+  barberId    String
+  barber      Barber   @relation(fields: [barberId], references: [id])
+
   @@map("appointments")
+  @@index([barberId, scheduleAt])
 }

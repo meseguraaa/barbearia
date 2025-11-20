@@ -12,6 +12,7 @@ const appointmentSchema = z.object({
   phone: z.string(),
   description: z.string(),
   scheduleAt: z.date(),
+  barberId: z.string().min(1, "O barbeiro é obrigatório"),
 });
 
 export type AppointmentData = z.infer<typeof appointmentSchema>;
@@ -36,7 +37,7 @@ function getSaoPauloTime(date: Date): { hour: number; minute: number } {
 }
 
 /* ---------------------------------------------------------
- * NOVA REGRA 1: não permitir agendamento no passado
+ * REGRA 1: não permitir agendamento no passado
  * ---------------------------------------------------------*/
 function validateNotInPast(scheduleAt: Date): string | null {
   const now = new Date();
@@ -49,7 +50,7 @@ function validateNotInPast(scheduleAt: Date): string | null {
 }
 
 /* ---------------------------------------------------------
- * NOVA REGRA 2: Pode agendar das 09:00 até 21:00 (contínuo)
+ * REGRA 2: Pode agendar das 09:00 até 21:00 (contínuo)
  * ---------------------------------------------------------*/
 function validateBusinessHours(scheduleAt: Date): string | null {
   const { hour, minute } = getSaoPauloTime(scheduleAt);
@@ -66,21 +67,24 @@ function validateBusinessHours(scheduleAt: Date): string | null {
 }
 
 /* ---------------------------------------------------------
- * Checar se já existe um agendamento no mesmo horário
+ * Checar se já existe um agendamento para o MESMO barbeiro
+ * no mesmo horário
  * ---------------------------------------------------------*/
 async function ensureAvailability(
   scheduleAt: Date,
+  barberId: string,
   excludeId?: string,
 ): Promise<string | null> {
   const existing = await prisma.appointment.findFirst({
     where: {
       scheduleAt,
+      barberId,
       ...(excludeId && { id: { not: excludeId } }),
     },
   });
 
   if (existing) {
-    return "Já existe um agendamento para esse horário";
+    return "Este barbeiro já possui um agendamento neste horário";
   }
 
   return null;
@@ -107,17 +111,15 @@ async function withAppointmentMutation(
  * ---------------------------------------------------------*/
 export async function createAppointment(data: AppointmentData) {
   const parsed = appointmentSchema.parse(data);
-  const { scheduleAt } = parsed;
+  const { scheduleAt, barberId } = parsed;
 
-  // 1️⃣ não deixar agendar no passado
   const pastError = validateNotInPast(scheduleAt);
   if (pastError) return { error: pastError };
 
-  // 2️⃣ respeitar faixa 09h–21h
   const scheduleError = validateBusinessHours(scheduleAt);
   if (scheduleError) return { error: scheduleError };
 
-  const availabilityError = await ensureAvailability(scheduleAt);
+  const availabilityError = await ensureAvailability(scheduleAt, barberId);
   if (availabilityError) return { error: availabilityError };
 
   return withAppointmentMutation(async () => {
@@ -130,17 +132,15 @@ export async function createAppointment(data: AppointmentData) {
  * ---------------------------------------------------------*/
 export async function updateAppointment(id: string, data: AppointmentData) {
   const parsed = appointmentSchema.parse(data);
-  const { scheduleAt } = parsed;
+  const { scheduleAt, barberId } = parsed;
 
-  // 1️⃣ não deixar reagendar para o passado
   const pastError = validateNotInPast(scheduleAt);
   if (pastError) return { error: pastError };
 
-  // 2️⃣ respeitar faixa 09h–21h
   const scheduleError = validateBusinessHours(scheduleAt);
   if (scheduleError) return { error: scheduleError };
 
-  const availabilityError = await ensureAvailability(scheduleAt, id);
+  const availabilityError = await ensureAvailability(scheduleAt, barberId, id);
   if (availabilityError) return { error: availabilityError };
 
   return withAppointmentMutation(async () => {
