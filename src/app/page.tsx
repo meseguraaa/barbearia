@@ -84,7 +84,7 @@ export default async function Home({ searchParams }: HomeProps) {
       phone: apt.phone,
       description: apt.description,
       scheduleAt: apt.scheduleAt,
-      barberId: apt.barberId,
+      barberId: apt.barberId ?? "", // ✅ garante string para bater com AppointmentType
       barber: apt.barber
         ? {
             id: apt.barber.id,
