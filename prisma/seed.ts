@@ -7,23 +7,20 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("🌱 Iniciando seed...");
 
-  // ====== Lê config do .env (com fallback só pra DEV) ======
+  // ================================================================
+  // Vars de ambiente (com fallbacks somente para ambiente DEV)
+  // ================================================================
   const adminEmail = process.env.ADMIN_EMAIL ?? "admin@barbearia.com";
   const adminPassword = process.env.ADMIN_PASSWORD ?? "admin123";
 
-  const barberEmail = process.env.BARBER_EMAIL ?? "barbeiro@barbearia.com";
-  const barberPassword = process.env.BARBER_PASSWORD ?? "barber123";
-
-  // IMPORTANTE: em produção, use sempre variáveis de ambiente
-  // e senhas fortes; esses fallbacks são só pra ambiente local.
-
-  // ====== Gera hashes de senha com bcrypt ======
   const saltRounds = 10;
 
+  // Hash do admin
   const adminPasswordHash = await bcrypt.hash(adminPassword, saltRounds);
-  const barberPasswordHash = await bcrypt.hash(barberPassword, saltRounds);
 
-  // ====== Cria/atualiza ADMIN ======
+  // ================================================================
+  // Criar/Atualizar ADMIN
+  // ================================================================
   const adminUser = await prisma.user.upsert({
     where: { email: adminEmail },
     update: {
@@ -41,27 +38,62 @@ async function main() {
 
   console.log("✅ Admin criado/atualizado:", adminUser.email);
 
-  // ====== Cria/atualiza BARBER ======
-  const barberUser = await prisma.user.upsert({
-    where: { email: barberEmail },
-    update: {
+  // ================================================================
+  // Lista de barbeiros fixos (podemos crescer isso quando quiser)
+  // ================================================================
+  const barbers = [
+    {
       name: "Barbeiro Principal",
-      role: "BARBER",
-      passwordHash: barberPasswordHash,
+      email: "barbeiro@barbearia.com",
+      password: "barber123",
     },
-    create: {
-      name: "Barbeiro Principal",
-      email: barberEmail,
-      role: "BARBER",
-      passwordHash: barberPasswordHash,
+    {
+      name: "João Cortes",
+      email: "joao@barbearia.com",
+      password: "123456",
     },
-  });
+    {
+      name: "Marcelo Fade",
+      email: "marcelo@barbearia.com",
+      password: "123456",
+    },
+    {
+      name: "Bruno Leal",
+      email: "bruno@barbearia.com",
+      password: "123456",
+    },
+  ];
 
-  console.log("✅ Barbeiro criado/atualizado:", barberUser.email);
+  // ================================================================
+  // Criar/Atualizar BARBEIROS
+  // ================================================================
+  for (const barber of barbers) {
+    const passwordHash = await bcrypt.hash(barber.password, saltRounds);
+
+    const user = await prisma.user.upsert({
+      where: { email: barber.email },
+      update: {
+        name: barber.name,
+        role: "BARBER",
+        passwordHash,
+      },
+      create: {
+        name: barber.name,
+        email: barber.email,
+        role: "BARBER",
+        passwordHash,
+      },
+    });
+
+    console.log(`✂️  Barbeiro criado/atualizado: ${user.email}`);
+  }
 
   console.log("🌱 Seed finalizado com sucesso.");
 }
 
+// ================================================================
+// Execução
+// ================================================================
 main()
   .catch((e) => {
     console.error("❌ Erro ao rodar seed:", e);
