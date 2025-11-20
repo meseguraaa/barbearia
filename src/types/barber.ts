@@ -1,5 +1,5 @@
 export type Barber = {
   id: string;
-  name: string;
-  isActive: boolean;
+  name: string | null;
+  role?: "BARBER"; // opcional
 };
