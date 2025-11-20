@@ -1,11 +1,15 @@
 import type { Barber } from "./barber";
 
+export type AppointmentStatus = "PENDING" | "DONE" | "CANCELED";
+
 export type Appointment = {
   id: string;
   clientName: string;
   phone: string;
   description: string;
   scheduleAt: Date;
+
+  status?: AppointmentStatus; // <- novo campo (opcional por segurança)
 
   // relacionamento com barbeiro
   barberId: string;

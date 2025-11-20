@@ -9,6 +9,7 @@ import { AppointmentForm } from "@/components/appointment-form";
 import { Button } from "@/components/ui/button";
 import type { Appointment as AppointmentType } from "@/types/appointment";
 import type { Barber } from "@/types/barber";
+import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -116,6 +117,7 @@ function mapToAppointmentType(prismaAppt: any): AppointmentType {
     phone: prismaAppt.phone,
     description: prismaAppt.description,
     scheduleAt: prismaAppt.scheduleAt,
+    status: prismaAppt.status ?? "PENDING",
     barberId: prismaAppt.barberId ?? "",
     barber: prismaAppt.barber
       ? {
@@ -240,6 +242,7 @@ export default async function AdminDashboardPage({
                       <th className="text-left px-4 py-2">Descrição</th>
                       <th className="text-left px-4 py-2">Data</th>
                       <th className="text-left px-4 py-2">Hora</th>
+                      <th className="text-left px-4 py-2">Status</th>
                       <th className="text-right px-4 py-2">Ações</th>
                     </tr>
                   </thead>
@@ -273,6 +276,9 @@ export default async function AdminDashboardPage({
                           <td className="px-4 py-2">{dateStr}</td>
                           <td className="px-4 py-2">{timeStr}</td>
                           <td className="px-4 py-2">
+                            <AppointmentStatusBadge status={appt.status} />
+                          </td>
+                          <td className="px-4 py-2">
                             <div className="flex justify-end gap-2">
                               {/* EDITAR – usando o mesmo AppointmentForm do painel principal */}
                               <AppointmentForm
@@ -289,8 +295,11 @@ export default async function AdminDashboardPage({
                                 </Button>
                               </AppointmentForm>
 
-                              {/* EXCLUIR – modal com server action do admin */}
-                              <AppointmentActions appointmentId={appt.id} />
+                              {/* EXCLUIR – ainda usando o componente atual */}
+                              <AppointmentActions
+                                appointmentId={appt.id}
+                                status={appt.status}
+                              />
                             </div>
                           </td>
                         </tr>

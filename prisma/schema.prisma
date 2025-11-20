@@ -21,6 +21,12 @@ enum Role {
   ADMIN
 }
 
+enum AppointmentStatus {
+  PENDING
+  DONE
+  CANCELED
+}
+
 // ============
 // MODELS
 // ============
@@ -67,13 +73,15 @@ model Appointment {
   phone       String
   scheduleAt  DateTime
 
+  status AppointmentStatus @default(PENDING)
+
   // Cliente que fez o agendamento (usuário logado)
   clientId String
   client   User   @relation("ClientAppointments", fields: [clientId], references: [id])
 
-  // Barbeiro que vai atender (agora usa o model Barber)
-  barberId String
-  barber   Barber @relation(fields: [barberId], references: [id])
+  // Barbeiro que vai atender (pode ser nulo para dados antigos / “Sem barbeiro”)
+  barberId String?
+  barber   Barber? @relation(fields: [barberId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
