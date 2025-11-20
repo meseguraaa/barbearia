@@ -1,2 +1,1 @@
-self.__NEXT_FONT_MANIFEST =
-  '{"pages":{},"app":{"/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/layout":["static/media/e4af272ccee01ff0-s.p.woff2","static/media/cafe7ff58138fc50-s.p.woff2"]},"appUsingSizeAdjust":true,"pagesUsingSizeAdjust":false}';
+self.__NEXT_FONT_MANIFEST="{\"pages\":{},\"app\":{\"/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/layout\":[\"static/media/e4af272ccee01ff0-s.p.woff2\",\"static/media/cafe7ff58138fc50-s.p.woff2\"]},\"appUsingSizeAdjust\":true,\"pagesUsingSizeAdjust\":false}"

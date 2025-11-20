@@ -28,11 +28,17 @@ import { formatTimeSaoPaulo } from "@/utills/datetime";
 type AppointmentCardProps = {
   appointment: Appointment;
   isFirstInSection?: boolean;
+  /**
+   * Lista de agendamentos (do dia) usada para
+   * bloquear horários que encavalem ao editar.
+   */
+  appointments?: Appointment[];
 };
 
 export const AppointmentCard = ({
   appointment,
   isFirstInSection = false,
+  appointments = [],
 }: AppointmentCardProps) => {
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -79,11 +85,13 @@ export const AppointmentCard = ({
       </div>
 
       <div className="text-right mt-2 md:mt-0 col-span-2 md:col-span-1 flex justify-end items-center gap-2">
-        <AppointmentForm appointment={appointment}>
+        {/* 👉 Agora o formulário recebe todos os agendamentos */}
+        <AppointmentForm appointment={appointment} appointments={appointments}>
           <Button variant="edit" size="icon">
             <EditIcon size={16} />
           </Button>
         </AppointmentForm>
+
         <AlertDialog>
           <AlertDialogTrigger asChild>
             <Button variant="remove" size="icon">

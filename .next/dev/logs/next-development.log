@@ -1,698 +1,177 @@
-[00:00:03.464] Server  LOG      ✓ Ready in 3.2s
-[00:00:08.632] Server  LOG      ○ Compiling / ...
-[00:00:13.474] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:02:07.311] Server  ERROR    ⨯ PrismaClientKnownRequestError: 
-Invalid `prisma.appointment.findMany()` invocation:
+[00:00:01.482] Server  LOG      ✓ Ready in 1256ms
+[00:00:13.145] Server  LOG      ○ Compiling / ...
+[00:00:16.222] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[00:00:17.205] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[33:17:33.422] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:17:43.503] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:17:48.813] Server  LOG     prisma:query "SELECT 1"
+[33:17:48.814] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:17:50.584] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:17:58.163] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:17:59.952] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:18:16.745] Server  LOG     prisma:query "SELECT 1"
+[33:18:16.745] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:18:19.673] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:19:23.022] Server  LOG     prisma:query "SELECT 1"
+[33:19:23.027] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:19:34.644] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:19:34.911] Browser ERROR   Received `%s` for a non-boolean attribute `%s`.
 
-
-The column `appointments.tutorName` does not exist in the current database.
-[00:02:07.715] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:02:07.715] Browser ERROR   uncaughtError: PrismaClientKnownRequestError: 
-Invalid `prisma.appointment.findMany()` invocation:
-
-
-The column `appointments.tutorName` does not exist in the current database.
-[00:02:08.119] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:02:09.142] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:09:08.366] Server  ERROR    ⨯ PrismaClientValidationError: 
-Invalid `prisma.appointment.findMany()` invocation:
-
-{
-  where: {
-    scheduleAt: {
-      gte: new Date("2025-11-18T03:00:00.000Z"),
-      lte: new Date("2025-11-19T02:59:59.999Z")
-    }
-  },
-  orderBy: {
-    scheduleAt: "asc"
-  },
-  select: {
-    id: true,
-    clientName: true,
-    phone: true,
-    description: true,
-    scheduleAt: true,
-    petName: true,
-    ~~~~~~~
-    tutorName: true
-  }
-}
-
-Unknown field `petName` for select statement on model `Appointment`. Available options are marked with ?.
-[00:09:08.944] Browser ERROR   uncaughtError: PrismaClientValidationError: 
-Invalid `prisma.appointment.findMany()` invocation:
-
-{
-  where: {
-    scheduleAt: {
-      gte: new Date("2025-11-18T03:00:00.000Z"),
-      lte: new Date("2025-11-19T02:59:59.999Z")
-    }
-  },
-  orderBy: {
-    scheduleAt: "asc"
-  },
-  select: {
-    id: true,
-    clientName: true,
-    phone: true,
-    description: true,
-    scheduleAt: true,
-    petName: true,
-    ~~~~~~~
-    tutorName: true
-  }
-}
-
-Unknown field `petName` for select statement on model `Appointment`. Available options are marked with ?.
-[00:09:15.102] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:09:15.824] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:22:45.078] Server  ERROR    ⨯ ReferenceError: Bar is not defined
-[00:22:45.308] Browser ERROR   uncaughtError: ReferenceError: Bar is not defined
-[00:22:48.329] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:22:48.940] Server  ERROR    ⨯ ReferenceError: Bar is not defined
-[00:22:49.674] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:22:49.674] Browser ERROR   uncaughtError: ReferenceError: Bar is not defined
-[00:22:51.102] Server  ERROR    ⨯ ReferenceError: Barber is not defined
-[00:22:51.495] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:22:51.495] Browser ERROR   uncaughtError: ReferenceError: Barber is not defined
-[00:22:55.207] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:22:55.703] Server  ERROR    ⨯ ReferenceError: Barb is not defined
-[00:22:56.448] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:22:56.448] Browser ERROR   uncaughtError: ReferenceError: Barb is not defined
-[00:22:58.973] Browser ERROR   ./src/components/logo/logo.tsx
-Error:   × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·           ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·            ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·       ─
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Unterminated regexp literal
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-
-Caused by:
-    Syntax Error
-
-Import trace for requested module:
-./src/components/logo/logo.tsx
-./src/components/header/header.tsx
-./src/components/header/index.ts
-./src/app/layout.tsx
-[00:22:59.697] Server  ERROR    ⨯ ./src/components/logo/logo.tsx
-Error:   × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·           ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·            ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·       ─
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Unterminated regexp literal
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-
-Caused by:
-    Syntax Error
-
-Import trace for requested module:
-./src/components/logo/logo.tsx
-./src/components/header/header.tsx
-./src/components/header/index.ts
-./src/app/layout.tsx
-[00:23:02.285] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:23:03.757] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:23:04.016] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:23:04.364] Server  ERROR    ⨯ ./src/components/logo/logo.tsx
-Error:   × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·           ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·            ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·       ─
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Unterminated regexp literal
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-
-Caused by:
-    Syntax Error
-
-Import trace for requested module:
-./src/components/logo/logo.tsx
-./src/components/header/header.tsx
-./src/components/header/index.ts
-./src/app/layout.tsx
-[00:23:04.394] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:23:04.495] Server  ERROR    ⨯ ./src/components/logo/logo.tsx
-Error:   × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·           ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·            ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·       ─
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Unterminated regexp literal
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-
-Caused by:
-    Syntax Error
-
-Import trace for requested module:
-./src/components/logo/logo.tsx
-./src/components/header/header.tsx
-./src/components/header/index.ts
-./src/app/layout.tsx
-[00:23:04.569] Browser ERROR   ./src/components/logo/logo.tsx
-Error:   × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·           ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·            ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·       ─
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Unterminated regexp literal
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-
-Caused by:
-    Syntax Error
-
-Import trace for requested module:
-./src/components/logo/logo.tsx
-./src/components/header/header.tsx
-./src/components/header/index.ts
-./src/app/layout.tsx
-[00:23:04.662] Browser ERROR   ./src/components/logo/logo.tsx
-Error:   × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·           ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·            ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·       ─
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Unterminated regexp literal
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-
-Caused by:
-    Syntax Error
-
-Import trace for requested module:
-./src/components/logo/logo.tsx
-./src/components/header/header.tsx
-./src/components/header/index.ts
-./src/app/layout.tsx
-[00:23:05.548] Browser ERROR   uncaughtError: ModuleBuildError: Module build failed (from ./node_modules/next/dist/build/webpack/loaders/next-swc-loader.js):
-Error:   × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·           ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·            ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·       ─
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Unterminated regexp literal
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-
-
-Caused by:
-    Syntax Error
-[00:23:05.656] Browser ERROR   ./src/components/logo/logo.tsx
-Error:   × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·           ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:11:1]
-  8 │       className="flex items-center- gap-4 bg-[#2e2c30] w-fit p-3 rounded-b-lg"
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
-    ·            ─
- 12 │       </div>
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·       ─
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Unterminated regexp literal
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-  × Expression expected
-    ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/logo/logo.tsx:12:1]
-  9 │     >
- 10 │       <div className="w-8 h-8 bg-background-brand rounded flex items-center justify-center">
- 11 │         < />
- 12 │       </div>
-    ·        ─────
- 13 │       <span className="text-label-large-size text-content-brand font-bold">
- 14 │         BarberShop
- 15 │       </span>
-    ╰────
-
-Caused by:
-    Syntax Error
-[00:23:07.439] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:23:08.549] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:23:09.940] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:23:10.565] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:23:11.285] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:23:37.416] Server  ERROR    ⨯ ReferenceError: Scissors is not defined
-[00:23:37.579] Browser ERROR   uncaughtError: ReferenceError: Scissors is not defined
-[00:23:41.834] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
-[00:23:42.484] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:24:55.043] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
-[00:46:19.971] Browser ERROR   ./src/utills/appoitment-utills.ts:6:1
-Module not found: Can't resolve '@/utils/datetime'
-  4 |     AppointmentPeriodDay,
-  5 | } from '@/types/appointment';
-> 6 | import { formatTimeSaoPaulo, getSaoPauloTime } from '@/utils/datetime';
-    | ^
-  7 |
-  8 | interface AppointmentPrisma {
-  9 |     id: string;
-
-https://nextjs.org/docs/messages/module-not-found
-
-Import trace for requested module:
-./src/app/page.tsx
-[00:46:20.034] Server  ERROR    ⨯ ./src/utills/appoitment-utills.ts:6:1
-Module not found: Can't resolve '@/utils/datetime'
-  4 |     AppointmentPeriodDay,
-  5 | } from '@/types/appointment';
-> 6 | import { formatTimeSaoPaulo, getSaoPauloTime } from '@/utils/datetime';
-    | ^
-  7 |
-  8 | interface AppointmentPrisma {
-  9 |     id: string;
-
-https://nextjs.org/docs/messages/module-not-found
-
-Import trace for requested module:
-./src/app/page.tsx
-[00:46:20.671] Server  ERROR    ⨯ ./src/utills/appoitment-utills.ts:6:1
-Module not found: Can't resolve '@/utils/datetime'
-  4 |     AppointmentPeriodDay,
-  5 | } from '@/types/appointment';
-> 6 | import { formatTimeSaoPaulo, getSaoPauloTime } from '@/utils/datetime';
-    | ^
-  7 |
-  8 | interface AppointmentPrisma {
-  9 |     id: string;
-
-https://nextjs.org/docs/messages/module-not-found
-
-Import trace for requested module:
-./src/app/page.tsx
-[00:46:20.734] Browser ERROR   ./src/utills/appoitment-utills.ts:6:1
-Module not found: Can't resolve '@/utils/datetime'
-  4 |     AppointmentPeriodDay,
-  5 | } from '@/types/appointment';
-> 6 | import { formatTimeSaoPaulo, getSaoPauloTime } from '@/utils/datetime';
-    | ^
-  7 |
-  8 | interface AppointmentPrisma {
-  9 |     id: string;
-
-https://nextjs.org/docs/messages/module-not-found
-
-Import trace for requested module:
-./src/app/page.tsx
-[00:46:21.136] Browser ERROR   uncaughtError: Error: Module not found: Can't resolve '@/utils/datetime'
-  4 |     AppointmentPeriodDay,
-  5 | } from '@/types/appointment';
-> 6 | import { formatTimeSaoPaulo, getSaoPauloTime } from '@/utils/datetime';
-    | ^
-  7 |
-  8 | interface AppointmentPrisma {
-  9 |     id: string;
-
-https://nextjs.org/docs/messages/module-not-found
-
-Import trace for requested module:
-./src/app/page.tsx
-[00:46:21.943] Browser ERROR   ./src/utills/appoitment-utills.ts:6:1
-Module not found: Can't resolve '@/utils/datetime'
-  4 |     AppointmentPeriodDay,
-  5 | } from '@/types/appointment';
-> 6 | import { formatTimeSaoPaulo, getSaoPauloTime } from '@/utils/datetime';
-    | ^
-  7 |
-  8 | interface AppointmentPrisma {
-  9 |     id: string;
-
-https://nextjs.org/docs/messages/module-not-found
-
-Import trace for requested module:
-./src/app/page.tsx
-[00:46:23.052] Server  LOG      ○ Compiling /_error ...
-[00:46:35.979] Server  WARN     ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
-[00:46:36.236] Server  WARN     ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
-[00:46:36.681] Server  WARN     ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
-[00:46:37.014] Server  WARN     ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
-[00:46:37.796] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
-[00:47:31.816] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
-[00:47:47.266] Browser WARN    Select is changing from controlled to uncontrolled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
-[00:48:02.531] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+If you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.toString()}. true cla cla true cla
+[33:19:36.136] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:19:40.221] Server  LOG     prisma:query "SELECT 1"
+[33:19:40.223] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:19:46.286] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:19:54.871] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:19:55.872] Server  LOG     prisma:query "SELECT 1"
+[33:19:55.873] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:20:03.174] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:20:09.777] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:21:03.501] Server  LOG     prisma:query "SELECT 1"
+[33:21:03.501] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:21:04.021] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:21:04.898] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:21:27.507] Server  LOG     prisma:query "SELECT 1"
+[33:21:27.511] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:21:29.973] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:21:32.670] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:21:36.462] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:21:42.815] Server  LOG     prisma:query "SELECT 1"
+[33:21:42.816] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:21:44.897] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:21:53.438] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:21:58.015] Server  LOG     prisma:query "SELECT 1"
+[33:21:58.016] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:22:38.571] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[33:26:42.410] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:26:42.411] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:26:42.411] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:26:42.411] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:26:42.411] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:26:42.448] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:26:42.532] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:26:42.608] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:26:42.845] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:30:28.300] Server  LOG     prisma:query "SELECT 1"
+[33:30:28.316] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:31:04.360] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[33:31:04.360] Browser ERROR   uncaughtError: ReferenceError: Toaster is not defined
+[33:31:04.988] Server  LOG     prisma:query "SELECT 1"
+[33:31:04.995] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:31:05.227] Server  ERROR    ⨯ ReferenceError: Toaster is not defined
+[33:31:05.762] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[33:31:06.665] Browser ERROR   uncaughtError: ReferenceError: Toaster is not defined
+[33:31:29.646] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[33:31:29.666] Server  LOG     prisma:query "SELECT 1"
+[33:31:29.667] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:31:29.774] Server  ERROR    ⨯ ReferenceError: Toaster is not defined
+[33:31:30.380] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[33:31:31.661] Browser ERROR   uncaughtError: ReferenceError: Toaster is not defined
+[33:31:32.687] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:31:32.693] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[33:31:33.283] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[33:31:34.352] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:31:34.377] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[33:31:34.377] Browser ERROR   uncaughtError: ReferenceError: Toaster is not defined
+[33:31:34.417] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:31:34.485] Server  ERROR    ⨯ ReferenceError: Toaster is not defined
+[33:31:34.808] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[33:31:35.662] Browser ERROR   uncaughtError: ReferenceError: Toaster is not defined
+[33:35:51.533] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[33:35:51.622] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:35:51.755] Server  ERROR    ⨯ ReferenceError: Toaster is not defined
+[33:35:52.211] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[33:35:52.661] Browser ERROR   uncaughtError: ReferenceError: Toaster is not defined
+[33:38:27.264] Server  WARN     ⚠ Fast Refresh had to perform a full reload due to a runtime error.
+[33:38:27.842] Server  LOG     prisma:query "SELECT 1"
+[33:38:27.856] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:38:28.454] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[33:38:34.648] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[33:40:40.509] Server  LOG     prisma:query "SELECT 1"
+[33:40:40.512] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:45:21.013] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:54:14.945] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:54:18.736] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:54:19.418] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[33:54:33.126] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[33:54:43.666] Server  LOG     prisma:query "SELECT 1"
+[33:54:43.669] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
+[33:54:43.690] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[33:54:43.705] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:54:43.844] Browser WARN    Select is changing from controlled to uncontrolled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[33:54:52.492] Browser WARN    Select is changing from uncontrolled to controlled. Components should not switch from controlled to uncontrolled (or vice versa). Decide between using a controlled or uncontrolled value for the lifetime of the component.
+[33:55:13.902] Server  LOG     prisma:query "SELECT 1"
+[33:55:13.903] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
+[33:55:13.906] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[33:55:13.922] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:55:29.727] Server  LOG     prisma:query "SELECT 1"
+[33:55:29.728] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[33:55:29.930] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:04:00.915] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:04:01.101] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:07:11.250] Server  LOG     prisma:query "SELECT 1"
+[34:07:11.271] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:08:49.675] Server  LOG     prisma:query "SELECT 1"
+[34:08:49.680] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:08:53.083] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:08:53.101] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:08:54.505] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:08:54.526] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:09:08.737] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
+[34:09:08.744] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:09:08.770] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:09:09.086] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:09:21.816] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
+[34:09:21.819] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:09:21.832] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:10:29.384] Server  LOG     prisma:query "SELECT 1"
+[34:10:29.384] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:10:29.625] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:15:36.481] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:15:37.010] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:15:38.726] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:15:38.747] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:15:40.105] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:15:40.125] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:15:56.623] Server  LOG     prisma:query "SELECT 1"
+[34:15:56.626] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
+[34:15:56.637] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:15:56.670] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:16:07.297] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
+[34:16:07.300] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:16:07.315] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:20:30.015] Server  LOG     prisma:query "SELECT 1"
+[34:20:30.015] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:20:30.136] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:20:45.439] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:20:45.686] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:21:03.642] Server  LOG     prisma:query "SELECT 1"
+[34:21:03.645] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:21:10.032] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:21:10.072] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:21:11.325] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:21:11.344] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:21:20.212] Server  LOG     prisma:query "SELECT 1"
+[34:21:20.213] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
+[34:21:20.221] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:21:20.239] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:21:41.401] Server  LOG     prisma:query "SELECT 1"
+[34:21:41.403] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
+[34:21:41.406] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:21:41.459] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:22:02.456] Server  LOG     prisma:query "SELECT 1"
+[34:22:02.457] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
+[34:22:02.461] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:22:02.488] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:22:17.276] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
+[34:22:17.281] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:22:17.329] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:22:23.353] Server  LOG     prisma:query "SELECT 1"
+[34:22:23.366] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:22:23.379] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:22:24.781] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:22:24.814] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:22:26.433] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:22:26.456] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:22:27.848] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:22:27.870] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
