@@ -1,0 +1,8 @@
+{
+  "c": ["app/layout", "app/page", "webpack"],
+  "r": [],
+  "m": [
+    "(app-pages-browser)/./node_modules/date-fns/getHours.js",
+    "(app-pages-browser)/./node_modules/date-fns/getMinutes.js"
+  ]
+}

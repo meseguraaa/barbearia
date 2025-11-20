@@ -175,3 +175,222 @@ If you want to write it to the DOM, pass a string instead: %s="%s" or %s={value.
 [34:22:26.456] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
 [34:22:27.848] Server  LOG     prisma:query "DELETE FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"id\" = $1 AND 1=1) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
 [34:22:27.870] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:24:01.492] Server  LOG     prisma:query "SELECT 1"
+[34:24:01.494] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:24:14.306] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:25:30.531] Server  LOG     prisma:query "SELECT 1"
+[34:25:30.531] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:25:30.655] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:27:52.549] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:27:52.930] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:30:06.984] Server  LOG     prisma:query "SELECT 1"
+[34:30:06.990] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:30:31.576] Server  LOG     prisma:query "SELECT 1"
+[34:30:31.579] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:30:36.365] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:31:00.983] Server  LOG     prisma:query "SELECT 1"
+[34:31:00.995] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:31:46.517] Server  ERROR    ⨯ ./src/components/appointment-form/schema.ts
+Error:   × Unterminated string constant
+   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
+ 1 │ // components/appointment-form/schema.ts
+ 2 │ import z from "zod";
+ 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
+ 4 │ import { SERVICE_OPTIONS } from "
+   ·                                 ─
+ 5 │ 
+ 6 │ export const appointmentFormSchema = z
+ 7 │   .object({
+   ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/appointment-form/schema.ts
+./src/components/appointment-form/appointment-form.tsx
+[34:31:46.660] Browser ERROR   ./src/components/appointment-form/schema.ts
+Error:   × Unterminated string constant
+   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
+ 1 │ // components/appointment-form/schema.ts
+ 2 │ import z from "zod";
+ 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
+ 4 │ import { SERVICE_OPTIONS } from "
+   ·                                 ─
+ 5 │ 
+ 6 │ export const appointmentFormSchema = z
+ 7 │   .object({
+   ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/appointment-form/schema.ts
+./src/components/appointment-form/appointment-form.tsx
+[34:31:49.462] Server  ERROR    ⨯ ./src/components/appointment-form/schema.ts
+Error:   × Unterminated string constant
+   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
+ 1 │ // components/appointment-form/schema.ts
+ 2 │ import z from "zod";
+ 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
+ 4 │ import { SERVICE_OPTIONS } from "@/
+   ·                                 ───
+ 5 │ 
+ 6 │ export const appointmentFormSchema = z
+ 7 │   .object({
+   ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/appointment-form/schema.ts
+./src/components/appointment-form/appointment-form.tsx
+[34:31:49.661] Browser ERROR   ./src/components/appointment-form/schema.ts
+Error:   × Unterminated string constant
+   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
+ 1 │ // components/appointment-form/schema.ts
+ 2 │ import z from "zod";
+ 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
+ 4 │ import { SERVICE_OPTIONS } from "
+   ·                                 ─
+ 5 │ 
+ 6 │ export const appointmentFormSchema = z
+ 7 │   .object({
+   ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/appointment-form/schema.ts
+./src/components/appointment-form/appointment-form.tsx
+[34:31:49.661] Browser ERROR   ./src/components/appointment-form/schema.ts
+Error:   × Unterminated string constant
+   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
+ 1 │ // components/appointment-form/schema.ts
+ 2 │ import z from "zod";
+ 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
+ 4 │ import { SERVICE_OPTIONS } from "@/
+   ·                                 ───
+ 5 │ 
+ 6 │ export const appointmentFormSchema = z
+ 7 │   .object({
+   ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/appointment-form/schema.ts
+./src/components/appointment-form/appointment-form.tsx
+[34:31:49.661] Browser ERROR   ./src/components/appointment-form/schema.ts
+Error:   × Unterminated string constant
+   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
+ 1 │ // components/appointment-form/schema.ts
+ 2 │ import z from "zod";
+ 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
+ 4 │ import { SERVICE_OPTIONS } from "@/
+   ·                                 ───
+ 5 │ 
+ 6 │ export const appointmentFormSchema = z
+ 7 │   .object({
+   ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/appointment-form/schema.ts
+./src/components/appointment-form/appointment-form.tsx
+[34:31:54.077] Server  ERROR    ⨯ ./src/components/appointment-form/schema.ts
+Error:   × Unterminated string constant
+   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
+ 1 │ // components/appointment-form/schema.ts
+ 2 │ import z from "zod";
+ 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
+ 4 │ import { SERVICE_OPTIONS } from "@/components
+   ·                                 ─────────────
+ 5 │ 
+ 6 │ export const appointmentFormSchema = z
+ 7 │   .object({
+   ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/appointment-form/schema.ts
+./src/components/appointment-form/appointment-form.tsx
+[34:31:54.668] Browser ERROR   ./src/components/appointment-form/schema.ts
+Error:   × Unterminated string constant
+   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
+ 1 │ // components/appointment-form/schema.ts
+ 2 │ import z from "zod";
+ 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
+ 4 │ import { SERVICE_OPTIONS } from "@/
+   ·                                 ───
+ 5 │ 
+ 6 │ export const appointmentFormSchema = z
+ 7 │   .object({
+   ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/appointment-form/schema.ts
+./src/components/appointment-form/appointment-form.tsx
+[34:31:54.668] Browser ERROR   ./src/components/appointment-form/schema.ts
+Error:   × Unterminated string constant
+   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
+ 1 │ // components/appointment-form/schema.ts
+ 2 │ import z from "zod";
+ 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
+ 4 │ import { SERVICE_OPTIONS } from "@/components
+   ·                                 ─────────────
+ 5 │ 
+ 6 │ export const appointmentFormSchema = z
+ 7 │   .object({
+   ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/appointment-form/schema.ts
+./src/components/appointment-form/appointment-form.tsx
+[34:31:55.666] Browser ERROR   ./src/components/appointment-form/schema.ts
+Error:   × Unterminated string constant
+   ╭─[/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/schema.ts:4:1]
+ 1 │ // components/appointment-form/schema.ts
+ 2 │ import z from "zod";
+ 3 │ import { startOfToday, setHours, setMinutes } from "date-fns";
+ 4 │ import { SERVICE_OPTIONS } from "@/components
+   ·                                 ─────────────
+ 5 │ 
+ 6 │ export const appointmentFormSchema = z
+ 7 │   .object({
+   ╰────
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./src/components/appointment-form/schema.ts
+./src/components/appointment-form/appointment-form.tsx
+[34:31:56.114] Server  LOG     prisma:query "SELECT 1"
+[34:31:56.129] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:32:07.407] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE \"public\".\"appointments\".\"scheduleAt\" = $1 LIMIT $2 OFFSET $3"
+[34:32:07.427] Server  LOG     prisma:query "INSERT INTO \"public\".\"appointments\" (\"id\",\"clientName\",\"phone\",\"description\",\"scheduleAt\") VALUES ($1,$2,$3,$4,$5) RETURNING \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\""
+[34:32:07.442] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:35:30.978] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:35:31.072] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:35:31.285] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:41:02.507] Server  WARN     ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+[34:41:02.644] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:41:04.462] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
+[34:41:05.424] Browser INFO    %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold
+[34:43:44.660] Server  LOG     prisma:query "SELECT 1"
+[34:43:44.662] Server  LOG     prisma:query "SELECT \"public\".\"appointments\".\"id\", \"public\".\"appointments\".\"clientName\", \"public\".\"appointments\".\"phone\", \"public\".\"appointments\".\"description\", \"public\".\"appointments\".\"scheduleAt\" FROM \"public\".\"appointments\" WHERE (\"public\".\"appointments\".\"scheduleAt\" >= $1 AND \"public\".\"appointments\".\"scheduleAt\" <= $2) ORDER BY \"public\".\"appointments\".\"scheduleAt\" ASC OFFSET $3"
