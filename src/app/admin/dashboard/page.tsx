@@ -80,7 +80,7 @@ async function getAppointments(dateParam?: string) {
       scheduleAt: "asc",
     },
     include: {
-      barber: true,
+      barber: true, // agora é o model Barber
     },
   });
 
@@ -88,17 +88,12 @@ async function getAppointments(dateParam?: string) {
 }
 
 async function getBarbers(): Promise<Barber[]> {
-  const barbers = await prisma.user.findMany({
+  const barbers = await prisma.barber.findMany({
     where: {
-      role: "BARBER",
+      isActive: true,
     },
     orderBy: {
       name: "asc",
-    },
-    select: {
-      id: true,
-      name: true,
-      role: true,
     },
   });
 
@@ -106,6 +101,9 @@ async function getBarbers(): Promise<Barber[]> {
   return barbers.map((barber) => ({
     id: barber.id,
     name: barber.name,
+    email: barber.email,
+    phone: barber.phone,
+    isActive: barber.isActive,
     role: "BARBER",
   }));
 }
@@ -123,6 +121,9 @@ function mapToAppointmentType(prismaAppt: any): AppointmentType {
       ? {
           id: prismaAppt.barber.id,
           name: prismaAppt.barber.name,
+          email: prismaAppt.barber.email,
+          phone: prismaAppt.barber.phone,
+          isActive: prismaAppt.barber.isActive,
           role: "BARBER",
         }
       : undefined,

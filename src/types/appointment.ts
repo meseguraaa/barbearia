@@ -9,7 +9,7 @@ export type Appointment = {
 
   // relacionamento com barbeiro
   barberId: string;
-  barber?: Barber;
+  barber?: Barber | null; // <- aqui só deixei mais flexível
 
   // campos calculados no front
   time?: string;
