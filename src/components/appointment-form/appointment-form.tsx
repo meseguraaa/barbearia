@@ -17,7 +17,6 @@ import {
   FormLabel,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import z from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -30,15 +29,7 @@ import {
   User,
 } from "lucide-react";
 import { IMaskInput } from "react-imask";
-import {
-  format,
-  setHours,
-  setMinutes,
-  startOfToday,
-  isSameDay,
-  getHours,
-  getMinutes,
-} from "date-fns";
+import { format, setHours, setMinutes, startOfToday } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
 import { Calendar } from "../ui/calendar";
@@ -54,86 +45,16 @@ import { createAppointment, updateAppointment } from "@/app/actions";
 import { useEffect, useState } from "react";
 import { Appointment } from "@/types/appointment";
 
-const SERVICE_OPTIONS = [
-  "Barba - R$80,00",
-  "Barba & Cabelo - R$120,00",
-  "Cabelo na tesoura - R$100,00",
-  "Cabelo na máquina - R$90,00",
-] as const;
-
-// ⏱ Duração de cada serviço (em minutos)
-const SERVICE_DURATION_MAP: Record<(typeof SERVICE_OPTIONS)[number], number> = {
-  "Barba - R$80,00": 30,
-  "Barba & Cabelo - R$120,00": 60,
-  "Cabelo na tesoura - R$100,00": 60,
-  "Cabelo na máquina - R$90,00": 30,
-};
-
-/**
- * Função mais robusta para descobrir a duração do serviço
- * a partir da descrição salva no banco.
- */
-const getServiceDuration = (description?: string): number => {
-  if (!description) return 30;
-
-  // Garante comparação sem ruído de espaços etc.
-  const normalized = description.trim().toLowerCase();
-
-  if (normalized.startsWith("barba & cabelo")) return 60;
-  if (normalized.startsWith("cabelo na tesoura")) return 60;
-  if (normalized.startsWith("barba - r$80")) return 30;
-  if (normalized.startsWith("cabelo na máquina")) return 30;
-
-  // fallback usando o mapa original quando for exatamente o enum
-  const key = description as (typeof SERVICE_OPTIONS)[number];
-  if (key in SERVICE_DURATION_MAP) {
-    return SERVICE_DURATION_MAP[key];
-  }
-
-  // fallback final
-  return 30;
-};
-
-const appointmentFormSchema = z
-  .object({
-    clientName: z.string().min(3, "Seu nome é obrigatório"),
-    phone: z.string().min(11, "O telefone é obrigatório"),
-    description: z.enum(SERVICE_OPTIONS, {
-      message: "A descrição do serviço é obrigatória",
-    }),
-    scheduleAt: z
-      .date({
-        error: "A data é obrigatória",
-      })
-      .min(startOfToday(), {
-        message: "A data não pode ser no passado",
-      }),
-    time: z.string().min(1, "A hora é obrigatória"),
-  })
-  .refine(
-    (data) => {
-      const [hour, minute] = data.time.split(":");
-      const scheduleDateTime = setMinutes(
-        setHours(data.scheduleAt, Number(hour)),
-        Number(minute),
-      );
-      return scheduleDateTime > new Date();
-    },
-    {
-      path: ["time"],
-      error: "O horário não pode ser no passado",
-    },
-  );
-
-type AppointFormValues = z.infer<typeof appointmentFormSchema>;
+import {
+  SERVICE_OPTIONS,
+  TIME_OPTIONS,
+  getAvailableTimes,
+} from "./constants-and-utils";
+import { AppointFormValues, appointmentFormSchema } from "./schema";
 
 type AppointmentFormProps = {
   appointment?: Appointment;
   children?: React.ReactNode;
-  /**
-   * Lista de agendamentos já existentes (do dia atual ou vários dias).
-   * A função interna filtra por data.
-   */
   appointments?: Appointment[];
 };
 
@@ -192,17 +113,13 @@ export const AppointmentForm = ({
     form.reset();
   };
 
-  // Handler que transforma erros de validação em toast
   const handleSubmit = form.handleSubmit(onSubmit, (errors) => {
     const firstError = Object.values(errors)[0];
-
-    if (!firstError) return;
-
     const message = firstError?.message;
 
     if (message) {
       toast.error(String(message));
-    } else {
+    } else if (firstError) {
       toast.error("Verifique os campos obrigatórios.");
     }
   });
@@ -231,14 +148,9 @@ export const AppointmentForm = ({
     });
   }, [appointment, form]);
 
-  // 🕒 Observa data e serviço selecionados
   const selectedDate = form.watch("scheduleAt");
   const selectedService = form.watch("description");
 
-  // 🕒 Calcula horários disponíveis com base em:
-  // - data selecionada
-  // - serviço selecionado (duração)
-  // - agendamentos existentes (não pode sobrepor)
   const availableTimes = getAvailableTimes({
     date: selectedDate,
     service: selectedService,
@@ -264,7 +176,7 @@ export const AppointmentForm = ({
 
         <Form {...form}>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* SEU NOME */}
+            {/* CLIENTE */}
             <FormField
               control={form.control}
               name="clientName"
@@ -317,7 +229,7 @@ export const AppointmentForm = ({
               )}
             />
 
-            {/* DESCRIÇÃO DO SERVIÇO */}
+            {/* SERVIÇO */}
             <FormField
               control={form.control}
               name="description"
@@ -330,7 +242,6 @@ export const AppointmentForm = ({
                     <Select
                       onValueChange={(value) => {
                         field.onChange(value);
-                        // Quando mudar o serviço, limpamos a hora pra forçar o usuário a escolher de novo
                         form.setValue("time", "");
                       }}
                       value={field.value}
@@ -395,7 +306,6 @@ export const AppointmentForm = ({
                           selected={field.value}
                           onSelect={(date) => {
                             field.onChange(date);
-                            // Ao mudar a data, limpamos o horário selecionado
                             form.setValue("time", "");
                           }}
                           disabled={(date) => date < startOfToday()}
@@ -476,96 +386,4 @@ export const AppointmentForm = ({
       </DialogContent>
     </Dialog>
   );
-};
-
-const generateTimeOptions = (): string[] => {
-  const times = [];
-
-  for (let hour = 9; hour <= 21; hour++) {
-    for (let minute = 0; minute < 60; minute += 30) {
-      if (hour === 21 && minute > 0) break;
-      const timeString = `${hour
-        .toString()
-        .padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
-      times.push(timeString);
-    }
-  }
-
-  return times;
-};
-
-const TIME_OPTIONS = generateTimeOptions();
-
-// 🔍 Calcula horários disponíveis considerando:
-// - data selecionada
-// - serviço selecionado (duração)
-// - agendamentos existentes (sem sobrepor)
-// - horários passados no dia de hoje
-const getAvailableTimes = (params: {
-  date?: Date | null;
-  service?: AppointFormValues["description"] | undefined;
-  appointments: Appointment[];
-  currentAppointmentId?: string;
-}): string[] => {
-  const { date, service, appointments, currentAppointmentId } = params;
-
-  if (!date || !service) return [];
-
-  const now = new Date();
-
-  // Duração do serviço selecionado
-  const selectedDuration = getServiceDuration(service);
-
-  let baseTimes = [...TIME_OPTIONS];
-
-  // Se for hoje, remove horários que já passaram
-  if (isSameDay(date, now)) {
-    const currentMinutes = getHours(now) * 60 + getMinutes(now);
-
-    baseTimes = baseTimes.filter((time) => {
-      const [hourStr, minuteStr] = time.split(":");
-      const hour = Number(hourStr);
-      const minute = Number(minuteStr);
-      const timeMinutes = hour * 60 + minute;
-
-      return timeMinutes > currentMinutes;
-    });
-  }
-
-  // Filtra agendamentos só desse dia
-  const dayAppointments = appointments.filter((appt) =>
-    isSameDay(new Date(appt.scheduleAt), date),
-  );
-
-  // Remove horários que colidem com qualquer agendamento existente
-  const availableTimes = baseTimes.filter((time) => {
-    const [hourStr, minuteStr] = time.split(":");
-    const hour = Number(hourStr);
-    const minute = Number(minuteStr);
-    const candidateStart = hour * 60 + minute;
-    const candidateEnd = candidateStart + selectedDuration;
-
-    for (const appt of dayAppointments) {
-      // Ignora o próprio agendamento quando estiver editando
-      if (currentAppointmentId && appt.id === currentAppointmentId) {
-        continue;
-      }
-
-      const apptDate = new Date(appt.scheduleAt);
-      const apptStart = getHours(apptDate) * 60 + getMinutes(apptDate);
-
-      const apptDuration = getServiceDuration(appt.description);
-      const apptEnd = apptStart + apptDuration;
-
-      const overlap = candidateStart < apptEnd && apptStart < candidateEnd;
-
-      if (overlap) {
-        return false;
-      }
-    }
-
-    return true;
-  });
-
-  return availableTimes;
 };
