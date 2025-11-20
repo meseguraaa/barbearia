@@ -87,12 +87,27 @@ exports.Prisma.TransactionIsolationLevel = makeStrictEnum({
   Serializable: "Serializable",
 });
 
+exports.Prisma.UserScalarFieldEnum = {
+  id: "id",
+  name: "name",
+  email: "email",
+  image: "image",
+  passwordHash: "passwordHash",
+  role: "role",
+  createdAt: "createdAt",
+  updatedAt: "updatedAt",
+};
+
 exports.Prisma.AppointmentScalarFieldEnum = {
   id: "id",
+  description: "description",
   clientName: "clientName",
   phone: "phone",
-  description: "description",
   scheduleAt: "scheduleAt",
+  clientId: "clientId",
+  barberId: "barberId",
+  createdAt: "createdAt",
+  updatedAt: "updatedAt",
 };
 
 exports.Prisma.SortOrder = {
@@ -105,7 +120,18 @@ exports.Prisma.QueryMode = {
   insensitive: "insensitive",
 };
 
+exports.Prisma.NullsOrder = {
+  first: "first",
+  last: "last",
+};
+exports.Role = exports.$Enums.Role = {
+  CLIENT: "CLIENT",
+  BARBER: "BARBER",
+  ADMIN: "ADMIN",
+};
+
 exports.Prisma.ModelName = {
+  User: "User",
   Appointment: "Appointment",
 };
 /**
@@ -139,7 +165,7 @@ const config = {
     isCustomOutput: true,
   },
   relativeEnvPaths: {
-    rootEnvPath: "../../../.env",
+    rootEnvPath: null,
     schemaEnvPath: "../../../.env",
   },
   relativePath: "../../../prisma",
@@ -157,15 +183,15 @@ const config = {
     },
   },
   inlineSchema:
-    'generator client {\n  provider = "prisma-client-js"\n  output   = "../src/generated/prisma"\n}\n\ndatasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL")\n}\n\nmodel Appointment {\n  id          String   @id @default(cuid())\n  clientName  String\n  phone       String\n  description String\n  scheduleAt  DateTime\n\n  @@map("appointments")\n}\n',
+    '// =======================\n// GENERATOR & DATASOURCE\n// =======================\n\ngenerator client {\n  provider = "prisma-client-js"\n  output   = "../src/generated/prisma"\n}\n\ndatasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL")\n}\n\n// ============\n// ENUMS\n// ============\n\nenum Role {\n  CLIENT\n  BARBER\n  ADMIN\n}\n\n// ============\n// MODELS\n// ============\n\nmodel User {\n  id String @id @default(cuid())\n\n  name  String?\n  email String  @unique\n  image String?\n\n  // Para barbeiro/admin: hash da senha (nunca em texto puro!)\n  passwordHash String?\n\n  role Role @default(CLIENT)\n\n  // Relacionamentos\n  appointmentsAsClient Appointment[] @relation("ClientAppointments")\n  appointmentsAsBarber Appointment[] @relation("BarberAppointments")\n\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n}\n\nmodel Appointment {\n  id          String   @id @default(cuid())\n  description String\n  clientName  String\n  phone       String\n  scheduleAt  DateTime\n\n  // Cliente que fez o agendamento (usuário logado)\n  clientId String\n  client   User   @relation("ClientAppointments", fields: [clientId], references: [id])\n\n  // Barbeiro que vai atender\n  barberId String\n  barber   User   @relation("BarberAppointments", fields: [barberId], references: [id])\n\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  // Índices úteis\n  @@index([clientId])\n  @@index([barberId])\n  @@index([scheduleAt])\n  // Mantém o nome da tabela como "appointments"\n  @@map("appointments")\n}\n',
   inlineSchemaHash:
-    "0965468ccbfccdd490eb64e168bbfd7508af3f8d488cbc773be303a3ba5b4ac5",
+    "3c0468f070aed2cba67ce00f1e9f92719db781f180bbd5f6179bee1d39062fbf",
   copyEngine: true,
 };
 config.dirname = "/";
 
 config.runtimeDataModel = JSON.parse(
-  '{"models":{"Appointment":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"clientName","kind":"scalar","type":"String"},{"name":"phone","kind":"scalar","type":"String"},{"name":"description","kind":"scalar","type":"String"},{"name":"scheduleAt","kind":"scalar","type":"DateTime"}],"dbName":"appointments"}},"enums":{},"types":{}}',
+  '{"models":{"User":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"name","kind":"scalar","type":"String"},{"name":"email","kind":"scalar","type":"String"},{"name":"image","kind":"scalar","type":"String"},{"name":"passwordHash","kind":"scalar","type":"String"},{"name":"role","kind":"enum","type":"Role"},{"name":"appointmentsAsClient","kind":"object","type":"Appointment","relationName":"ClientAppointments"},{"name":"appointmentsAsBarber","kind":"object","type":"Appointment","relationName":"BarberAppointments"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":null},"Appointment":{"fields":[{"name":"id","kind":"scalar","type":"String"},{"name":"description","kind":"scalar","type":"String"},{"name":"clientName","kind":"scalar","type":"String"},{"name":"phone","kind":"scalar","type":"String"},{"name":"scheduleAt","kind":"scalar","type":"DateTime"},{"name":"clientId","kind":"scalar","type":"String"},{"name":"client","kind":"object","type":"User","relationName":"ClientAppointments"},{"name":"barberId","kind":"scalar","type":"String"},{"name":"barber","kind":"object","type":"User","relationName":"BarberAppointments"},{"name":"createdAt","kind":"scalar","type":"DateTime"},{"name":"updatedAt","kind":"scalar","type":"DateTime"}],"dbName":"appointments"}},"enums":{},"types":{}}',
 );
 defineDmmfProperty(exports.Prisma, config.runtimeDataModel);
 config.engineWasm = {

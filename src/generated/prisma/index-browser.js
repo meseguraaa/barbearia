@@ -117,12 +117,27 @@ exports.Prisma.TransactionIsolationLevel = makeStrictEnum({
   Serializable: "Serializable",
 });
 
+exports.Prisma.UserScalarFieldEnum = {
+  id: "id",
+  name: "name",
+  email: "email",
+  image: "image",
+  passwordHash: "passwordHash",
+  role: "role",
+  createdAt: "createdAt",
+  updatedAt: "updatedAt",
+};
+
 exports.Prisma.AppointmentScalarFieldEnum = {
   id: "id",
+  description: "description",
   clientName: "clientName",
   phone: "phone",
-  description: "description",
   scheduleAt: "scheduleAt",
+  clientId: "clientId",
+  barberId: "barberId",
+  createdAt: "createdAt",
+  updatedAt: "updatedAt",
 };
 
 exports.Prisma.SortOrder = {
@@ -135,7 +150,18 @@ exports.Prisma.QueryMode = {
   insensitive: "insensitive",
 };
 
+exports.Prisma.NullsOrder = {
+  first: "first",
+  last: "last",
+};
+exports.Role = exports.$Enums.Role = {
+  CLIENT: "CLIENT",
+  BARBER: "BARBER",
+  ADMIN: "ADMIN",
+};
+
 exports.Prisma.ModelName = {
+  User: "User",
   Appointment: "Appointment",
 };
 

@@ -91,6 +91,25 @@ async function ensureAvailability(
 }
 
 /* ---------------------------------------------------------
+ * Helper TEMPORÁRIO: cliente padrão (sem login)
+ * ---------------------------------------------------------*/
+async function getDefaultClientId(): Promise<string> {
+  const email = "anon@barbearia.local";
+
+  const client = await prisma.user.upsert({
+    where: { email },
+    update: {},
+    create: {
+      email,
+      name: "Cliente não autenticado",
+      role: "CLIENT",
+    },
+  });
+
+  return client.id;
+}
+
+/* ---------------------------------------------------------
  * Wrapper para operações com try/catch + revalidate
  * ---------------------------------------------------------*/
 async function withAppointmentMutation(
@@ -122,8 +141,17 @@ export async function createAppointment(data: AppointmentData) {
   const availabilityError = await ensureAvailability(scheduleAt, barberId);
   if (availabilityError) return { error: availabilityError };
 
+  // Enquanto não temos login de cliente,
+  // associamos a um "cliente padrão" seguro.
+  const clientId = await getDefaultClientId();
+
   return withAppointmentMutation(async () => {
-    await prisma.appointment.create({ data: parsed });
+    await prisma.appointment.create({
+      data: {
+        ...parsed,
+        clientId,
+      },
+    });
   }, "Falha ao criar o agendamento");
 }
 
@@ -146,6 +174,7 @@ export async function updateAppointment(id: string, data: AppointmentData) {
   return withAppointmentMutation(async () => {
     await prisma.appointment.update({
       where: { id },
+      // aqui não mudamos o clientId, só os campos do formulário
       data: parsed,
     });
   }, "Falha ao atualizar o agendamento");

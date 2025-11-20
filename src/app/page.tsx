@@ -40,13 +40,22 @@ export default async function Home({ searchParams }: HomeProps) {
       scheduleAt: "asc",
     },
     include: {
-      barber: true,
+      barber: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
     },
   });
 
-  const barbers = await prisma.barber.findMany({
-    where: { isActive: true },
+  const barbers = await prisma.user.findMany({
+    where: { role: "BARBER" },
     orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+    },
   });
 
   const appointments = rawAppointments.map((apt) => ({

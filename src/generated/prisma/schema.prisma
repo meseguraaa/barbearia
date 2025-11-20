@@ -1,3 +1,7 @@
+// =======================
+// GENERATOR & DATASOURCE
+// =======================
+
 generator client {
   provider = "prisma-client-js"
   output   = "../src/generated/prisma"
@@ -8,12 +12,62 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ============
+// ENUMS
+// ============
+
+enum Role {
+  CLIENT
+  BARBER
+  ADMIN
+}
+
+// ============
+// MODELS
+// ============
+
+model User {
+  id String @id @default(cuid())
+
+  name  String?
+  email String  @unique
+  image String?
+
+  // Para barbeiro/admin: hash da senha (nunca em texto puro!)
+  passwordHash String?
+
+  role Role @default(CLIENT)
+
+  // Relacionamentos
+  appointmentsAsClient Appointment[] @relation("ClientAppointments")
+  appointmentsAsBarber Appointment[] @relation("BarberAppointments")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Appointment {
   id          String   @id @default(cuid())
+  description String
   clientName  String
   phone       String
-  description String
   scheduleAt  DateTime
 
+  // Cliente que fez o agendamento (usuário logado)
+  clientId String
+  client   User   @relation("ClientAppointments", fields: [clientId], references: [id])
+
+  // Barbeiro que vai atender
+  barberId String
+  barber   User   @relation("BarberAppointments", fields: [barberId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Índices úteis
+  @@index([clientId])
+  @@index([barberId])
+  @@index([scheduleAt])
+  // Mantém o nome da tabela como "appointments"
   @@map("appointments")
 }

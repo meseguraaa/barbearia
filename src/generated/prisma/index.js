@@ -89,12 +89,27 @@ exports.Prisma.TransactionIsolationLevel = makeStrictEnum({
   Serializable: "Serializable",
 });
 
+exports.Prisma.UserScalarFieldEnum = {
+  id: "id",
+  name: "name",
+  email: "email",
+  image: "image",
+  passwordHash: "passwordHash",
+  role: "role",
+  createdAt: "createdAt",
+  updatedAt: "updatedAt",
+};
+
 exports.Prisma.AppointmentScalarFieldEnum = {
   id: "id",
+  description: "description",
   clientName: "clientName",
   phone: "phone",
-  description: "description",
   scheduleAt: "scheduleAt",
+  clientId: "clientId",
+  barberId: "barberId",
+  createdAt: "createdAt",
+  updatedAt: "updatedAt",
 };
 
 exports.Prisma.SortOrder = {
@@ -107,7 +122,18 @@ exports.Prisma.QueryMode = {
   insensitive: "insensitive",
 };
 
+exports.Prisma.NullsOrder = {
+  first: "first",
+  last: "last",
+};
+exports.Role = exports.$Enums.Role = {
+  CLIENT: "CLIENT",
+  BARBER: "BARBER",
+  ADMIN: "ADMIN",
+};
+
 exports.Prisma.ModelName = {
+  User: "User",
   Appointment: "Appointment",
 };
 /**
@@ -141,7 +167,7 @@ const config = {
     isCustomOutput: true,
   },
   relativeEnvPaths: {
-    rootEnvPath: "../../../.env",
+    rootEnvPath: null,
     schemaEnvPath: "../../../.env",
   },
   relativePath: "../../../prisma",
@@ -159,9 +185,9 @@ const config = {
     },
   },
   inlineSchema:
-    'generator client {\n  provider = "prisma-client-js"\n  output   = "../src/generated/prisma"\n}\n\ndatasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL")\n}\n\nmodel Appointment {\n  id          String   @id @default(cuid())\n  clientName  String\n  phone       String\n  description String\n  scheduleAt  DateTime\n\n  @@map("appointments")\n}\n',
+    '// =======================\n// GENERATOR & DATASOURCE\n// =======================\n\ngenerator client {\n  provider = "prisma-client-js"\n  output   = "../src/generated/prisma"\n}\n\ndatasource db {\n  provider = "postgresql"\n  url      = env("DATABASE_URL")\n}\n\n// ============\n// ENUMS\n// ============\n\nenum Role {\n  CLIENT\n  BARBER\n  ADMIN\n}\n\n// ============\n// MODELS\n// ============\n\nmodel User {\n  id String @id @default(cuid())\n\n  name  String?\n  email String  @unique\n  image String?\n\n  // Para barbeiro/admin: hash da senha (nunca em texto puro!)\n  passwordHash String?\n\n  role Role @default(CLIENT)\n\n  // Relacionamentos\n  appointmentsAsClient Appointment[] @relation("ClientAppointments")\n  appointmentsAsBarber Appointment[] @relation("BarberAppointments")\n\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n}\n\nmodel Appointment {\n  id          String   @id @default(cuid())\n  description String\n  clientName  String\n  phone       String\n  scheduleAt  DateTime\n\n  // Cliente que fez o agendamento (usuário logado)\n  clientId String\n  client   User   @relation("ClientAppointments", fields: [clientId], references: [id])\n\n  // Barbeiro que vai atender\n  barberId String\n  barber   User   @relation("BarberAppointments", fields: [barberId], references: [id])\n\n  createdAt DateTime @default(now())\n  updatedAt DateTime @updatedAt\n\n  // Índices úteis\n  @@index([clientId])\n  @@index([barberId])\n  @@index([scheduleAt])\n  // Mantém o nome da tabela como "appointments"\n  @@map("appointments")\n}\n',
   inlineSchemaHash:
-    "0965468ccbfccdd490eb64e168bbfd7508af3f8d488cbc773be303a3ba5b4ac5",
+    "3c0468f070aed2cba67ce00f1e9f92719db781f180bbd5f6179bee1d39062fbf",
   copyEngine: true,
 };
 
@@ -181,7 +207,7 @@ if (!fs.existsSync(path.join(__dirname, "schema.prisma"))) {
 }
 
 config.runtimeDataModel = JSON.parse(
-  '{"models":{"Appointment":{"dbName":"appointments","schema":null,"fields":[{"name":"id","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":true,"isReadOnly":false,"hasDefaultValue":true,"type":"String","nativeType":null,"default":{"name":"cuid","args":[1]},"isGenerated":false,"isUpdatedAt":false},{"name":"clientName","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"String","nativeType":null,"isGenerated":false,"isUpdatedAt":false},{"name":"phone","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"String","nativeType":null,"isGenerated":false,"isUpdatedAt":false},{"name":"description","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"String","nativeType":null,"isGenerated":false,"isUpdatedAt":false},{"name":"scheduleAt","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"DateTime","nativeType":null,"isGenerated":false,"isUpdatedAt":false}],"primaryKey":null,"uniqueFields":[],"uniqueIndexes":[],"isGenerated":false}},"enums":{},"types":{}}',
+  '{"models":{"User":{"dbName":null,"schema":null,"fields":[{"name":"id","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":true,"isReadOnly":false,"hasDefaultValue":true,"type":"String","nativeType":null,"default":{"name":"cuid","args":[1]},"isGenerated":false,"isUpdatedAt":false},{"name":"name","kind":"scalar","isList":false,"isRequired":false,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"String","nativeType":null,"isGenerated":false,"isUpdatedAt":false},{"name":"email","kind":"scalar","isList":false,"isRequired":true,"isUnique":true,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"String","nativeType":null,"isGenerated":false,"isUpdatedAt":false},{"name":"image","kind":"scalar","isList":false,"isRequired":false,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"String","nativeType":null,"isGenerated":false,"isUpdatedAt":false},{"name":"passwordHash","kind":"scalar","isList":false,"isRequired":false,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"String","nativeType":null,"isGenerated":false,"isUpdatedAt":false},{"name":"role","kind":"enum","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":true,"type":"Role","nativeType":null,"default":"CLIENT","isGenerated":false,"isUpdatedAt":false},{"name":"appointmentsAsClient","kind":"object","isList":true,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"Appointment","nativeType":null,"relationName":"ClientAppointments","relationFromFields":[],"relationToFields":[],"isGenerated":false,"isUpdatedAt":false},{"name":"appointmentsAsBarber","kind":"object","isList":true,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"Appointment","nativeType":null,"relationName":"BarberAppointments","relationFromFields":[],"relationToFields":[],"isGenerated":false,"isUpdatedAt":false},{"name":"createdAt","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":true,"type":"DateTime","nativeType":null,"default":{"name":"now","args":[]},"isGenerated":false,"isUpdatedAt":false},{"name":"updatedAt","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"DateTime","nativeType":null,"isGenerated":false,"isUpdatedAt":true}],"primaryKey":null,"uniqueFields":[],"uniqueIndexes":[],"isGenerated":false},"Appointment":{"dbName":"appointments","schema":null,"fields":[{"name":"id","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":true,"isReadOnly":false,"hasDefaultValue":true,"type":"String","nativeType":null,"default":{"name":"cuid","args":[1]},"isGenerated":false,"isUpdatedAt":false},{"name":"description","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"String","nativeType":null,"isGenerated":false,"isUpdatedAt":false},{"name":"clientName","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"String","nativeType":null,"isGenerated":false,"isUpdatedAt":false},{"name":"phone","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"String","nativeType":null,"isGenerated":false,"isUpdatedAt":false},{"name":"scheduleAt","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"DateTime","nativeType":null,"isGenerated":false,"isUpdatedAt":false},{"name":"clientId","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":true,"hasDefaultValue":false,"type":"String","nativeType":null,"isGenerated":false,"isUpdatedAt":false},{"name":"client","kind":"object","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"User","nativeType":null,"relationName":"ClientAppointments","relationFromFields":["clientId"],"relationToFields":["id"],"isGenerated":false,"isUpdatedAt":false},{"name":"barberId","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":true,"hasDefaultValue":false,"type":"String","nativeType":null,"isGenerated":false,"isUpdatedAt":false},{"name":"barber","kind":"object","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"User","nativeType":null,"relationName":"BarberAppointments","relationFromFields":["barberId"],"relationToFields":["id"],"isGenerated":false,"isUpdatedAt":false},{"name":"createdAt","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":true,"type":"DateTime","nativeType":null,"default":{"name":"now","args":[]},"isGenerated":false,"isUpdatedAt":false},{"name":"updatedAt","kind":"scalar","isList":false,"isRequired":true,"isUnique":false,"isId":false,"isReadOnly":false,"hasDefaultValue":false,"type":"DateTime","nativeType":null,"isGenerated":false,"isUpdatedAt":true}],"primaryKey":null,"uniqueFields":[],"uniqueIndexes":[],"isGenerated":false}},"enums":{"Role":{"values":[{"name":"CLIENT","dbName":null},{"name":"BARBER","dbName":null},{"name":"ADMIN","dbName":null}],"dbName":null}},"types":{}}',
 );
 defineDmmfProperty(exports.Prisma, config.runtimeDataModel);
 config.engineWasm = undefined;
