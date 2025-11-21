@@ -1,4 +1,3 @@
-// app/admin/barber/page.tsx
 import { prisma } from "@/lib/prisma";
 import { Metadata } from "next";
 import { Button } from "@/components/ui/button";
@@ -29,11 +28,11 @@ export default async function BarbersPage() {
   });
 
   return (
-    <main className="p-6 space-y-6">
+    <div className="space-y-6 max-w-7xl ">
       <header className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Barbeiros</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-title text-content-primary">Barbeiros</h1>
+          <p className="text-paragraph-small text-content-secondary">
             Gerencie os barbeiros disponíveis para agendamento.
           </p>
         </div>
@@ -41,7 +40,7 @@ export default async function BarbersPage() {
         <NewBarberDialog />
       </header>
 
-      <section className="overflow-x-auto rounded-md border">
+      <section className="overflow-x-auto rounded-xl border border-border-primary bg-background-tertiary">
         <table className="min-w-full text-sm">
           <thead className="bg-muted/50">
             <tr className="text-left">
@@ -57,14 +56,14 @@ export default async function BarbersPage() {
               <tr>
                 <td
                   colSpan={5}
-                  className="px-4 py-6 text-center text-muted-foreground"
+                  className="px-4 py-6 text-center text-paragraph-small text-content-secondary"
                 >
                   Nenhum barbeiro cadastrado ainda.
                 </td>
               </tr>
             ) : (
               barbers.map((barber) => (
-                <tr key={barber.id} className="border-t">
+                <tr key={barber.id} className="border-t border-border-primary">
                   <td className="px-4 py-3">{barber.name}</td>
                   <td className="px-4 py-3">{barber.email}</td>
                   <td className="px-4 py-3">{barber.phone ?? "-"}</td>
@@ -72,8 +71,8 @@ export default async function BarbersPage() {
                     <Badge
                       className={
                         barber.isActive
-                          ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
-                          : "bg-red-100 text-red-800 hover:bg-red-100"
+                          ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
+                          : "bg-red-500/15 text-red-300 border-red-500/40"
                       }
                     >
                       {barber.isActive ? "Ativo" : "Inativo"}
@@ -87,8 +86,13 @@ export default async function BarbersPage() {
                           name="barberId"
                           value={barber.id}
                         />
-                        <Button variant="outline" size="sm" type="submit">
-                          {barber.isActive ? "Desativar" : "Ativar"}
+                        <Button
+                          variant={barber.isActive ? "destructive" : "active"}
+                          size="sm"
+                          type="submit"
+                          className="border-border-primary hover:bg-muted/40"
+                        >
+                          {barber.isActive ? "DESATIVAR" : "ATIVAR"}
                         </Button>
                       </form>
 
@@ -98,7 +102,12 @@ export default async function BarbersPage() {
                           name="barberId"
                           value={barber.id}
                         />
-                        <Button variant="outline" size="sm" type="submit">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="submit"
+                          className="border-border-primary hover:bg-muted/40"
+                        >
                           Resetar senha
                         </Button>
                       </form>
@@ -110,7 +119,7 @@ export default async function BarbersPage() {
           </tbody>
         </table>
       </section>
-    </main>
+    </div>
   );
 }
 
@@ -118,47 +127,72 @@ function NewBarberDialog() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button>Novo barbeiro</Button>
+        <Button variant="brand">Novo barbeiro</Button>
       </DialogTrigger>
 
-      <DialogContent>
+      <DialogContent className="bg-background-secondary border border-border-primary">
         <DialogHeader>
-          <DialogTitle>Novo barbeiro</DialogTitle>
+          <DialogTitle className="text-title text-content-primary">
+            Novo barbeiro
+          </DialogTitle>
         </DialogHeader>
 
         <form
           action={async (formData) => {
             "use server";
             await createBarber(formData);
-            // se createBarber retornar { error }, você pode tratar aqui se quiser
-            // const result = await createBarber(formData);
-            // if (result?.error) { ... }
           }}
           className="space-y-4"
         >
           <div className="space-y-1">
-            <label className="text-sm font-medium" htmlFor="name">
+            <label
+              className="text-label-small text-content-secondary"
+              htmlFor="name"
+            >
               Nome
             </label>
-            <Input id="name" name="name" required />
+            <Input
+              id="name"
+              name="name"
+              required
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium" htmlFor="email">
+            <label
+              className="text-label-small text-content-secondary"
+              htmlFor="email"
+            >
               E-mail
             </label>
-            <Input id="email" type="email" name="email" required />
+            <Input
+              id="email"
+              type="email"
+              name="email"
+              required
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
           </div>
 
           <div className="space-y-1">
-            <label className="text-sm font-medium" htmlFor="phone">
+            <label
+              className="text-label-small text-content-secondary"
+              htmlFor="phone"
+            >
               Telefone (opcional)
             </label>
-            <Input id="phone" name="phone" />
+            <Input
+              id="phone"
+              name="phone"
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="submit">Salvar</Button>
+            <Button type="submit" variant="brand">
+              Salvar
+            </Button>
           </div>
         </form>
       </DialogContent>

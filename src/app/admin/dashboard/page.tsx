@@ -25,9 +25,6 @@ type AdminDashboardPageProps = {
 
 const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
 
-/**
- * Pega a data "hoje" em São Paulo (zerada, só ano-mês-dia)
- */
 function getSaoPauloToday(): Date {
   const now = new Date();
 
@@ -46,9 +43,6 @@ function getSaoPauloToday(): Date {
   return new Date(year, month - 1, day);
 }
 
-/**
- * Converte "yyyy-MM-dd" em Date local (sem timezone explícito)
- */
 function parseDateParam(dateStr?: string): Date | null {
   if (!dateStr) return null;
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -63,7 +57,6 @@ async function getAppointments(dateParam?: string) {
     const parsed = parseDateParam(dateParam);
     baseDate = parsed ?? getSaoPauloToday();
   } else {
-    // fallback padrão: hoje em São Paulo
     baseDate = getSaoPauloToday();
   }
 
@@ -81,7 +74,7 @@ async function getAppointments(dateParam?: string) {
       scheduleAt: "asc",
     },
     include: {
-      barber: true, // agora é o model Barber
+      barber: true,
     },
   });
 
@@ -98,7 +91,6 @@ async function getBarbers(): Promise<Barber[]> {
     },
   });
 
-  // adapta para o tipo Barber do front
   return barbers.map((barber) => ({
     id: barber.id,
     name: barber.name,
@@ -109,7 +101,6 @@ async function getBarbers(): Promise<Barber[]> {
   }));
 }
 
-// mapeia o retorno do prisma para o tipo Appointment usado no front
 function mapToAppointmentType(prismaAppt: any): AppointmentType {
   return {
     id: prismaAppt.id,
@@ -149,7 +140,6 @@ export default async function AdminDashboardPage({
     getBarbers(),
   ]);
 
-  // array no formato esperado pelo AppointmentForm
   const appointmentsForForm: AppointmentType[] =
     appointmentsPrisma.map(mapToAppointmentType);
 
@@ -184,51 +174,50 @@ export default async function AdminDashboardPage({
   const barberGroups = Object.values(groupedByBarber);
 
   return (
-    <main className="p-6 space-y-6">
+    <div className="space-y-6">
       <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard - Admin</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-title text-content-primary">Dashboard - Admin</h1>
+          <p className="text-paragraph-small text-content-secondary">
             Visão geral de todos os agendamentos.
           </p>
-
-          {selectedDate && !isNaN(selectedDate.getTime()) && (
-            <p className="mt-1 text-xs text-muted-foreground"></p>
-          )}
         </div>
 
-        {/* FILTRO POR DATA – reutilizando DatePicker do projeto */}
         <DatePicker />
       </header>
 
       {appointmentsPrisma.length === 0 ? (
-        <section className="border rounded-lg overflow-hidden">
-          <div className="border-b px-4 py-3 bg-muted/40 flex justify-between items-center">
-            <h2 className="font-semibold">Agendamentos</h2>
-            <span className="text-xs text-muted-foreground">Total: 0</span>
+        <section className="border border-border-primary rounded-xl overflow-hidden bg-background-tertiary">
+          <div className="border-b border-border-primary px-4 py-3 bg-muted/40 flex justify-between items-center">
+            <h2 className="text-label-small text-content-primary">
+              Agendamentos
+            </h2>
+            <span className="text-paragraph-small text-content-secondary">
+              Total: 0
+            </span>
           </div>
-          <div className="p-6 text-sm text-muted-foreground">
+          <div className="p-6 text-paragraph-small text-content-secondary">
             Nenhum agendamento encontrado.
           </div>
         </section>
       ) : (
         <section className="space-y-4">
-          <p className="text-xs text-muted-foreground px-1">
+          <p className="text-paragraph-small text-content-secondary px-1">
             Total geral: {appointmentsPrisma.length}
           </p>
 
           {barberGroups.map((group) => (
             <div
               key={group.barberId ?? "no-barber"}
-              className="border rounded-lg overflow-hidden"
+              className="border border-border-primary rounded-xl overflow-hidden bg-background-tertiary"
             >
-              <div className="border-b px-4 py-3 bg-muted/40 flex justify-between items-center">
+              <div className="border-b border-border-primary px-4 py-3 bg-muted/40 flex justify-between items-center">
                 <div>
-                  <h2 className="font-semibold">
+                  <h2 className="text-label-small text-content-primary">
                     Barbeiro: {group.barberName}
                   </h2>
                 </div>
-                <span className="text-xs text-muted-foreground">
+                <span className="text-paragraph-small text-content-secondary">
                   Total: {group.appointments.length}
                 </span>
               </div>
@@ -236,7 +225,7 @@ export default async function AdminDashboardPage({
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <thead>
-                    <tr className="border-b bg-muted/40">
+                    <tr className="border-b border-border-primary bg-muted/40">
                       <th className="text-left px-4 py-2">Cliente</th>
                       <th className="text-left px-4 py-2">Telefone</th>
                       <th className="text-left px-4 py-2">Descrição</th>
@@ -258,7 +247,6 @@ export default async function AdminDashboardPage({
                         locale: ptBR,
                       });
 
-                      // encontra o mesmo agendamento na versão tipada pro form
                       const apptForForm = appointmentsForForm.find(
                         (a) => a.id === appt.id,
                       )!;
@@ -266,7 +254,7 @@ export default async function AdminDashboardPage({
                       return (
                         <tr
                           key={appt.id}
-                          className="border-b hover:bg-muted/30"
+                          className="border-b border-border-primary hover:bg-muted/30"
                         >
                           <td className="px-4 py-2 font-medium">
                             {appt.clientName}
@@ -280,22 +268,20 @@ export default async function AdminDashboardPage({
                           </td>
                           <td className="px-4 py-2">
                             <div className="flex justify-end gap-2">
-                              {/* EDITAR – usando o mesmo AppointmentForm do painel principal */}
                               <AppointmentForm
                                 appointment={apptForForm}
                                 appointments={appointmentsForForm}
                                 barbers={barbers}
                               >
                                 <Button
-                                  variant="outline"
+                                  variant="brand"
                                   size="sm"
-                                  className="border-border-primary hover:bg-muted"
+                                  //className="border-border-primary hover:bg-muted"
                                 >
                                   Editar
                                 </Button>
                               </AppointmentForm>
 
-                              {/* EXCLUIR – ainda usando o componente atual */}
                               <AppointmentActions
                                 appointmentId={appt.id}
                                 status={appt.status}
@@ -312,6 +298,6 @@ export default async function AdminDashboardPage({
           ))}
         </section>
       )}
-    </main>
+    </div>
   );
 }
