@@ -47,7 +47,7 @@ async function getCurrentBarber() {
     redirect("/painel/login");
   }
 
-  // 🔧 Ajuste importante: vincular apenas pelo e-mail
+  // Tenta vincular pelo userId (quando houver) ou pelo e-mail
   const barber = await prisma.barber.findUnique({
     where: { email: payload.email },
   });
@@ -67,8 +67,8 @@ export default async function BarberDashboardPage() {
   // Se não achou um registro de Barber ligado a esse usuário
   if (!barber) {
     return (
-      <main className="space-y-4">
-        <h2 className="text-xl font-semibold tracking-tight">Minha agenda</h2>
+      <main className="p-6 space-y-4">
+        <h1 className="text-2xl font-semibold tracking-tight">Minha agenda</h1>
         <p className="text-sm text-muted-foreground">
           Sua conta ainda não está vinculada a um barbeiro cadastrado. Peça para
           um administrador associar seu usuário a um barbeiro na área
@@ -96,11 +96,11 @@ export default async function BarberDashboardPage() {
   });
 
   return (
-    <main className="space-y-6">
+    <main className="p-6 space-y-6">
       <header className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight">
+        <h1 className="text-2xl font-semibold tracking-tight">
           Minha agenda de hoje
-        </h2>
+        </h1>
         <p className="text-sm text-muted-foreground">
           Veja os horários agendados para hoje.
         </p>

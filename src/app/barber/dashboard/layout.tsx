@@ -1,6 +1,11 @@
+import { ReactNode } from "react";
 import { logoutPainel } from "@/app/painel/login/actions";
 
-export function BarberDashboardComponent() {
+export default function BarberDashboardLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-8">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -25,14 +30,7 @@ export function BarberDashboardComponent() {
         </header>
 
         <section className="bg-white rounded-2xl shadow p-4">
-          <p className="text-sm text-slate-600">
-            (Placeholder) Em breve vamos listar aqui:
-          </p>
-          <ul className="mt-2 list-disc list-inside text-sm text-slate-600 space-y-1">
-            <li>Seus agendamentos futuros</li>
-            <li>Ações para editar/cancelar seus horários</li>
-            <li>Gerenciamento do seu horário de trabalho (se quiser)</li>
-          </ul>
+          {children}
         </section>
       </div>
     </main>
