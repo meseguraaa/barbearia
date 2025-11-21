@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Metadata } from "next";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -10,11 +11,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  createBarber,
-  toggleBarberStatus,
-  resetBarberPassword,
-} from "./actions";
+import { createBarber, toggleBarberStatus } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +77,18 @@ export default async function BarbersPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
+                      {/* Botão EDITAR */}
+                      <Button
+                        asChild
+                        variant="brand"
+                        size="sm"
+                        className="border-border-primary hover:bg-muted/40"
+                      >
+                        <Link href={`/admin/barber/${barber.id}/edit`}>
+                          Editar
+                        </Link>
+                      </Button>
+
                       <form action={toggleBarberStatus}>
                         <input
                           type="hidden"
@@ -92,23 +101,7 @@ export default async function BarbersPage() {
                           type="submit"
                           className="border-border-primary hover:bg-muted/40"
                         >
-                          {barber.isActive ? "DESATIVAR" : "ATIVAR"}
-                        </Button>
-                      </form>
-
-                      <form action={resetBarberPassword}>
-                        <input
-                          type="hidden"
-                          name="barberId"
-                          value={barber.id}
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          type="submit"
-                          className="border-border-primary hover:bg-muted/40"
-                        >
-                          Resetar senha
+                          {barber.isActive ? "Desativar" : "Ativar"}
                         </Button>
                       </form>
                     </div>
@@ -186,6 +179,23 @@ function NewBarberDialog() {
               id="phone"
               name="phone"
               className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label
+              className="text-label-small text-content-secondary"
+              htmlFor="password"
+            >
+              Senha para o barbeiro
+            </label>
+            <Input
+              id="password"
+              type="password"
+              name="password"
+              required
+              className="bg-background-tertiary border-border-primary text-content-primary"
+              placeholder="Defina a senha de acesso do barbeiro"
             />
           </div>
 

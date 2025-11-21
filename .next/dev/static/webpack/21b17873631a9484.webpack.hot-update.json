@@ -1,5 +1,0 @@
-{
-  "c": ["main", "app/layout", "webpack"],
-  "r": ["app/barber/dashboard/page"],
-  "m": []
-}

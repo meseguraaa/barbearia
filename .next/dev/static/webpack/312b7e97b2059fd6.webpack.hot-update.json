@@ -1,0 +1,10 @@
+{
+  "c": [
+    "app/layout",
+    "app/painel/login/page",
+    "app/barber/dashboard/page",
+    "webpack"
+  ],
+  "r": [],
+  "m": []
+}
