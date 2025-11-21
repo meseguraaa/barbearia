@@ -75,7 +75,6 @@ export function AppointmentActions({
         <Button
           size="sm"
           variant="outline"
-          className="border-red-300 text-red-600 hover:bg-red-50"
           onClick={handleCancel}
           disabled={isPending}
         >
@@ -86,11 +85,7 @@ export function AppointmentActions({
       {/* EXCLUIR – com modal de confirmação */}
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="border-destructive/60 text-destructive hover:bg-destructive/10"
-          >
+          <Button variant="destructive" size="sm">
             Excluir
           </Button>
         </AlertDialogTrigger>

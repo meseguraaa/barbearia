@@ -174,7 +174,7 @@
     "006e965d8fcdba86a24537d4ef7e52ec1e921716d7": {
       "workers": {
         "app/painel/login/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fpainel%2Flogin%2Factions.ts%22%2C%5B%7B%22id%22%3A%22006e965d8fcdba86a24537d4ef7e52ec1e921716d7%22%2C%22exportedName%22%3A%22logoutPainel%22%2C%22filename%22%3A%22app%2Fpainel%2Flogin%2Factions.ts%22%7D%2C%7B%22id%22%3A%224076b8bf20c862700b762671a860513ef606a1f3af%22%2C%22exportedName%22%3A%22loginPainel%22%2C%22filename%22%3A%22app%2Fpainel%2Flogin%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=!",
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fpainel%2Flogin%2Factions.ts%22%2C%5B%7B%22id%22%3A%22006e965d8fcdba86a24537d4ef7e52ec1e921716d7%22%2C%22exportedName%22%3A%22logoutPainel%22%2C%22filename%22%3A%22app%2Fpainel%2Flogin%2Factions.ts%22%7D%2C%7B%22id%22%3A%224076b8bf20c862700b762671a860513ef606a1f3af%22%2C%22exportedName%22%3A%22loginPainel%22%2C%22filename%22%3A%22app%2Fpainel%2Flogin%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
           "async": false
         },
         "app/barber/dashboard/page": {
@@ -183,7 +183,7 @@
         }
       },
       "layer": {
-        "app/painel/login/page": "rsc",
+        "app/painel/login/page": "action-browser",
         "app/barber/dashboard/page": "rsc"
       },
       "filename": "app/painel/login/actions.ts",
@@ -192,7 +192,7 @@
     "4076b8bf20c862700b762671a860513ef606a1f3af": {
       "workers": {
         "app/painel/login/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fpainel%2Flogin%2Factions.ts%22%2C%5B%7B%22id%22%3A%22006e965d8fcdba86a24537d4ef7e52ec1e921716d7%22%2C%22exportedName%22%3A%22logoutPainel%22%2C%22filename%22%3A%22app%2Fpainel%2Flogin%2Factions.ts%22%7D%2C%7B%22id%22%3A%224076b8bf20c862700b762671a860513ef606a1f3af%22%2C%22exportedName%22%3A%22loginPainel%22%2C%22filename%22%3A%22app%2Fpainel%2Flogin%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=!",
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fpainel%2Flogin%2Factions.ts%22%2C%5B%7B%22id%22%3A%22006e965d8fcdba86a24537d4ef7e52ec1e921716d7%22%2C%22exportedName%22%3A%22logoutPainel%22%2C%22filename%22%3A%22app%2Fpainel%2Flogin%2Factions.ts%22%7D%2C%7B%22id%22%3A%224076b8bf20c862700b762671a860513ef606a1f3af%22%2C%22exportedName%22%3A%22loginPainel%22%2C%22filename%22%3A%22app%2Fpainel%2Flogin%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
           "async": false
         },
         "app/barber/dashboard/page": {
@@ -201,7 +201,7 @@
         }
       },
       "layer": {
-        "app/painel/login/page": "rsc",
+        "app/painel/login/page": "action-browser",
         "app/barber/dashboard/page": "rsc"
       },
       "filename": "app/painel/login/actions.ts",

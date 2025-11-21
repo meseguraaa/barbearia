@@ -1,0 +1,8 @@
+{
+  "c": ["app/layout", "app/admin/layout", "webpack"],
+  "r": [],
+  "m": [
+    "(app-pages-browser)/./node_modules/@radix-ui/react-navigation-menu/dist/index.mjs",
+    "(app-pages-browser)/./src/components/ui/navigation-menu.tsx"
+  ]
+}

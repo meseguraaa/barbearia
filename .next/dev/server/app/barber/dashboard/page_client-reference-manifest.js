@@ -150,6 +150,14 @@ globalThis.__RSC_MANIFEST["/barber/dashboard/page"] = {
         async: false,
       },
     },
+    "(app-pages-browser)/./src/app/painel/login/login.tsx": {
+      "*": {
+        id: "(ssr)/./src/app/painel/login/login.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
   },
   edgeSSRModuleMapping: {},
   clientModules: {
@@ -213,7 +221,10 @@ globalThis.__RSC_MANIFEST["/barber/dashboard/page"] = {
       {
         id: "(app-pages-browser)/./src/components/date-picker/date-picker.tsx",
         name: "*",
-        chunks: ["app/page", "static/chunks/app/page.js"],
+        chunks: [
+          "app/barber/dashboard/page",
+          "static/chunks/app/barber/dashboard/page.js",
+        ],
         async: false,
       },
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/node_modules/next/dist/client/components/builtin/global-error.js":
@@ -359,6 +370,13 @@ globalThis.__RSC_MANIFEST["/barber/dashboard/page"] = {
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/admin-nav/admin-nav.tsx":
       {
         id: "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/painel/login/login.tsx":
+      {
+        id: "(app-pages-browser)/./src/app/painel/login/login.tsx",
         name: "*",
         chunks: [],
         async: false,
@@ -527,6 +545,14 @@ globalThis.__RSC_MANIFEST["/barber/dashboard/page"] = {
     "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx": {
       "*": {
         id: "(rsc)/./src/components/admin-nav/admin-nav.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
+    "(app-pages-browser)/./src/app/painel/login/login.tsx": {
+      "*": {
+        id: "(rsc)/./src/app/painel/login/login.tsx",
         name: "*",
         chunks: [],
         async: false,

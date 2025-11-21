@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { logoutPainel } from "@/app/painel/login/actions";
+import { Button } from "@/components/ui/button";
 
 export default function BarberDashboardLayout({
   children,
@@ -7,29 +8,26 @@ export default function BarberDashboardLayout({
   children: ReactNode;
 }) {
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-8">
-      <div className="max-w-5xl mx-auto space-y-6">
+    <main className="min-h-screen bg-background-primary px-4 py-8">
+      <div className="max-w-7xl mx-auto space-y-6">
         <header className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900">
+          <div className="space-y-1">
+            <h1 className="text-title text-content-primary">
               Painel do Barbeiro
             </h1>
-            <p className="text-sm text-slate-500">
+            <p className="text-paragraph-small text-content-secondary">
               Aqui você vê e gerencia os seus agendamentos.
             </p>
           </div>
 
           <form action={logoutPainel}>
-            <button
-              type="submit"
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-100 transition"
-            >
+            <Button type="submit" variant="outline">
               Sair
-            </button>
+            </Button>
           </form>
         </header>
 
-        <section className="bg-white rounded-2xl shadow p-4">
+        <section className="rounded-2xl border border-border-primary bg-background-secondary shadow-lg px-6 py-5">
           {children}
         </section>
       </div>

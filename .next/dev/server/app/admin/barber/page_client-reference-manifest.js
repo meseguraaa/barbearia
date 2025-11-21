@@ -150,6 +150,14 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         async: false,
       },
     },
+    "(app-pages-browser)/./src/app/painel/login/login.tsx": {
+      "*": {
+        id: "(ssr)/./src/app/painel/login/login.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
   },
   edgeSSRModuleMapping: {},
   clientModules: {
@@ -366,6 +374,13 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         chunks: ["app/admin/layout", "static/chunks/app/admin/layout.js"],
         async: false,
       },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/painel/login/login.tsx":
+      {
+        id: "(app-pages-browser)/./src/app/painel/login/login.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
   },
   entryCSSFiles: {
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/": [],
@@ -530,6 +545,14 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
     "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx": {
       "*": {
         id: "(rsc)/./src/components/admin-nav/admin-nav.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
+    "(app-pages-browser)/./src/app/painel/login/login.tsx": {
+      "*": {
+        id: "(rsc)/./src/app/painel/login/login.tsx",
         name: "*",
         chunks: [],
         async: false,

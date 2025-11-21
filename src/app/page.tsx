@@ -135,7 +135,7 @@ export default async function Home({ searchParams }: HomeProps) {
         "
       >
         <AppointmentForm appointments={appointments} barbers={barbers}>
-          <Button variant="brand">Agendar</Button>
+          <Button variant="brand">Novo Agendamento</Button>
         </AppointmentForm>
       </div>
     </div>

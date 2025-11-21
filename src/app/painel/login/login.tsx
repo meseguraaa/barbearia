@@ -1,4 +1,10 @@
+"use client";
+
 import { loginPainel } from "./actions";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Github, Chrome } from "lucide-react";
 
 type ErrorType = "credenciais" | "desconhecido" | "permissao" | undefined;
 
@@ -19,63 +25,63 @@ export function PainelLoginPageComponent({
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-6 space-y-6">
-        <div className="space-y-1 text-center">
-          <h1 className="text-xl font-semibold text-slate-900">
-            Login do painel
-          </h1>
-          <p className="text-sm text-slate-500">
-            Acesso para barbeiros e administradores
+    <div className="min-h-screen bg-background-primary flex items-center justify-center px-4">
+      <div className="w-full max-w-lg rounded-2xl bg-background-secondary border border-border-primary shadow-lg px-8 py-10 space-y-8">
+        {/* Título */}
+        <header className="space-y-2">
+          <h1 className="text-title text-content-primary">Acesse sua conta</h1>
+          <p className="text-paragraph-medium text-content-secondary">
+            Faça login para entrar no painel da barbearia.
           </p>
-        </div>
+        </header>
 
+        {/* Erro */}
         {errorMessage && (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-md px-3 py-2 text-center">
+          <div className="text-paragraph-small text-destructive bg-destructive/10 border border-destructive/40 rounded-md px-3 py-2">
             {errorMessage}
           </div>
         )}
 
-        <form action={loginPainel} className="space-y-4">
-          <div className="space-y-1">
-            <label
+        {/* Formulário */}
+        <form action={loginPainel} className="space-y-5">
+          <div className="space-y-2">
+            <Label
               htmlFor="email"
-              className="block text-sm font-medium text-slate-700"
+              className="text-label-small text-content-secondary"
             >
               E-mail
-            </label>
-            <input
+            </Label>
+            <Input
               id="email"
               name="email"
               type="email"
               required
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+              placeholder="Seu e-mail"
+              className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary focus-visible:ring-2 focus-visible:ring-border-brand focus-visible:ring-offset-0"
             />
           </div>
 
-          <div className="space-y-1">
-            <label
+          <div className="space-y-2">
+            <Label
               htmlFor="password"
-              className="block text-sm font-medium text-slate-700"
+              className="text-label-small text-content-secondary"
             >
               Senha
-            </label>
-            <input
+            </Label>
+            <Input
               id="password"
               name="password"
               type="password"
               autoComplete="current-password"
               required
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900"
+              placeholder="Sua senha"
+              className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary focus-visible:ring-2 focus-visible:ring-border-brand focus-visible:ring-offset-0"
             />
           </div>
 
-          <button
-            type="submit"
-            className="w-full rounded-md bg-slate-900 text-white text-sm font-medium py-2.5 hover:bg-slate-800 transition"
-          >
+          <Button type="submit" className="w-full " variant="brand">
             Entrar
-          </button>
+          </Button>
         </form>
       </div>
     </div>

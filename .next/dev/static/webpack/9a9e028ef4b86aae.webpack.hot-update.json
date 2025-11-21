@@ -1,0 +1,11 @@
+{
+  "c": [
+    "app/layout",
+    "app/page",
+    "app/admin/dashboard/page",
+    "app/painel/login/page",
+    "webpack"
+  ],
+  "r": [],
+  "m": []
+}
