@@ -14,7 +14,7 @@ const buttonVariants = cva(
         brand:
           "bg-background-brand font-bold text-label-large text-[#050505] hover:bg-background-highlights rounded-lg",
         outline:
-          "border border-border-primary bg-background-tertiary text-content-primary hover:bg-background-secondary hover:border-border-secondary transition-colors",
+          "border border-border-primary bg-background-tertiary text-content-primary hover:bg-background-secondary hover:border-border-secondary transition-colors font-medium",
         destructive:
           "bg-red-600 text-white hover:bg-red-700 transition-colors font-medium",
         active:
