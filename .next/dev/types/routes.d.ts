@@ -5,11 +5,12 @@ type AppRoutes =
   | "/"
   | "/admin"
   | "/admin/barber"
+  | "/admin/barber/dashboard"
   | "/admin/dashboard"
   | "/barber/dashboard"
   | "/painel/login";
 type PageRoutes = never;
-type LayoutRoutes = "/" | "/admin";
+type LayoutRoutes = "/" | "/admin" | "/barber/dashboard";
 type RedirectRoutes = never;
 type RewriteRoutes = never;
 type Routes =
@@ -23,6 +24,7 @@ interface ParamMap {
   "/": {};
   "/admin": {};
   "/admin/barber": {};
+  "/admin/barber/dashboard": {};
   "/admin/dashboard": {};
   "/barber/dashboard": {};
   "/painel/login": {};
@@ -33,6 +35,7 @@ export type ParamsOf<Route extends Routes> = ParamMap[Route];
 interface LayoutSlotMap {
   "/": never;
   "/admin": never;
+  "/barber/dashboard": never;
 }
 
 export type {

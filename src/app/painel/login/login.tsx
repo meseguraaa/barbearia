@@ -1,9 +1,11 @@
 import { loginPainel } from "./actions";
 
+type ErrorType = "credenciais" | "desconhecido" | "permissao" | undefined;
+
 export function PainelLoginPageComponent({
   errorType,
 }: {
-  errorType?: string;
+  errorType?: ErrorType;
 }) {
   let errorMessage: string | null = null;
 
@@ -11,6 +13,9 @@ export function PainelLoginPageComponent({
     errorMessage = "E-mail ou senha inválidos.";
   } else if (errorType === "desconhecido") {
     errorMessage = "Ocorreu um erro ao fazer login. Tente novamente.";
+  } else if (errorType === "permissao") {
+    errorMessage =
+      "Você não tem permissão para acessar o painel. Entre com uma conta de barbeiro ou administrador.";
   }
 
   return (

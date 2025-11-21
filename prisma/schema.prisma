@@ -49,6 +49,7 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  barber    Barber?
 }
 
 model Barber {
@@ -59,6 +60,10 @@ model Barber {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // 🔗 relação com User (opcional, para login de barbeiro)
+  userId String? @unique
+  user   User?   @relation(fields: [userId], references: [id])
 
   // 🔗 relação com Appointment
   appointments Appointment[]

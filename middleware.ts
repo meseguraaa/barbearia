@@ -60,13 +60,13 @@ export async function middleware(req: NextRequest) {
 
   const role = payload.role;
 
-  // Proteção admin
+  // Proteção admin → só ADMIN acessa /admin/**
   if (isAdminRoute && role !== "ADMIN") {
     return NextResponse.redirect(new URL("/painel/login", req.url));
   }
 
-  // Proteção barbeiro
-  if (isBarberRoute && role !== "BARBER" && role !== "ADMIN") {
+  // Proteção barbeiro → só BARBER acessa /barber/**
+  if (isBarberRoute && role !== "BARBER") {
     return NextResponse.redirect(new URL("/painel/login", req.url));
   }
 

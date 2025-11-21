@@ -57,6 +57,17 @@ type LayoutConfig<Route extends LayoutRoutes = LayoutRoutes> = {
   viewport?: any;
 };
 
+// Validate ../../../src/app/admin/barber/dashboard/page.tsx
+{
+  type __IsExpected<Specific extends AppPageConfig<"/admin/barber/dashboard">> =
+    Specific;
+  const handler =
+    {} as typeof import("../../../src/app/admin/barber/dashboard/page.js");
+  type __Check = __IsExpected<typeof handler>;
+  // @ts-ignore
+  type __Unused = __Check;
+}
+
 // Validate ../../../src/app/admin/barber/page.tsx
 {
   type __IsExpected<Specific extends AppPageConfig<"/admin/barber">> = Specific;
@@ -119,6 +130,17 @@ type LayoutConfig<Route extends LayoutRoutes = LayoutRoutes> = {
 {
   type __IsExpected<Specific extends LayoutConfig<"/admin">> = Specific;
   const handler = {} as typeof import("../../../src/app/admin/layout.js");
+  type __Check = __IsExpected<typeof handler>;
+  // @ts-ignore
+  type __Unused = __Check;
+}
+
+// Validate ../../../src/app/barber/dashboard/layout.tsx
+{
+  type __IsExpected<Specific extends LayoutConfig<"/barber/dashboard">> =
+    Specific;
+  const handler =
+    {} as typeof import("../../../src/app/barber/dashboard/layout.js");
   type __Check = __IsExpected<typeof handler>;
   // @ts-ignore
   type __Unused = __Check;

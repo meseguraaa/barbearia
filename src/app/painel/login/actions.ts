@@ -17,6 +17,11 @@ export async function loginPainel(formData: FormData) {
   try {
     const user = await loginWithCredentials(email, password);
 
+    // ✅ Permite só ADMIN e BARBER acessarem o painel
+    if (user.role !== "ADMIN" && user.role !== "BARBER") {
+      redirect("/painel/login?error=permissao");
+    }
+
     // cria cookie de sessão seguro
     await createPainelSessionCookie(user);
 
@@ -25,6 +30,7 @@ export async function loginPainel(formData: FormData) {
       redirect("/admin/dashboard");
     }
 
+    // aqui sabemos que é BARBER
     redirect("/barber/dashboard");
   } catch (error: any) {
     // 👇 NÃO interceptar redirects do Next
