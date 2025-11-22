@@ -58,7 +58,7 @@ async function getCurrentBarber() {
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Minha agenda | Barbeiro",
+  title: "Barbeiro | Minha agenda",
 };
 
 export default async function BarberDashboardPage() {

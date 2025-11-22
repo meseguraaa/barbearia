@@ -33,7 +33,7 @@ export default function RootLayout({
         <Toaster position="top-right" richColors /> {/* único Toaster da app */}
         <Header />
         <div className="max-w-7xl mx-auto">
-          <main className="flex-1 flex flex-col mt-12">{children}</main>
+          <main className="flex-1 flex flex-col mt-14">{children}</main>
         </div>
       </body>
     </html>

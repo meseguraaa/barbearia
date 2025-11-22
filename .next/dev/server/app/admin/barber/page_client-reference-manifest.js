@@ -2,14 +2,6 @@ globalThis.__RSC_MANIFEST = globalThis.__RSC_MANIFEST || {};
 globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
   moduleLoading: { prefix: "/_next/" },
   ssrModuleMapping: {
-    "(app-pages-browser)/./node_modules/next/dist/client/app-dir/link.js": {
-      "*": {
-        id: "(ssr)/./node_modules/next/dist/client/app-dir/link.js",
-        name: "*",
-        chunks: [],
-        async: false,
-      },
-    },
     "(app-pages-browser)/./node_modules/sonner/dist/index.mjs": {
       "*": {
         id: "(ssr)/./node_modules/sonner/dist/index.mjs",
@@ -107,25 +99,35 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
           async: false,
         },
       },
-    "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx": {
-      "*": {
-        id: "(ssr)/./src/components/admin-nav/admin-nav.tsx",
-        name: "*",
-        chunks: [],
-        async: false,
+    "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx":
+      {
+        "*": {
+          id: "(ssr)/./src/components/appointment-form/appointment-form.tsx",
+          name: "*",
+          chunks: [],
+          async: false,
+        },
       },
-    },
-    "(app-pages-browser)/./src/components/ui/dialog.tsx": {
-      "*": {
-        id: "(ssr)/./src/components/ui/dialog.tsx",
-        name: "*",
-        chunks: [],
-        async: false,
+    "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx":
+      {
+        "*": {
+          id: "(ssr)/./src/components/appoitment-card/appoitment-card.tsx",
+          name: "*",
+          chunks: [],
+          async: false,
+        },
       },
-    },
     "(app-pages-browser)/./src/components/date-picker/date-picker.tsx": {
       "*": {
         id: "(ssr)/./src/components/date-picker/date-picker.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
+    "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx": {
+      "*": {
+        id: "(ssr)/./src/components/admin-nav/admin-nav.tsx",
         name: "*",
         chunks: [],
         async: false,
@@ -140,38 +142,25 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
           async: false,
         },
       },
-    "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx":
-      {
-        "*": {
-          id: "(ssr)/./src/components/appointment-form/appointment-form.tsx",
-          name: "*",
-          chunks: [],
-          async: false,
-        },
+    "(app-pages-browser)/./node_modules/next/dist/client/app-dir/link.js": {
+      "*": {
+        id: "(ssr)/./node_modules/next/dist/client/app-dir/link.js",
+        name: "*",
+        chunks: [],
+        async: false,
       },
+    },
+    "(app-pages-browser)/./src/components/ui/dialog.tsx": {
+      "*": {
+        id: "(ssr)/./src/components/ui/dialog.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
   },
   edgeSSRModuleMapping: {},
   clientModules: {
-    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/node_modules/next/dist/client/app-dir/link.js":
-      {
-        id: "(app-pages-browser)/./node_modules/next/dist/client/app-dir/link.js",
-        name: "*",
-        chunks: [
-          "app/admin/barber/page",
-          "static/chunks/app/admin/barber/page.js",
-        ],
-        async: false,
-      },
-    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/node_modules/next/dist/esm/client/app-dir/link.js":
-      {
-        id: "(app-pages-browser)/./node_modules/next/dist/client/app-dir/link.js",
-        name: "*",
-        chunks: [
-          "app/admin/barber/page",
-          "static/chunks/app/admin/barber/page.js",
-        ],
-        async: false,
-      },
     '/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/node_modules/next/font/google/target.css?{"path":"src/app/layout.tsx","import":"Inter","arguments":[{"variable":"--font-inter","subsets":["latin"],"weight":["400","500","700"]}],"variableName":"inter"}':
       {
         id: '(app-pages-browser)/./node_modules/next/font/google/target.css?{"path":"src/app/layout.tsx","import":"Inter","arguments":[{"variable":"--font-inter","subsets":["latin"],"weight":["400","500","700"]}],"variableName":"inter"}',
@@ -333,11 +322,59 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         chunks: ["app-pages-internals", "static/chunks/app-pages-internals.js"],
         async: false,
       },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx":
+      {
+        id: "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx",
+        name: "*",
+        chunks: ["app/page", "static/chunks/app/page.js"],
+        async: false,
+      },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appoitment-card/appoitment-card.tsx":
+      {
+        id: "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx",
+        name: "*",
+        chunks: ["app/page", "static/chunks/app/page.js"],
+        async: false,
+      },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/date-picker/date-picker.tsx":
+      {
+        id: "(app-pages-browser)/./src/components/date-picker/date-picker.tsx",
+        name: "*",
+        chunks: ["app/page", "static/chunks/app/page.js"],
+        async: false,
+      },
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/admin-nav/admin-nav.tsx":
       {
         id: "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx",
         name: "*",
         chunks: ["app/admin/layout", "static/chunks/app/admin/layout.js"],
+        async: false,
+      },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-actions/appointment-actions.tsx":
+      {
+        id: "(app-pages-browser)/./src/components/appointment-actions/appointment-actions.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/node_modules/next/dist/client/app-dir/link.js":
+      {
+        id: "(app-pages-browser)/./node_modules/next/dist/client/app-dir/link.js",
+        name: "*",
+        chunks: [
+          "app/admin/barber/page",
+          "static/chunks/app/admin/barber/page.js",
+        ],
+        async: false,
+      },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/node_modules/next/dist/esm/client/app-dir/link.js":
+      {
+        id: "(app-pages-browser)/./node_modules/next/dist/client/app-dir/link.js",
+        name: "*",
+        chunks: [
+          "app/admin/barber/page",
+          "static/chunks/app/admin/barber/page.js",
+        ],
         async: false,
       },
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/ui/dialog.tsx":
@@ -350,47 +387,19 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         ],
         async: false,
       },
-    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/date-picker/date-picker.tsx":
-      {
-        id: "(app-pages-browser)/./src/components/date-picker/date-picker.tsx",
-        name: "*",
-        chunks: [],
-        async: false,
-      },
-    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-actions/appointment-actions.tsx":
-      {
-        id: "(app-pages-browser)/./src/components/appointment-actions/appointment-actions.tsx",
-        name: "*",
-        chunks: [],
-        async: false,
-      },
-    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx":
-      {
-        id: "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx",
-        name: "*",
-        chunks: [],
-        async: false,
-      },
   },
   entryCSSFiles: {
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/": [],
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/layout": [
       { inlined: false, path: "static/css/app/layout.css" },
     ],
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/page": [],
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/admin/layout":
       [],
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/admin/barber/page":
       [],
   },
   rscModuleMapping: {
-    "(app-pages-browser)/./node_modules/next/dist/client/app-dir/link.js": {
-      "*": {
-        id: "(rsc)/./node_modules/next/dist/client/app-dir/link.js",
-        name: "*",
-        chunks: [],
-        async: false,
-      },
-    },
     "(app-pages-browser)/./node_modules/sonner/dist/index.mjs": {
       "*": {
         id: "(rsc)/./node_modules/sonner/dist/index.mjs",
@@ -496,25 +505,35 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
           async: false,
         },
       },
-    "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx": {
-      "*": {
-        id: "(rsc)/./src/components/admin-nav/admin-nav.tsx",
-        name: "*",
-        chunks: [],
-        async: false,
+    "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx":
+      {
+        "*": {
+          id: "(rsc)/./src/components/appointment-form/appointment-form.tsx",
+          name: "*",
+          chunks: [],
+          async: false,
+        },
       },
-    },
-    "(app-pages-browser)/./src/components/ui/dialog.tsx": {
-      "*": {
-        id: "(rsc)/./src/components/ui/dialog.tsx",
-        name: "*",
-        chunks: [],
-        async: false,
+    "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx":
+      {
+        "*": {
+          id: "(rsc)/./src/components/appoitment-card/appoitment-card.tsx",
+          name: "*",
+          chunks: [],
+          async: false,
+        },
       },
-    },
     "(app-pages-browser)/./src/components/date-picker/date-picker.tsx": {
       "*": {
         id: "(rsc)/./src/components/date-picker/date-picker.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
+    "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx": {
+      "*": {
+        id: "(rsc)/./src/components/admin-nav/admin-nav.tsx",
         name: "*",
         chunks: [],
         async: false,
@@ -529,15 +548,22 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
           async: false,
         },
       },
-    "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx":
-      {
-        "*": {
-          id: "(rsc)/./src/components/appointment-form/appointment-form.tsx",
-          name: "*",
-          chunks: [],
-          async: false,
-        },
+    "(app-pages-browser)/./node_modules/next/dist/client/app-dir/link.js": {
+      "*": {
+        id: "(rsc)/./node_modules/next/dist/client/app-dir/link.js",
+        name: "*",
+        chunks: [],
+        async: false,
       },
+    },
+    "(app-pages-browser)/./src/components/ui/dialog.tsx": {
+      "*": {
+        id: "(rsc)/./src/components/ui/dialog.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
   },
   edgeRscModuleMapping: {},
 };

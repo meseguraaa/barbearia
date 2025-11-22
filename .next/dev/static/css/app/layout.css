@@ -356,8 +356,11 @@
     --color-red-800: oklch(44.4% 0.177 26.899);
     --color-amber-50: oklch(98.7% 0.022 95.277);
     --color-yellow-100: oklch(97.3% 0.071 103.193);
+    --color-yellow-300: oklch(90.5% 0.182 98.111);
+    --color-yellow-700: oklch(55.4% 0.135 66.442);
     --color-yellow-800: oklch(47.6% 0.114 61.907);
     --color-green-100: oklch(96.2% 0.044 156.743);
+    --color-green-300: oklch(87.1% 0.15 154.449);
     --color-green-600: oklch(62.7% 0.194 149.214);
     --color-green-700: oklch(52.7% 0.154 150.069);
     --color-green-800: oklch(44.8% 0.119 151.328);
@@ -389,6 +392,7 @@
     --font-weight-medium: 500;
     --font-weight-semibold: 600;
     --font-weight-bold: 700;
+    --font-weight-black: 900;
     --tracking-tight: -0.025em;
     --radius-xs: 0.125rem;
     --radius-sm: 0.25rem;
@@ -790,8 +794,8 @@
   .mt-3 {
     margin-top: calc(var(--spacing) * 3);
   }
-  .mt-12 {
-    margin-top: calc(var(--spacing) * 12);
+  .mt-14 {
+    margin-top: calc(var(--spacing) * 14);
   }
   .mr-2 {
     margin-right: calc(var(--spacing) * 2);
@@ -822,6 +826,9 @@
   }
   .inline {
     display: inline;
+  }
+  .inline-block {
+    display: inline-block;
   }
   .inline-flex {
     display: inline-flex;
@@ -940,9 +947,6 @@
   .w-max {
     width: max-content;
   }
-  .max-w-2xl {
-    max-width: var(--container-2xl);
-  }
   .max-w-7xl {
     max-width: var(--container-7xl);
   }
@@ -1019,14 +1023,11 @@
   .scroll-my-1 {
     scroll-margin-block: calc(var(--spacing) * 1);
   }
-  .list-inside {
-    list-style-position: inside;
-  }
-  .list-disc {
-    list-style-type: disc;
-  }
   .list-none {
     list-style-type: none;
+  }
+  .grid-cols-1 {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
   }
   .grid-cols-2 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1246,6 +1247,12 @@
       );
     }
   }
+  .border-green-300 {
+    border-color: var(--color-green-300);
+  }
+  .border-red-300 {
+    border-color: var(--color-red-300);
+  }
   .border-red-500\/40 {
     border-color: color-mix(
       in srgb,
@@ -1268,6 +1275,9 @@
   }
   .border-transparent {
     border-color: transparent;
+  }
+  .border-yellow-300 {
+    border-color: var(--color-yellow-300);
   }
   .bg-\[\#333333\] {
     background-color: #333333;
@@ -1296,6 +1306,16 @@
   }
   .bg-background-tertiary {
     background-color: var(--color-background-tertiary);
+  }
+  .bg-background-tertiary\/50 {
+    background-color: color-mix(in srgb, #23242c 50%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(
+        in oklab,
+        var(--color-background-tertiary) 50%,
+        transparent
+      );
+    }
   }
   .bg-black\/30 {
     background-color: color-mix(in srgb, #000 30%, transparent);
@@ -1521,6 +1541,9 @@
   .text-\[0\.8rem\] {
     font-size: 0.8rem;
   }
+  .text-label-large-line-height {
+    font-size: var(--text-label-large-line-height);
+  }
   .text-label-large-size {
     font-size: var(--text-label-large-size);
   }
@@ -1542,6 +1565,10 @@
   .leading-none {
     --tw-leading: 1;
     line-height: 1;
+  }
+  .font-black {
+    --tw-font-weight: var(--font-weight-black);
+    font-weight: var(--font-weight-black);
   }
   .font-bold {
     --tw-font-weight: var(--font-weight-bold);
@@ -1571,6 +1598,9 @@
   }
   .text-\[\#050505\] {
     color: #050505;
+  }
+  .text-\[\#ffffff\] {
+    color: #ffffff;
   }
   .text-accent-blue {
     color: var(--color-accent-blue);
@@ -1612,6 +1642,9 @@
   .text-gray-500 {
     color: var(--color-gray-500);
   }
+  .text-green-700 {
+    color: var(--color-green-700);
+  }
   .text-green-800 {
     color: var(--color-green-800);
   }
@@ -1621,11 +1654,17 @@
   .text-red-500 {
     color: var(--color-red-500);
   }
+  .text-red-700 {
+    color: var(--color-red-700);
+  }
   .text-red-800 {
     color: var(--color-red-800);
   }
   .text-white {
     color: var(--color-white);
+  }
+  .text-yellow-700 {
+    color: var(--color-yellow-700);
   }
   .text-yellow-800 {
     color: var(--color-yellow-800);
@@ -1936,13 +1975,6 @@
       color: var(--color-content-tertiary);
     }
   }
-  .hover\:border-border-brand {
-    &:hover {
-      @media (hover: hover) {
-        border-color: var(--color-border-brand);
-      }
-    }
-  }
   .hover\:border-border-secondary {
     &:hover {
       @media (hover: hover) {
@@ -1954,20 +1986,6 @@
     &:hover {
       @media (hover: hover) {
         background-color: var(--color-background-highlights);
-      }
-    }
-  }
-  .hover\:bg-background-highlights\/10 {
-    &:hover {
-      @media (hover: hover) {
-        background-color: color-mix(in srgb, #bdb4fa 10%, transparent);
-        @supports (color: color-mix(in lab, red, red)) {
-          background-color: color-mix(
-            in oklab,
-            var(--color-background-highlights) 10%,
-            transparent
-          );
-        }
       }
     }
   }
@@ -2453,6 +2471,21 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
+  .md\:grid-cols-4 {
+    @media (width >= 48rem) {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  .md\:grid-cols-5 {
+    @media (width >= 48rem) {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+  }
+  .md\:grid-cols-6 {
+    @media (width >= 48rem) {
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+    }
+  }
   .md\:grid-cols-\[15\%_35\%_30\%_20\%\] {
     @media (width >= 48rem) {
       grid-template-columns: 15% 35% 30% 20%;
@@ -2478,6 +2511,11 @@
       justify-content: space-between;
     }
   }
+  .md\:justify-center {
+    @media (width >= 48rem) {
+      justify-content: center;
+    }
+  }
   .md\:gap-4 {
     @media (width >= 48rem) {
       gap: calc(var(--spacing) * 4);
@@ -2496,6 +2534,11 @@
       }
     }
   }
+  .md\:px-0 {
+    @media (width >= 48rem) {
+      padding-inline: calc(var(--spacing) * 0);
+    }
+  }
   .md\:pr-0 {
     @media (width >= 48rem) {
       padding-right: calc(var(--spacing) * 0);
@@ -2509,6 +2552,11 @@
   .md\:pb-0 {
     @media (width >= 48rem) {
       padding-bottom: calc(var(--spacing) * 0);
+    }
+  }
+  .md\:text-center {
+    @media (width >= 48rem) {
+      text-align: center;
     }
   }
   .md\:text-left {

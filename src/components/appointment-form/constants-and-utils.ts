@@ -2,20 +2,20 @@ import { getHours, getMinutes, isSameDay } from "date-fns";
 import { Appointment } from "@/types/appointment";
 
 export const SERVICE_OPTIONS = [
-  "Barba - R$80,00",
-  "Barba & Cabelo - R$120,00",
-  "Cabelo na tesoura - R$100,00",
-  "Cabelo na máquina - R$90,00",
+  "Barba",
+  "Barba & Cabelo",
+  "Cabelo na tesoura",
+  "Cabelo na máquina",
 ] as const;
 
 export type ServiceOption = (typeof SERVICE_OPTIONS)[number];
 
 // ⏱ Duração de cada serviço (em minutos)
 const SERVICE_DURATION_MAP: Record<ServiceOption, number> = {
-  "Barba - R$80,00": 30,
-  "Barba & Cabelo - R$120,00": 60,
-  "Cabelo na tesoura - R$100,00": 60,
-  "Cabelo na máquina - R$90,00": 30,
+  Barba: 30,
+  "Barba & Cabelo": 60,
+  "Cabelo na tesoura": 60,
+  "Cabelo na máquina": 30,
 };
 
 /**
