@@ -25,6 +25,8 @@ const buttonVariants = cva(
         remove:
           "inline-flex items-center gap-2 rounded-md border border-red-500/50 px-3 py-1 text-sm text-red-500 transition-all hover:bg-red-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
         edit: "inline-flex items-center gap-2 rounded-md border border-blue-500/50 px-3 py-1 text-sm text-blue-500 transition-all hover:bg-blue-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+        edit2:
+          "bg-background-brand text-label-large text-[#ffffff] hover:bg-background-highlights rounded-lg",
       },
       size: {
         default: "h-12 px-4 py-3 has-[>svg]:px-3",

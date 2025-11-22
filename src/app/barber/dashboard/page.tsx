@@ -7,7 +7,6 @@ import { Metadata } from "next";
 import { startOfDay, endOfDay } from "date-fns";
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
 import { Button } from "@/components/ui/button";
-import { DatePicker } from "@/components/date-picker";
 import { markAppointmentDone, cancelAppointment } from "./actions";
 
 const SESSION_COOKIE_NAME = "painel_session";
@@ -58,7 +57,7 @@ async function getCurrentBarber() {
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Minha agenda | Barbeiro",
+  title: "Barbeiro | Minha agenda",
 };
 
 const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
@@ -137,92 +136,81 @@ export default async function BarberDashboardPage({
 
   return (
     <main className="space-y-6">
-      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="space-y-1">
-          <h2 className="text-title text-content-primary">Minha agenda</h2>
-          <p className="text-paragraph-medium text-content-secondary">
-            Veja os horários agendados para a data selecionada.
-          </p>
-        </div>
-
-        <DatePicker />
-      </header>
-
       {appointments.length === 0 ? (
-        <p className="text-paragraph-medium text-content-secondary">
+        <p className="text-paragraph-small text-content-secondary">
           Você não tem agendamentos para esta data.
         </p>
       ) : (
         <section className="space-y-3">
           {appointments.map((appt) => {
-            const statusClass =
-              appt.status === "PENDING"
-                ? "bg-accent-yellow/15 text-accent-yellow border-accent-yellow"
-                : appt.status === "DONE"
-                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
-                  : "bg-red-500/15 text-red-300 border-red-500/40";
+            const timeStr = appt.scheduleAt.toLocaleTimeString("pt-BR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            });
 
-            const statusLabel =
-              appt.status === "PENDING"
-                ? "Pendente"
-                : appt.status === "DONE"
-                  ? "Concluído"
-                  : "Cancelado";
+            const isPending = appt.status === "PENDING";
 
             return (
               <div
                 key={appt.id}
-                className="flex items-center justify-between gap-4 rounded-xl border border-border-primary bg-background-tertiary px-4 py-3"
+                className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3"
               >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
+                <div className="grid w-full grid-cols-1 gap-2 md:grid-cols-6 md:items-center">
+                  {/* Coluna 1: Nome */}
+                  <div>
                     <span className="text-paragraph-medium text-content-primary font-medium">
                       {appt.clientName}
                     </span>
+                  </div>
 
-                    {/* Badge padronizado igual ao admin */}
+                  {/* Coluna 2: Telefone */}
+                  <div className="text-paragraph-medium text-content-primary">
+                    {appt.phone}
+                  </div>
 
+                  {/* Coluna 3: Descrição */}
+                  <div className="text-paragraph-medium text-content-primary">
+                    {appt.description}
+                  </div>
+
+                  {/* Coluna 4: Status */}
+                  <div className="flex md:justify-center">
                     <AppointmentStatusBadge status={appt.status} />
                   </div>
 
-                  <p className="text-paragraph-small text-content-secondary">
-                    {appt.phone} • {appt.description}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <div className="text-label-small font-mono text-content-primary">
-                    {appt.scheduleAt.toLocaleTimeString("pt-BR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                  {/* Coluna 5: Horário */}
+                  <div className="text-paragraph-medium text-content-primary md:text-center">
+                    {timeStr}
                   </div>
 
-                  {appt.status === "PENDING" && (
-                    <div className="flex gap-2">
-                      <form action={markAppointmentDone}>
-                        <input
-                          type="hidden"
-                          name="appointmentId"
-                          value={appt.id}
-                        />
-                        <Button type="submit" size="sm" variant="active">
-                          Concluir
-                        </Button>
-                      </form>
+                  {/* Coluna 6: Botões */}
+                  <div className="flex justify-end gap-2">
+                    {isPending && (
+                      <>
+                        <form action={markAppointmentDone}>
+                          <input
+                            type="hidden"
+                            name="appointmentId"
+                            value={appt.id}
+                          />
+                          <Button type="submit" size="sm" variant="active">
+                            Concluir
+                          </Button>
+                        </form>
 
-                      <form action={cancelAppointment}>
-                        <input
-                          type="hidden"
-                          name="appointmentId"
-                          value={appt.id}
-                        />
-                        <Button type="submit" size="sm" variant="outline">
-                          Cancelar
-                        </Button>
-                      </form>
-                    </div>
-                  )}
+                        <form action={cancelAppointment}>
+                          <input
+                            type="hidden"
+                            name="appointmentId"
+                            value={appt.id}
+                          />
+                          <Button type="submit" size="sm" variant="outline">
+                            Cancelar
+                          </Button>
+                        </form>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             );

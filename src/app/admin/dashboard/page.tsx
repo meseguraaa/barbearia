@@ -14,7 +14,7 @@ import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Dashboard Admin | Barbearia",
+  title: "Admin | Dashboard",
 };
 
 type AdminDashboardPageProps = {
@@ -175,26 +175,21 @@ export default async function AdminDashboardPage({
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-title text-content-primary">Dashboard - Admin</h1>
-          <p className="text-paragraph-small text-content-secondary">
+          <h1 className="text-title text-content-primary">Dashboard</h1>
+          <p className="text-paragraph-medium-size text-content-secondary">
             Visão geral de todos os agendamentos.
           </p>
         </div>
 
         <DatePicker />
-      </header>
+      </div>
 
       {appointmentsPrisma.length === 0 ? (
         <section className="border border-border-primary rounded-xl overflow-hidden bg-background-tertiary">
           <div className="border-b border-border-primary px-4 py-3 bg-muted/40 flex justify-between items-center">
-            <h2 className="text-label-small text-content-primary">
-              Agendamentos
-            </h2>
-            <span className="text-paragraph-small text-content-secondary">
-              Total: 0
-            </span>
+            <p className="font-medium">Agendamentos</p>
           </div>
           <div className="p-6 text-paragraph-small text-content-secondary">
             Nenhum agendamento encontrado.
@@ -202,10 +197,6 @@ export default async function AdminDashboardPage({
         </section>
       ) : (
         <section className="space-y-4">
-          <p className="text-paragraph-small text-content-secondary px-1">
-            Total geral: {appointmentsPrisma.length}
-          </p>
-
           {barberGroups.map((group) => (
             <div
               key={group.barberId ?? "no-barber"}
@@ -213,28 +204,17 @@ export default async function AdminDashboardPage({
             >
               <div className="border-b border-border-primary px-4 py-3 bg-muted/40 flex justify-between items-center">
                 <div>
-                  <h2 className="text-label-small text-content-primary">
-                    Barbeiro: {group.barberName}
+                  <h2 className="text-label-large text-content-primary">
+                    {group.barberName}
                   </h2>
                 </div>
                 <span className="text-paragraph-small text-content-secondary">
-                  Total: {group.appointments.length}
+                  Agendamento(s): {group.appointments.length}
                 </span>
               </div>
 
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border-primary bg-muted/40">
-                      <th className="text-left px-4 py-2">Cliente</th>
-                      <th className="text-left px-4 py-2">Telefone</th>
-                      <th className="text-left px-4 py-2">Descrição</th>
-                      <th className="text-left px-4 py-2">Data</th>
-                      <th className="text-left px-4 py-2">Hora</th>
-                      <th className="text-left px-4 py-2">Status</th>
-                      <th className="text-right px-4 py-2">Ações</th>
-                    </tr>
-                  </thead>
                   <tbody>
                     {group.appointments.map((appt) => {
                       const date = new Date(appt.scheduleAt);
@@ -251,6 +231,9 @@ export default async function AdminDashboardPage({
                         (a) => a.id === appt.id,
                       )!;
 
+                      const isFinished =
+                        appt.status === "DONE" || appt.status === "CANCELED";
+
                       return (
                         <tr
                           key={appt.id}
@@ -266,21 +249,23 @@ export default async function AdminDashboardPage({
                           <td className="px-4 py-2">
                             <AppointmentStatusBadge status={appt.status} />
                           </td>
-                          <td className="px-4 py-2">
+                          <td className="px-4 py-3">
                             <div className="flex justify-end gap-2">
-                              <AppointmentForm
-                                appointment={apptForForm}
-                                appointments={appointmentsForForm}
-                                barbers={barbers}
-                              >
-                                <Button
-                                  variant="brand"
-                                  size="sm"
-                                  //className="border-border-primary hover:bg-muted"
+                              {!isFinished && (
+                                <AppointmentForm
+                                  appointment={apptForForm}
+                                  appointments={appointmentsForForm}
+                                  barbers={barbers}
                                 >
-                                  Editar
-                                </Button>
-                              </AppointmentForm>
+                                  <Button
+                                    variant="edit2"
+                                    size="sm"
+                                    //className="border-border-primary hover:bg-muted"
+                                  >
+                                    Editar
+                                  </Button>
+                                </AppointmentForm>
+                              )}
 
                               <AppointmentActions
                                 appointmentId={appt.id}
@@ -296,6 +281,9 @@ export default async function AdminDashboardPage({
               </div>
             </div>
           ))}
+          <p className="text-paragraph-medium text-content-primary px-1 text-right">
+            Total de atendimentos no dia: {appointmentsPrisma.length}
+          </p>
         </section>
       )}
     </div>

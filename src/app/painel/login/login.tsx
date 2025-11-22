@@ -25,7 +25,7 @@ export function PainelLoginPageComponent({
   }
 
   return (
-    <div className="min-h-screen bg-background-primary flex items-center justify-center px-4">
+    <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-lg rounded-2xl bg-background-secondary border border-border-primary shadow-lg px-8 py-10 space-y-8">
         {/* Título */}
         <header className="space-y-2">

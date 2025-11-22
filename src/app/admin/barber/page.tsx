@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { Metadata } from "next";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -16,7 +15,7 @@ import { createBarber, toggleBarberStatus } from "./actions";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Barbeiros | Admin",
+  title: "Admin | Barbeiros",
 };
 
 export default async function BarbersPage() {
@@ -29,7 +28,7 @@ export default async function BarbersPage() {
       <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-title text-content-primary">Barbeiros</h1>
-          <p className="text-paragraph-small text-content-secondary">
+          <p className="text-paragraph-medium-size text-content-secondary">
             Gerencie os barbeiros disponíveis para agendamento.
           </p>
         </div>
@@ -39,15 +38,6 @@ export default async function BarbersPage() {
 
       <section className="overflow-x-auto rounded-xl border border-border-primary bg-background-tertiary">
         <table className="min-w-full text-sm">
-          <thead className="bg-muted/50">
-            <tr className="text-left">
-              <th className="px-4 py-3 font-medium">Nome</th>
-              <th className="px-4 py-3 font-medium">E-mail</th>
-              <th className="px-4 py-3 font-medium">Telefone</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium text-right">Ações</th>
-            </tr>
-          </thead>
           <tbody>
             {barbers.length === 0 ? (
               <tr>
@@ -65,22 +55,22 @@ export default async function BarbersPage() {
                   <td className="px-4 py-3">{barber.email}</td>
                   <td className="px-4 py-3">{barber.phone ?? "-"}</td>
                   <td className="px-4 py-3">
-                    <Badge
-                      className={
+                    <span
+                      className={`px-3 py-1.5 text-xs font-medium rounded-full inline-block border ${
                         barber.isActive
-                          ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/40"
-                          : "bg-red-500/15 text-red-300 border-red-500/40"
-                      }
+                          ? "text-green-700 bg-green-100 border-green-300"
+                          : "text-red-700 bg-red-100 border-red-300"
+                      }`}
                     >
                       {barber.isActive ? "Ativo" : "Inativo"}
-                    </Badge>
+                    </span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
                       {/* Botão EDITAR */}
                       <Button
                         asChild
-                        variant="brand"
+                        variant="edit2"
                         size="sm"
                         className="border-border-primary hover:bg-muted/40"
                       >
