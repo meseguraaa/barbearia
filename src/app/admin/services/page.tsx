@@ -1,6 +1,7 @@
+// app/admin/services/page.tsx
 import { prisma } from "@/lib/prisma";
 import { Metadata } from "next";
-import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,9 +12,10 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { ServiceStatusBadge } from "@/components/service-status-badge";
 
-import { createService, toggleServiceStatus } from "./actions";
+import { createService, toggleServiceStatus, updateService } from "./actions";
+import type { Service } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -47,63 +49,71 @@ export default async function ServicesPage() {
             {services.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   className="px-4 py-6 text-center text-paragraph-small text-content-secondary"
                 >
                   Nenhum serviço cadastrado ainda.
                 </td>
               </tr>
             ) : (
-              services.map((service) => (
-                <tr key={service.id} className="border-t border-border-primary">
-                  <td className="px-4 py-3">{service.name}</td>
-                  <td className="px-4 py-3">
-                    R$ {Number(service.price).toFixed(2)}
-                  </td>
-                  <td className="px-4 py-3">{service.durationMinutes} min</td>
+              services.map((service) => {
+                const rawBarberPercentage = (service as any)
+                  .barberPercentage as number | null | undefined;
 
-                  <td className="px-4 py-3">
-                    <Badge
-                      variant={service.isActive ? "outline" : "destructive"}
-                    >
-                      {service.isActive ? "Ativo" : "Inativo"}
-                    </Badge>
-                  </td>
+                const barberPercentage =
+                  rawBarberPercentage !== undefined &&
+                  rawBarberPercentage !== null
+                    ? Number(rawBarberPercentage)
+                    : null;
 
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-2">
-                      {/* EDITAR (vamos implementar depois) */}
-                      <Button
-                        asChild
-                        variant="edit2"
-                        size="sm"
-                        className="border-border-primary hover:bg-muted/40"
-                      >
-                        <Link href={`/admin/services/${service.id}/edit`}>
-                          Editar
-                        </Link>
-                      </Button>
+                return (
+                  <tr
+                    key={service.id}
+                    className="border-t border-border-primary"
+                  >
+                    <td className="px-4 py-3">{service.name}</td>
+                    <td className="px-4 py-3">
+                      R$ {Number(service.price).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3">{service.durationMinutes} min</td>
 
-                      {/* ATIVAR / DESATIVAR */}
-                      <form action={toggleServiceStatus}>
-                        <input
-                          type="hidden"
-                          name="serviceId"
-                          value={service.id}
-                        />
-                        <Button
-                          variant={service.isActive ? "destructive" : "active"}
-                          size="sm"
-                          type="submit"
-                          className="border-border-primary hover:bg-muted/40"
-                        >
-                          {service.isActive ? "Desativar" : "Ativar"}
-                        </Button>
-                      </form>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                    {/* PORCENTAGEM DO BARBEIRO */}
+                    <td className="px-4 py-3">
+                      {barberPercentage !== null ? `${barberPercentage}%` : "-"}
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <ServiceStatusBadge isActive={service.isActive} />
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-end gap-2">
+                        {/* EDITAR → modal inline */}
+                        <EditServiceDialog service={service} />
+
+                        {/* ATIVAR / DESATIVAR */}
+                        <form action={toggleServiceStatus}>
+                          <input
+                            type="hidden"
+                            name="serviceId"
+                            value={service.id}
+                          />
+                          <Button
+                            variant={
+                              service.isActive ? "destructive" : "active"
+                            }
+                            size="sm"
+                            type="submit"
+                            className="border-border-primary hover:bg-muted/40"
+                          >
+                            {service.isActive ? "Desativar" : "Ativar"}
+                          </Button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -111,6 +121,8 @@ export default async function ServicesPage() {
     </div>
   );
 }
+
+/* ========= NOVO SERVIÇO ========= */
 
 function NewServiceDialog() {
   return (
@@ -130,6 +142,8 @@ function NewServiceDialog() {
           action={async (formData) => {
             "use server";
             await createService(formData);
+            // navega para a mesma página → fecha o modal
+            redirect("/admin/services");
           }}
           className="space-y-4"
         >
@@ -184,9 +198,140 @@ function NewServiceDialog() {
             />
           </div>
 
+          {/* PORCENTAGEM DO BARBEIRO */}
+          <div className="space-y-1">
+            <label
+              className="text-label-small text-content-secondary"
+              htmlFor="barberPercentage"
+            >
+              Porcentagem do barbeiro (%)
+            </label>
+            <Input
+              id="barberPercentage"
+              name="barberPercentage"
+              type="number"
+              step="0.01"
+              min={0}
+              max={100}
+              placeholder="Ex: 50"
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
           <div className="flex justify-end gap-2 pt-2">
             <Button type="submit" variant="brand">
               Criar
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ========= EDITAR SERVIÇO (MODAL INLINE) ========= */
+
+function EditServiceDialog({ service }: { service: Service }) {
+  const rawBarberPercentage = (service as any).barberPercentage as
+    | number
+    | null
+    | undefined;
+
+  const barberPercentageDefault =
+    rawBarberPercentage !== undefined && rawBarberPercentage !== null
+      ? String(Number(rawBarberPercentage))
+      : "";
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button
+          variant="edit2"
+          size="sm"
+          className="border-border-primary hover:bg-muted/40"
+        >
+          Editar
+        </Button>
+      </DialogTrigger>
+
+      <DialogContent className="bg-background-secondary border border-border-primary">
+        <DialogHeader>
+          <DialogTitle className="text-title text-content-primary">
+            Editar serviço
+          </DialogTitle>
+        </DialogHeader>
+
+        <form
+          action={async (formData) => {
+            "use server";
+            await updateService(service.id, formData);
+            // redireciona pra mesma página → fecha o modal
+            redirect("/admin/services");
+          }}
+          className="space-y-4"
+        >
+          {/* NOME */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              Nome do serviço
+            </label>
+            <Input
+              name="name"
+              defaultValue={service.name}
+              required
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
+          {/* VALOR */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              Valor (R$)
+            </label>
+            <Input
+              name="price"
+              type="number"
+              step="0.01"
+              required
+              defaultValue={String(service.price)}
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
+          {/* DURAÇÃO */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              Duração (minutos)
+            </label>
+            <Input
+              name="durationMinutes"
+              type="number"
+              required
+              defaultValue={service.durationMinutes}
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
+          {/* PORCENTAGEM DO BARBEIRO */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              Porcentagem do barbeiro (%)
+            </label>
+            <Input
+              name="barberPercentage"
+              type="number"
+              step="0.01"
+              min={0}
+              max={100}
+              defaultValue={barberPercentageDefault}
+              placeholder="Ex: 50"
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="submit" variant="brand">
+              Salvar alterações
             </Button>
           </div>
         </form>

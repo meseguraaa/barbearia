@@ -1,6 +1,6 @@
+// app/admin/barber/page.tsx
 import { prisma } from "@/lib/prisma";
 import { Metadata } from "next";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,7 +10,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { createBarber, toggleBarberStatus } from "./actions";
+import { Badge } from "@/components/ui/badge";
+import { createBarber, toggleBarberStatus, updateBarber } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -54,31 +55,27 @@ export default async function BarbersPage() {
                   <td className="px-4 py-3">{barber.name}</td>
                   <td className="px-4 py-3">{barber.email}</td>
                   <td className="px-4 py-3">{barber.phone ?? "-"}</td>
+
+                  {/* STATUS com Badge do shadcn */}
                   <td className="px-4 py-3">
-                    <span
-                      className={`px-3 py-1.5 text-xs font-medium rounded-full inline-block border ${
+                    <Badge
+                      variant="outline"
+                      className={
                         barber.isActive
-                          ? "text-green-700 bg-green-100 border-green-300"
-                          : "text-red-700 bg-red-100 border-red-300"
-                      }`}
+                          ? "text-green-700 bg-green-100 border border-green-300"
+                          : "text-red-700 bg-red-100 border border-red-300"
+                      }
                     >
                       {barber.isActive ? "Ativo" : "Inativo"}
-                    </span>
+                    </Badge>
                   </td>
+
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      {/* Botão EDITAR */}
-                      <Button
-                        asChild
-                        variant="edit2"
-                        size="sm"
-                        className="border-border-primary hover:bg-muted/40"
-                      >
-                        <Link href={`/admin/barber/${barber.id}/edit`}>
-                          Editar
-                        </Link>
-                      </Button>
+                      {/* EDITAR em modal inline */}
+                      <EditBarberDialog barber={barber} />
 
+                      {/* ATIVAR / DESATIVAR */}
                       <form action={toggleBarberStatus}>
                         <input
                           type="hidden"
@@ -106,6 +103,8 @@ export default async function BarbersPage() {
   );
 }
 
+/* ========= NOVO PROFISSIONAL ========= */
+
 function NewBarberDialog() {
   return (
     <Dialog>
@@ -124,6 +123,7 @@ function NewBarberDialog() {
           action={async (formData) => {
             "use server";
             await createBarber(formData);
+            // createBarber já faz redirect("/admin/barber") e revalidate
           }}
           className="space-y-4"
         >
@@ -192,6 +192,106 @@ function NewBarberDialog() {
           <div className="flex justify-end gap-2 pt-2">
             <Button type="submit" variant="brand">
               Salvar
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ========= EDITAR PROFISSIONAL (MODAL INLINE) ========= */
+
+type BarberForEdit = Awaited<ReturnType<typeof prisma.barber.findMany>>[number];
+
+function EditBarberDialog({ barber }: { barber: BarberForEdit }) {
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button
+          variant="edit2"
+          size="sm"
+          className="border-border-primary hover:bg-muted/40"
+        >
+          Editar
+        </Button>
+      </DialogTrigger>
+
+      <DialogContent className="bg-background-secondary border border-border-primary">
+        <DialogHeader>
+          <DialogTitle className="text-title text-content-primary">
+            Editar profissional
+          </DialogTitle>
+        </DialogHeader>
+
+        <form
+          action={async (formData) => {
+            "use server";
+            // mantém o contrato atual do updateBarber: recebe um FormData com "id"
+            formData.set("id", barber.id);
+            await updateBarber(formData);
+            // updateBarber já faz redirect("/admin/barber") + revalidate
+          }}
+          className="space-y-4"
+        >
+          {/* NOME */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              Nome
+            </label>
+            <Input
+              name="name"
+              required
+              defaultValue={barber.name}
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
+          {/* E-MAIL */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              E-mail
+            </label>
+            <Input
+              type="email"
+              name="email"
+              required
+              defaultValue={barber.email}
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
+          {/* TELEFONE */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              Telefone (opcional)
+            </label>
+            <Input
+              name="phone"
+              defaultValue={barber.phone ?? ""}
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
+          {/* NOVA SENHA */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              Nova senha (opcional)
+            </label>
+            <Input
+              type="password"
+              name="password"
+              placeholder="Preencha para alterar a senha"
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+            <p className="text-xs text-content-secondary/70">
+              Deixe em branco se não quiser alterar a senha do barbeiro.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="submit" variant="brand">
+              Salvar alterações
             </Button>
           </div>
         </form>

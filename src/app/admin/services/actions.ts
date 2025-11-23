@@ -9,17 +9,25 @@ import { revalidatePath } from "next/cache";
  * - name
  * - price
  * - durationMinutes
+ * - barberPercentage
  */
 export async function createService(formData: FormData) {
   const rawName = formData.get("name");
   const rawPrice = formData.get("price");
   const rawDuration = formData.get("durationMinutes");
+  const rawBarberPercentage = formData.get("barberPercentage");
 
   const name = String(rawName ?? "").trim();
+
   const priceString = String(rawPrice ?? "")
     .replace(",", ".")
     .trim();
+
   const durationString = String(rawDuration ?? "").trim();
+
+  const barberPercentageString = String(rawBarberPercentage ?? "")
+    .replace(",", ".")
+    .trim();
 
   if (!name || name.length < 2) {
     throw new Error("O nome do serviço deve ter pelo menos 2 caracteres.");
@@ -35,12 +43,24 @@ export async function createService(formData: FormData) {
     throw new Error("A duração deve ser um número maior que zero.");
   }
 
+  const barberPercentage = Number(barberPercentageString);
+  if (
+    isNaN(barberPercentage) ||
+    barberPercentage < 0 ||
+    barberPercentage > 100
+  ) {
+    throw new Error(
+      "A porcentagem do barbeiro deve ser um número entre 0 e 100.",
+    );
+  }
+
   await prisma.service.create({
     data: {
       name,
       price,
       durationMinutes,
       isActive: true,
+      barberPercentage,
     },
   });
 
@@ -85,17 +105,25 @@ export async function toggleServiceStatus(formData: FormData) {
  * - name
  * - price
  * - durationMinutes
+ * - barberPercentage
  */
 export async function updateService(id: string, formData: FormData) {
   const rawName = formData.get("name");
   const rawPrice = formData.get("price");
   const rawDuration = formData.get("durationMinutes");
+  const rawBarberPercentage = formData.get("barberPercentage");
 
   const name = String(rawName ?? "").trim();
+
   const priceString = String(rawPrice ?? "")
     .replace(",", ".")
     .trim();
+
   const durationString = String(rawDuration ?? "").trim();
+
+  const barberPercentageString = String(rawBarberPercentage ?? "")
+    .replace(",", ".")
+    .trim();
 
   if (!id) {
     throw new Error("ID do serviço é obrigatório.");
@@ -115,12 +143,24 @@ export async function updateService(id: string, formData: FormData) {
     throw new Error("A duração deve ser um número maior que zero.");
   }
 
+  const barberPercentage = Number(barberPercentageString);
+  if (
+    isNaN(barberPercentage) ||
+    barberPercentage < 0 ||
+    barberPercentage > 100
+  ) {
+    throw new Error(
+      "A porcentagem do barbeiro deve ser um número entre 0 e 100.",
+    );
+  }
+
   await prisma.service.update({
     where: { id },
     data: {
       name,
       price,
       durationMinutes,
+      barberPercentage,
     },
   });
 

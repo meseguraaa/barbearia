@@ -7,7 +7,8 @@ import { Metadata } from "next";
 import { startOfDay, endOfDay } from "date-fns";
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
 import { Button } from "@/components/ui/button";
-import { markAppointmentDone, cancelAppointment } from "./actions";
+import { DatePicker } from "@/components/date-picker";
+import { markAppointmentDone, cancelAppointment } from "../actions";
 
 const SESSION_COOKIE_NAME = "painel_session";
 
@@ -100,14 +101,14 @@ export default async function BarberDashboardPage({
 
   if (!barber) {
     return (
-      <main className="space-y-4">
+      <div className="space-y-4">
         <h2 className="text-title text-content-primary">Minha agenda</h2>
         <p className="text-paragraph-medium text-content-secondary">
           Sua conta ainda não está vinculada a um barbeiro cadastrado. Peça para
           um administrador associar seu usuário a um barbeiro na área
           administrativa.
         </p>
-      </main>
+      </div>
     );
   }
 
@@ -135,7 +136,19 @@ export default async function BarberDashboardPage({
   });
 
   return (
-    <main className="space-y-6">
+    <div className="space-y-6">
+      {/* HEADER (igual ao antigo layout) */}
+      <header className="flex items-center justify-between">
+        <div className="space-y-1">
+          <h1 className="text-title text-content-primary">Minha agenda</h1>
+          <p className="text-paragraph-medium-size text-content-secondary">
+            Veja os horários agendados para a data selecionada.
+          </p>
+        </div>
+        <DatePicker />
+      </header>
+
+      {/* CONTEÚDO */}
       {appointments.length === 0 ? (
         <p className="text-paragraph-small text-content-secondary">
           Você não tem agendamentos para esta data.
@@ -217,6 +230,6 @@ export default async function BarberDashboardPage({
           })}
         </section>
       )}
-    </main>
+    </div>
   );
 }

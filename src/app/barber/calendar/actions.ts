@@ -86,7 +86,7 @@ async function updateAppointmentStatus(
     },
   });
 
-  revalidatePath("/barber/dashboard");
+  revalidatePath("/barber/calendar");
 }
 
 export async function markAppointmentDone(formData: FormData) {
