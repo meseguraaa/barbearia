@@ -82,7 +82,7 @@ async function getAppointments(dateParam?: string) {
     },
     include: {
       barber: true,
-      service: true, // para poder calcular financeiro
+      service: true,
     },
   });
 
@@ -109,7 +109,7 @@ async function getBarbers(): Promise<Barber[]> {
   }));
 }
 
-// 🔧 IMPORTANTE: transformar Decimal em number
+// 🔧 transforma Decimal em number
 async function getServices(): Promise<Service[]> {
   const services = await prisma.service.findMany({
     where: {
@@ -123,11 +123,9 @@ async function getServices(): Promise<Service[]> {
   return services.map((service) => ({
     id: service.id,
     name: service.name,
-    // Prisma.Decimal -> number
     price: Number(service.price),
     durationMinutes: service.durationMinutes,
     isActive: service.isActive,
-    // se esse campo existir no tipo Service:
     barberPercentage: service.barberPercentage
       ? Number(service.barberPercentage)
       : 0,
@@ -153,7 +151,6 @@ function mapToAppointmentType(prismaAppt: any): AppointmentType {
           role: "BARBER",
         }
       : undefined,
-    // se você quiser já guardar o serviceId aqui:
     serviceId: prismaAppt.serviceId ?? undefined,
   };
 }
@@ -173,24 +170,38 @@ export default async function AdminDashboardPage({
   const monthStart = startOfMonth(selectedDate);
   const monthEnd = endOfMonth(selectedDate);
 
-  const [appointmentsPrisma, barbers, monthAppointmentsPrisma, services] =
-    await Promise.all([
-      getAppointments(dateParam),
-      getBarbers(),
-      prisma.appointment.findMany({
-        where: {
-          status: "DONE",
-          scheduleAt: {
-            gte: monthStart,
-            lte: monthEnd,
-          },
+  const [
+    appointmentsPrisma,
+    barbers,
+    monthAppointmentsPrisma,
+    services,
+    monthCanceledAppointmentsPrisma,
+  ] = await Promise.all([
+    getAppointments(dateParam),
+    getBarbers(),
+    prisma.appointment.findMany({
+      where: {
+        status: "DONE",
+        scheduleAt: {
+          gte: monthStart,
+          lte: monthEnd,
         },
-        include: {
-          service: true,
+      },
+      include: {
+        service: true,
+      },
+    }),
+    getServices(),
+    prisma.appointment.findMany({
+      where: {
+        status: "CANCELED",
+        scheduleAt: {
+          gte: monthStart,
+          lte: monthEnd,
         },
-      }),
-      getServices(),
-    ]);
+      },
+    }),
+  ]);
 
   const appointmentsForForm: AppointmentType[] =
     appointmentsPrisma.map(mapToAppointmentType);
@@ -243,7 +254,12 @@ export default async function AdminDashboardPage({
 
   const totalAppointmentsDoneDay = doneAppointments.length;
 
-  // ====== FINANCEIRO GERAL DO MÊS (baseado no dia selecionado) ======
+  const canceledAppointmentsDay = appointmentsPrisma.filter(
+    (appt) => appt.status === "CANCELED",
+  );
+  const totalAppointmentsCanceledDay = canceledAppointmentsDay.length;
+
+  // ====== FINANCEIRO GERAL DO MÊS ======
   const { totalGrossMonth, totalCommissionMonth, totalNetMonth } =
     monthAppointmentsPrisma.reduce(
       (acc, appt) => {
@@ -278,8 +294,9 @@ export default async function AdminDashboardPage({
     );
 
   const totalAppointmentsDoneMonth = monthAppointmentsPrisma.length;
+  const totalAppointmentsCanceledMonth = monthCanceledAppointmentsPrisma.length;
 
-  // ====== AGRUPADO POR BARBEIRO (COM TOTAIS DIÁRIOS) ======
+  // ====== AGRUPADO POR BARBEIRO ======
   const groupedByBarber = appointmentsPrisma.reduce<
     Record<
       string,
@@ -309,7 +326,7 @@ export default async function AdminDashboardPage({
 
     acc[barberId].appointments.push(appt);
 
-    // Só conta financeiro se o atendimento foi concluído (visão diária por barbeiro)
+    // só soma financeiro se concluído
     if (appt.status === "DONE") {
       const priceSnapshot = appt.servicePriceAtTheTime;
       const priceService = appt.service?.price ?? 0;
@@ -354,7 +371,6 @@ export default async function AdminDashboardPage({
 
       {/* RESUMO FINANCEIRO DO DIA */}
       <section className="grid gap-4 md:grid-cols-3">
-        {/* Valor bruto do dia */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
             Valor bruto (dia)
@@ -364,7 +380,6 @@ export default async function AdminDashboardPage({
           </p>
         </div>
 
-        {/* Valor em comissão do dia */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
             Valor em comissão (dia)
@@ -374,7 +389,6 @@ export default async function AdminDashboardPage({
           </p>
         </div>
 
-        {/* Valor líquido do dia */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
             Valor líquido (dia)
@@ -387,7 +401,6 @@ export default async function AdminDashboardPage({
 
       {/* RESUMO FINANCEIRO DO MÊS + ATENDIMENTOS */}
       <section className="grid gap-4 md:grid-cols-3">
-        {/* Valor bruto do mês */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
             Valor bruto (mês)
@@ -397,7 +410,6 @@ export default async function AdminDashboardPage({
           </p>
         </div>
 
-        {/* Valor líquido do mês */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
             Valor líquido (mês)
@@ -407,19 +419,48 @@ export default async function AdminDashboardPage({
           </p>
         </div>
 
-        {/* Atendimentos concluídos - dia e mês */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3">
           <p className="text-label-small text-content-secondary">
-            Atendimentos concluídos
+            Atendimentos
           </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Dia:{" "}
-            <span className="font-semibold">{totalAppointmentsDoneDay}</span>
-          </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Mês:{" "}
-            <span className="font-semibold">{totalAppointmentsDoneMonth}</span>
-          </p>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <p className="text-paragraph-small text-content-secondary">
+                Concluídos
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Dia:{" "}
+                <span className="font-semibold">
+                  {totalAppointmentsDoneDay}
+                </span>
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Mês:{" "}
+                <span className="font-semibold">
+                  {totalAppointmentsDoneMonth}
+                </span>
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <p className="text-paragraph-small text-content-secondary">
+                Cancelados
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Dia:{" "}
+                <span className="font-semibold">
+                  {totalAppointmentsCanceledDay}
+                </span>
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Mês:{" "}
+                <span className="font-semibold">
+                  {totalAppointmentsCanceledMonth}
+                </span>
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -449,7 +490,6 @@ export default async function AdminDashboardPage({
                   </p>
                 </div>
 
-                {/* Totais por barbeiro (no dia) */}
                 <div className="flex flex-wrap gap-4 text-right">
                   <div className="space-y-0.5">
                     <p className="text-label-small text-content-secondary">
@@ -483,11 +523,9 @@ export default async function AdminDashboardPage({
                   <tbody>
                     {group.appointments.map((appt) => {
                       const date = new Date(appt.scheduleAt);
-
                       const dateStr = format(date, "dd/MM/yyyy", {
                         locale: ptBR,
                       });
-
                       const timeStr = format(date, "HH:mm", {
                         locale: ptBR,
                       });
@@ -496,8 +534,9 @@ export default async function AdminDashboardPage({
                         (a) => a.id === appt.id,
                       )!;
 
-                      const isFinished =
-                        appt.status === "DONE" || appt.status === "CANCELED";
+                      const normalizedStatus =
+                        (appt.status as AppointmentType["status"]) ?? "PENDING";
+                      const isPending = normalizedStatus === "PENDING";
 
                       return (
                         <tr
@@ -512,27 +551,45 @@ export default async function AdminDashboardPage({
                           <td className="px-4 py-2">{dateStr}</td>
                           <td className="px-4 py-2">{timeStr}</td>
                           <td className="px-4 py-2">
-                            <AppointmentStatusBadge status={appt.status} />
+                            <AppointmentStatusBadge status={normalizedStatus} />
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex justify-end gap-2">
-                              {!isFinished && (
-                                <AppointmentForm
-                                  appointment={apptForForm}
-                                  appointments={appointmentsForForm}
-                                  barbers={barbers}
-                                  services={services}
+                              {/* EDITAR: sempre aparece, só desabilita se não for pendente */}
+                              <AppointmentForm
+                                appointment={apptForForm}
+                                appointments={appointmentsForForm}
+                                barbers={barbers}
+                                services={services}
+                              >
+                                <Button
+                                  variant="edit2"
+                                  size="sm"
+                                  disabled={!isPending}
                                 >
-                                  <Button variant="edit2" size="sm">
-                                    Editar
-                                  </Button>
-                                </AppointmentForm>
-                              )}
+                                  Editar
+                                </Button>
+                              </AppointmentForm>
 
-                              <AppointmentActions
-                                appointmentId={appt.id}
-                                status={appt.status}
-                              />
+                              {/* AÇÕES: só aparece enquanto PENDENTE */}
+                              {isPending && (
+                                <AppointmentActions
+                                  appointmentId={appt.id}
+                                  status={normalizedStatus}
+                                  clientName={appt.clientName}
+                                  phone={appt.phone}
+                                  description={appt.description}
+                                  scheduleAt={appt.scheduleAt}
+                                  barberName={appt.barber?.name}
+                                  servicePrice={
+                                    appt.servicePriceAtTheTime
+                                      ? Number(appt.servicePriceAtTheTime)
+                                      : appt.service?.price
+                                        ? Number(appt.service.price)
+                                        : undefined
+                                  }
+                                />
+                              )}
                             </div>
                           </td>
                         </tr>

@@ -141,6 +141,18 @@ export default async function BarberEarningsPage({
     },
   });
 
+  // ❌ Atendimentos CANCELADOS do DIA (para contagem)
+  const dayCanceledAppointments = await prisma.appointment.findMany({
+    where: {
+      barberId: barber.id,
+      status: "CANCELED",
+      scheduleAt: {
+        gte: dayStart,
+        lte: dayEnd,
+      },
+    },
+  });
+
   // Atendimentos concluídos do MÊS
   const monthAppointments = await prisma.appointment.findMany({
     where: {
@@ -156,6 +168,18 @@ export default async function BarberEarningsPage({
     },
     orderBy: {
       scheduleAt: "asc",
+    },
+  });
+
+  // ❌ Atendimentos CANCELADOS do MÊS (para contagem)
+  const monthCanceledAppointments = await prisma.appointment.findMany({
+    where: {
+      barberId: barber.id,
+      status: "CANCELED",
+      scheduleAt: {
+        gte: monthStart,
+        lte: monthEnd,
+      },
     },
   });
 
@@ -215,8 +239,13 @@ export default async function BarberEarningsPage({
     return sum + earningNumber;
   }, 0);
 
+  // ✅ Concluídos
   const totalAppointmentsDay = dayAppointments.length;
   const totalAppointmentsMonth = monthAppointments.length;
+
+  // ✅ Cancelados
+  const totalAppointmentsCanceledDay = dayCanceledAppointments.length;
+  const totalAppointmentsCanceledMonth = monthCanceledAppointments.length;
 
   return (
     <div className="space-y-6">
@@ -253,17 +282,47 @@ export default async function BarberEarningsPage({
           </p>
         </div>
 
-        {/* Atendimentos concluídos (dia e mês) */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
+        {/* Atendimentos concluídos e cancelados */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3">
           <p className="text-label-small text-content-secondary">
-            Atendimentos concluídos
+            Atendimentos
           </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Dia: <span className="font-semibold">{totalAppointmentsDay}</span>
-          </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Mês: <span className="font-semibold">{totalAppointmentsMonth}</span>
-          </p>
+
+          <div className="grid grid-cols-2 gap-4">
+            {/* Concluídos */}
+            <div className="space-y-1">
+              <p className="text-paragraph-small text-content-secondary">
+                Concluídos
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Dia:{" "}
+                <span className="font-semibold">{totalAppointmentsDay}</span>
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Mês:{" "}
+                <span className="font-semibold">{totalAppointmentsMonth}</span>
+              </p>
+            </div>
+
+            {/* Cancelados */}
+            <div className="space-y-1">
+              <p className="text-paragraph-small text-content-secondary">
+                Cancelados
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Dia:{" "}
+                <span className="font-semibold">
+                  {totalAppointmentsCanceledDay}
+                </span>
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Mês:{" "}
+                <span className="font-semibold">
+                  {totalAppointmentsCanceledMonth}
+                </span>
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 

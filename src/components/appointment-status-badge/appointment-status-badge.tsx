@@ -6,15 +6,15 @@ const STATUS_MAP: Record<
 > = {
   PENDING: {
     label: "Pendente",
-    className: "text-yellow-700 bg-yellow-100 border border-yellow-300",
+    className: "text-yellow-500 bg-yellow-100/10 border border-yellow-500",
   },
   DONE: {
     label: "Concluído",
-    className: "text-green-700 bg-green-100 border border-green-300",
+    className: "text-green-500 bg-green-100/10 border border-green-500",
   },
   CANCELED: {
     label: "Cancelado",
-    className: "text-red-700 bg-red-100 border border-red-300",
+    className: "text-red-500 bg-red-100/10 border border-red-500",
   },
 };
 

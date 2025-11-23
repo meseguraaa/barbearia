@@ -12,62 +12,68 @@ import {
   DialogFooter,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  concludeAppointment,
-  cancelAppointment,
-} from "@/app/admin/dashboard/actions";
+import { markAppointmentDone, cancelAppointment } from "@/app/barber/actions";
 import type { AppointmentStatus } from "@/types/appointment";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
-type AppointmentActionsProps = {
+type BarberAppointmentActionsProps = {
   appointmentId: string;
   status?: AppointmentStatus | null;
 
-  // dados para exibir no modal de conferência
   clientName: string;
   phone: string;
   description: string;
   scheduleAt: Date;
-  barberName?: string | null;
 
-  // valor do serviço (já em número)
+  // valor do serviço já em número
   servicePrice?: number | null;
 };
 
-export function AppointmentActions({
+export function BarberAppointmentActions({
   appointmentId,
   status,
   clientName,
   phone,
   description,
   scheduleAt,
-  barberName,
   servicePrice,
-}: AppointmentActionsProps) {
+}: BarberAppointmentActionsProps) {
   const [isReviewOpen, setIsReviewOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isPendingTransition, startTransition] = useTransition();
   const router = useRouter();
-
-  const isDoneStatus = status === "DONE";
-  const isCanceledStatus = status === "CANCELED";
-
-  // Pode interagir (conferir/cancelar) se não estiver concluído nem cancelado
-  const canInteract = !isDoneStatus && !isCanceledStatus && !isPending;
 
   const dateStr = format(scheduleAt, "dd/MM/yyyy", { locale: ptBR });
   const timeStr = format(scheduleAt, "HH:mm", { locale: ptBR });
 
-  // formatador de moeda (valor do serviço)
   const currencyFormatter = new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
     minimumFractionDigits: 2,
   });
 
+  // ================== REGRAS DE STATUS ==================
+
+  // Se por algum motivo vier null/undefined, trato como PENDING
+  const effectiveStatus: AppointmentStatus =
+    (status as AppointmentStatus) ?? "PENDING";
+
+  const isPendingStatus = effectiveStatus === "PENDING";
+
+  // Só mostra os botões enquanto estiver PENDENTE
+  if (!isPendingStatus) {
+    return null;
+  }
+
+  const canInteract = !isPendingTransition;
+
+  // ======================================================
+
   function handleConfirmConclude() {
     startTransition(async () => {
-      await concludeAppointment(appointmentId);
+      const fd = new FormData();
+      fd.append("appointmentId", appointmentId);
+      await markAppointmentDone(fd);
       setIsReviewOpen(false);
       router.refresh();
     });
@@ -75,14 +81,16 @@ export function AppointmentActions({
 
   function handleCancel() {
     startTransition(async () => {
-      await cancelAppointment(appointmentId);
+      const fd = new FormData();
+      fd.append("appointmentId", appointmentId);
+      await cancelAppointment(fd);
       router.refresh();
     });
   }
 
   return (
     <div className="flex items-center gap-2">
-      {/* CONFERIR / CONCLUIR – sempre aparece, mas desabilita em DONE/CANCELED ou durante ação */}
+      {/* CONFERIR / CONCLUIR – só enquanto estiver PENDENTE */}
       <Dialog open={isReviewOpen} onOpenChange={setIsReviewOpen}>
         <DialogTrigger asChild>
           <Button
@@ -102,11 +110,12 @@ export function AppointmentActions({
           <DialogHeader>
             <DialogTitle size="modal">Conferência</DialogTitle>
             <DialogDescription size="modal">
-              Confirme se as informações abaixo estão corretas.
+              Confirme se as informações abaixo estão corretas antes de concluir
+              o atendimento.
             </DialogDescription>
           </DialogHeader>
 
-          {/* 🔹 Layout em grade: até 2 colunas em telas maiores */}
+          {/* 🔹 Grade 2 colunas no desktop */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
             <div>
               <p className="text-label-small text-content-secondary">Cliente</p>
@@ -121,15 +130,6 @@ export function AppointmentActions({
               </p>
               <p className="text-paragraph-medium text-content-primary">
                 {phone || "—"}
-              </p>
-            </div>
-
-            <div>
-              <p className="text-label-small text-content-secondary">
-                Barbeiro
-              </p>
-              <p className="text-paragraph-medium text-content-primary">
-                {barberName || "—"}
               </p>
             </div>
 
@@ -167,9 +167,8 @@ export function AppointmentActions({
           </div>
 
           <p className="text-paragraph-small text-content-secondary mt-3">
-            Se alguma informação estiver errada, clique em{" "}
-            <span className="font-semibold">Editar</span> na tabela, ajuste os
-            dados e depois volte aqui para concluir.
+            Se algo estiver errado, avise o administrador antes de concluir este
+            atendimento.
           </p>
 
           <DialogFooter className="mt-4">
@@ -177,7 +176,7 @@ export function AppointmentActions({
               variant="outline"
               type="button"
               onClick={() => setIsReviewOpen(false)}
-              disabled={isPending}
+              disabled={isPendingTransition}
             >
               Voltar
             </Button>
@@ -187,13 +186,13 @@ export function AppointmentActions({
               onClick={handleConfirmConclude}
               disabled={!canInteract}
             >
-              {isPending ? "Concluindo..." : "Concluir"}
+              {isPendingTransition ? "Concluindo..." : "Concluir"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* CANCELAR – também sempre aparece, mas desabilita em DONE/CANCELED ou durante ação */}
+      {/* CANCELAR – também só enquanto estiver PENDENTE */}
       <Button
         size="sm"
         variant="destructive"
