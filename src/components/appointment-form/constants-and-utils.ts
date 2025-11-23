@@ -2,9 +2,7 @@ import { getHours, getMinutes, isSameDay } from "date-fns";
 import { Appointment } from "@/types/appointment";
 
 /**
- * ⚠️ IMPORTANTE:
- * SERVICE_OPTIONS agora serve apenas como fallback visual.
- * O tipo NÃO depende mais dessas opções fixas.
+ * SERVICE_OPTIONS agora é só visual / fallback.
  */
 export const SERVICE_OPTIONS = [
   "Barba",
@@ -14,14 +12,7 @@ export const SERVICE_OPTIONS = [
 ];
 
 /**
- * 🔥 Agora qualquer string pode ser um serviço dinâmico
- * vindo do banco de dados.
- */
-export type ServiceOption = string;
-
-/**
- * Mapa de duração padrão para alguns serviços conhecidos.
- * (Mantemos isso como fallback.)
+ * Duração padrão dos serviços conhecidos.
  */
 const SERVICE_DURATION_MAP: Record<string, number> = {
   Barba: 30,
@@ -30,11 +21,6 @@ const SERVICE_DURATION_MAP: Record<string, number> = {
   "Cabelo na máquina": 30,
 };
 
-/**
- * Retorna a duração correta do serviço.
- * - Caso seja um serviço novo do banco, retorna 30 como fallback.
- * - Caso seja um nome conhecido, retorna a duração correta.
- */
 export const getServiceDuration = (description?: string): number => {
   if (!description) return 30;
 
@@ -45,12 +31,10 @@ export const getServiceDuration = (description?: string): number => {
   if (normalized.startsWith("barba - r$80")) return 30;
   if (normalized.startsWith("cabelo na máquina")) return 30;
 
-  // Se estiver no mapa fixo
   if (description in SERVICE_DURATION_MAP) {
     return SERVICE_DURATION_MAP[description];
   }
 
-  // Fallback para serviços novos vindos do admin
   return 30;
 };
 
@@ -76,11 +60,7 @@ const generateTimeOptions = (): string[] => {
 export const TIME_OPTIONS = generateTimeOptions();
 
 /**
- * Calcula horários disponíveis considerando:
- * - Data selecionada
- * - Serviço selecionado (duração)
- * - Agendamentos existentes (sem sobreposição)
- * - Horários passados no dia atual
+ * Calcula horários disponíveis
  */
 export const getAvailableTimes = (params: {
   date?: Date | null;
@@ -112,9 +92,10 @@ export const getAvailableTimes = (params: {
     });
   }
 
-  // Filtra agendamentos do dia
-  const dayAppointments = appointments.filter((appt) =>
-    isSameDay(new Date(appt.scheduleAt), date),
+  // Filtra agendamentos do dia e IGNORA CANCELADOS
+  const dayAppointments = appointments.filter(
+    (appt) =>
+      isSameDay(new Date(appt.scheduleAt), date) && appt.status !== "CANCELED",
   );
 
   // Remove horários que colidem com agendamentos

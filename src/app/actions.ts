@@ -1,248 +1,93 @@
-"use server";
+import { getHours, getMinutes, isSameDay } from "date-fns";
+import { Appointment } from "@/types/appointment";
 
-import { prisma } from "@/lib/prisma";
-import { revalidatePath } from "next/cache";
-import z from "zod";
+export const SERVICE_OPTIONS = [
+  "Barba",
+  "Barba & Cabelo",
+  "Cabelo na tesoura",
+  "Cabelo na máquina",
+];
 
-/* ---------------------------------------------------------
- * Schema
- * ---------------------------------------------------------*/
-const appointmentSchema = z.object({
-  clientName: z.string(),
-  phone: z.string(),
-  // espelho do nome do serviço (pra exibir)
-  description: z.string(),
-  scheduleAt: z.date(),
+export const getServiceDuration = (description?: string): number => {
+  if (!description) return 30;
 
-  // ✅ novo: serviço é obrigatório
-  serviceId: z.string().min(1, "O serviço é obrigatório"),
+  const normalized = description.trim().toLowerCase();
 
-  barberId: z.string().min(1, "O barbeiro é obrigatório"),
-});
+  if (normalized.startsWith("barba & cabelo")) return 60;
+  if (normalized.startsWith("cabelo na tesoura")) return 60;
+  if (normalized.startsWith("barba - r$80")) return 30;
+  if (normalized.startsWith("cabelo na máquina")) return 30;
 
-export type AppointmentData = z.infer<typeof appointmentSchema>;
+  return 30;
+};
 
-/* ---------------------------------------------------------
- * Helper: hora + minuto em São Paulo (America/Sao_Paulo)
- * ---------------------------------------------------------*/
-function getSaoPauloTime(date: Date): { hour: number; minute: number } {
-  const formatter = new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    hour: "numeric",
-    minute: "numeric",
-    hour12: false,
-  });
+const generateTimeOptions = () => {
+  const times: string[] = [];
+  for (let hour = 9; hour <= 21; hour++) {
+    for (let minute = 0; minute < 60; minute += 30) {
+      if (hour === 21 && minute > 0) break;
+      times.push(
+        `${hour.toString().padStart(2, "0")}:${minute
+          .toString()
+          .padStart(2, "0")}`,
+      );
+    }
+  }
+  return times;
+};
 
-  const parts = formatter.formatToParts(date);
+export const TIME_OPTIONS = generateTimeOptions();
 
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
+export const getAvailableTimes = (params: {
+  date?: Date | null;
+  service?: string;
+  appointments: Appointment[];
+  currentAppointmentId?: string;
+}): string[] => {
+  const { date, service, appointments, currentAppointmentId } = params;
 
-  return { hour, minute };
-}
+  if (!date || !service) return [];
 
-/* ---------------------------------------------------------
- * REGRA 1: não permitir agendamento no passado
- * ---------------------------------------------------------*/
-function validateNotInPast(scheduleAt: Date): string | null {
   const now = new Date();
+  const duration = getServiceDuration(service);
 
-  if (scheduleAt.getTime() < now.getTime()) {
-    return "Não é possível agendar para um horário no passado";
-  }
+  let baseTimes = [...TIME_OPTIONS];
 
-  return null;
-}
+  if (isSameDay(date, now)) {
+    const nowMinutes = getHours(now) * 60 + getMinutes(now);
 
-/* ---------------------------------------------------------
- * REGRA 2: Pode agendar das 09:00 até 21:00 (contínuo)
- * ---------------------------------------------------------*/
-function validateBusinessHours(scheduleAt: Date): string | null {
-  const { hour, minute } = getSaoPauloTime(scheduleAt);
-  const totalMinutes = hour * 60 + minute;
-
-  const start = 9 * 60; // 09:00
-  const end = 21 * 60; // 21:00
-
-  if (totalMinutes < start || totalMinutes > end) {
-    return `Agendamentos só podem ser feitos entre 9h-21h (horário de São Paulo)`;
-  }
-
-  return null;
-}
-
-/* ---------------------------------------------------------
- * Checar se já existe um agendamento para o MESMO barbeiro
- * no mesmo horário
- * ---------------------------------------------------------*/
-async function ensureAvailability(
-  scheduleAt: Date,
-  barberId: string,
-  excludeId?: string,
-): Promise<string | null> {
-  const existing = await prisma.appointment.findFirst({
-    where: {
-      scheduleAt,
-      barberId,
-      ...(excludeId && { id: { not: excludeId } }),
-    },
-  });
-
-  if (existing) {
-    return "Este barbeiro já possui um agendamento neste horário";
-  }
-
-  return null;
-}
-
-/* ---------------------------------------------------------
- * Helper TEMPORÁRIO: cliente padrão (sem login)
- * ---------------------------------------------------------*/
-async function getDefaultClientId(): Promise<string> {
-  const email = "anon@barbearia.local";
-
-  const client = await prisma.user.upsert({
-    where: { email },
-    update: {},
-    create: {
-      email,
-      name: "Cliente não autenticado",
-      role: "CLIENT",
-    },
-  });
-
-  return client.id;
-}
-
-/* ---------------------------------------------------------
- * Wrapper para operações com try/catch + revalidate
- * ---------------------------------------------------------*/
-async function withAppointmentMutation(
-  operation: () => Promise<void>,
-  defaultError: string,
-) {
-  try {
-    await operation();
-    // se quiser, depois podemos adicionar outros paths aqui
-    revalidatePath("/");
-  } catch (err) {
-    console.log(err);
-    return { error: defaultError };
-  }
-}
-
-/* ---------------------------------------------------------
- * CREATE
- * ---------------------------------------------------------*/
-export async function createAppointment(data: AppointmentData) {
-  const parsed = appointmentSchema.parse(data);
-  const { scheduleAt, barberId, serviceId } = parsed;
-
-  const pastError = validateNotInPast(scheduleAt);
-  if (pastError) return { error: pastError };
-
-  const scheduleError = validateBusinessHours(scheduleAt);
-  if (scheduleError) return { error: scheduleError };
-
-  const availabilityError = await ensureAvailability(scheduleAt, barberId);
-  if (availabilityError) return { error: availabilityError };
-
-  // Verifica se o serviço existe para poder calcular os ganhos
-  const service = await prisma.service.findUnique({
-    where: { id: serviceId },
-  });
-
-  if (!service) {
-    return { error: "Serviço não encontrado" };
-  }
-
-  // Enquanto não temos login de cliente,
-  // associamos a um "cliente padrão" seguro.
-  const clientId = await getDefaultClientId();
-
-  // Snapshots de valores para não depender de futuras mudanças no Service
-  const servicePriceAtTheTime = service.price; // Decimal
-  const barberPercentageAtTheTime = service.barberPercentage; // Decimal
-  const barberEarningValue = service.price
-    .mul(service.barberPercentage)
-    .div(100); // Decimal
-
-  return withAppointmentMutation(async () => {
-    await prisma.appointment.create({
-      data: {
-        ...parsed, // inclui serviceId, description, etc.
-        clientId,
-        servicePriceAtTheTime,
-        barberPercentageAtTheTime,
-        barberEarningValue,
-      },
+    baseTimes = baseTimes.filter((time) => {
+      const [h, m] = time.split(":").map(Number);
+      return h * 60 + m > nowMinutes;
     });
-  }, "Falha ao criar o agendamento");
-}
-
-/* ---------------------------------------------------------
- * UPDATE
- * ---------------------------------------------------------*/
-export async function updateAppointment(id: string, data: AppointmentData) {
-  const parsed = appointmentSchema.parse(data);
-  const { scheduleAt, barberId, serviceId } = parsed;
-
-  const pastError = validateNotInPast(scheduleAt);
-  if (pastError) return { error: pastError };
-
-  const scheduleError = validateBusinessHours(scheduleAt);
-  if (scheduleError) return { error: scheduleError };
-
-  const availabilityError = await ensureAvailability(scheduleAt, barberId, id);
-  if (availabilityError) return { error: availabilityError };
-
-  // Busca o agendamento atual para decidir se recalcula snapshot
-  const existing = await prisma.appointment.findUnique({
-    where: { id },
-  });
-
-  if (!existing) {
-    return { error: "Agendamento não encontrado" };
   }
 
-  let servicePriceAtTheTime = existing.servicePriceAtTheTime;
-  let barberPercentageAtTheTime = existing.barberPercentageAtTheTime;
-  let barberEarningValue = existing.barberEarningValue;
+  // 👇 FILTRA CANCELADOS (NOVO!)
+  const dayAppointments = appointments.filter(
+    (appt) =>
+      isSameDay(new Date(appt.scheduleAt), date) && appt.status !== "CANCELED",
+  );
 
-  // Se o serviço foi alterado (ou não havia serviço antes), recalculamos os snapshots
-  if (!existing.serviceId || existing.serviceId !== serviceId) {
-    const service = await prisma.service.findUnique({
-      where: { id: serviceId },
-    });
+  const available = baseTimes.filter((time) => {
+    const [h, m] = time.split(":").map(Number);
 
-    if (!service) {
-      return { error: "Serviço não encontrado" };
+    const start = h * 60 + m;
+    const end = start + duration;
+
+    for (const appt of dayAppointments) {
+      if (currentAppointmentId && appt.id === currentAppointmentId) continue;
+
+      const apptDate = new Date(appt.scheduleAt);
+      const apptStart = getHours(apptDate) * 60 + getMinutes(apptDate);
+      const apptDuration = getServiceDuration(appt.description);
+      const apptEnd = apptStart + apptDuration;
+
+      const overlap = start < apptEnd && apptStart < end;
+      if (overlap) return false;
     }
 
-    servicePriceAtTheTime = service.price;
-    barberPercentageAtTheTime = service.barberPercentage;
-    barberEarningValue = service.price.mul(service.barberPercentage).div(100);
-  }
+    return true;
+  });
 
-  return withAppointmentMutation(async () => {
-    await prisma.appointment.update({
-      where: { id },
-      // aqui não mudamos o clientId, só os campos do formulário
-      data: {
-        ...parsed, // inclui serviceId, description, etc.
-        servicePriceAtTheTime,
-        barberPercentageAtTheTime,
-        barberEarningValue,
-      },
-    });
-  }, "Falha ao atualizar o agendamento");
-}
-
-/* ---------------------------------------------------------
- * DELETE
- * ---------------------------------------------------------*/
-export async function deleteAppointment(id: string) {
-  return withAppointmentMutation(async () => {
-    await prisma.appointment.delete({ where: { id } });
-  }, "Falha ao excluir o agendamento");
-}
+  return available;
+};

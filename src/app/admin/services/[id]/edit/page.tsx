@@ -143,7 +143,7 @@ export default async function EditServicePage({
           </div>
 
           <div className="flex justify-end gap-2 pt-4">
-            <Button asChild variant="outline">
+            <Button asChild variant="destructive">
               <Link href="/admin/services">Cancelar</Link>
             </Button>
             <Button type="submit" variant="brand">
