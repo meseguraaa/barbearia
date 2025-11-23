@@ -33,6 +33,13 @@ export default async function EditServicePage({
     notFound();
   }
 
+  // tentativa segura de pegar a porcentagem (caso já exista no modelo)
+  const barberPercentageDefault =
+    (service as any).barberPercentage !== undefined &&
+    (service as any).barberPercentage !== null
+      ? String((service as any).barberPercentage)
+      : "";
+
   // server action local para o submit
   async function handleSubmit(formData: FormData) {
     "use server";
@@ -111,6 +118,27 @@ export default async function EditServicePage({
               required
               defaultValue={service.durationMinutes}
               className="bg-background-secondary border-border-primary text-content-primary"
+            />
+          </div>
+
+          {/* PORCENTAGEM DO BARBEIRO */}
+          <div className="space-y-1">
+            <label
+              className="text-label-small text-content-secondary"
+              htmlFor="barberPercentage"
+            >
+              Porcentagem do barbeiro (%)
+            </label>
+            <Input
+              id="barberPercentage"
+              name="barberPercentage"
+              type="number"
+              step="0.01"
+              min={0}
+              max={100}
+              defaultValue={barberPercentageDefault}
+              className="bg-background-secondary border-border-primary text-content-primary"
+              placeholder="Ex: 50"
             />
           </div>
 

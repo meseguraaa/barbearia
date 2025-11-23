@@ -1,6 +1,12 @@
 // app/admin/dashboard/page.tsx
 import { prisma } from "@/lib/prisma";
-import { format, startOfDay, endOfDay } from "date-fns";
+import {
+  format,
+  startOfDay,
+  endOfDay,
+  startOfMonth,
+  endOfMonth,
+} from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Metadata } from "next";
 import { AppointmentActions } from "@/components/appointment-actions";
@@ -75,6 +81,7 @@ async function getAppointments(dateParam?: string) {
     },
     include: {
       barber: true,
+      service: true, // para poder calcular financeiro
     },
   });
 
@@ -135,16 +142,115 @@ export default async function AdminDashboardPage({
     ? (parseDateParam(dateParam) ?? todaySP)
     : todaySP;
 
-  const [appointmentsPrisma, barbers] = await Promise.all([
-    getAppointments(dateParam),
-    getBarbers(),
-  ]);
+  const monthStart = startOfMonth(selectedDate);
+  const monthEnd = endOfMonth(selectedDate);
+
+  const [appointmentsPrisma, barbers, monthAppointmentsPrisma] =
+    await Promise.all([
+      getAppointments(dateParam),
+      getBarbers(),
+      prisma.appointment.findMany({
+        where: {
+          status: "DONE",
+          scheduleAt: {
+            gte: monthStart,
+            lte: monthEnd,
+          },
+        },
+        include: {
+          service: true,
+        },
+      }),
+    ]);
 
   const appointmentsForForm: AppointmentType[] =
     appointmentsPrisma.map(mapToAppointmentType);
 
   type AppointmentWithBarberPrisma = (typeof appointmentsPrisma)[number];
 
+  // ====== FINANCEIRO GERAL DO DIA ======
+  const currencyFormatter = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+  });
+
+  const doneAppointments = appointmentsPrisma.filter(
+    (appt) => appt.status === "DONE",
+  );
+
+  const { totalGrossDay, totalCommissionDay, totalNetDay } =
+    doneAppointments.reduce(
+      (acc, appt) => {
+        const priceSnapshot = appt.servicePriceAtTheTime;
+        const priceService = appt.service?.price ?? 0;
+        const priceNumber = priceSnapshot
+          ? Number(priceSnapshot)
+          : Number(priceService);
+
+        const percentSnapshot = appt.barberPercentageAtTheTime;
+        const percentService = appt.service?.barberPercentage ?? 0;
+        const percentNumber = percentSnapshot
+          ? Number(percentSnapshot)
+          : Number(percentService);
+
+        const earningSnapshot = appt.barberEarningValue;
+        const earningNumber = earningSnapshot
+          ? Number(earningSnapshot)
+          : (priceNumber * percentNumber) / 100;
+
+        acc.totalGrossDay += priceNumber;
+        acc.totalCommissionDay += earningNumber;
+        acc.totalNetDay += priceNumber - earningNumber;
+
+        return acc;
+      },
+      {
+        totalGrossDay: 0,
+        totalCommissionDay: 0,
+        totalNetDay: 0,
+      },
+    );
+
+  const totalAppointmentsDoneDay = doneAppointments.length;
+
+  // ====== FINANCEIRO GERAL DO MÊS (baseado no dia selecionado) ======
+  const { totalGrossMonth, totalCommissionMonth, totalNetMonth } =
+    monthAppointmentsPrisma.reduce(
+      (acc, appt) => {
+        const priceSnapshot = appt.servicePriceAtTheTime;
+        const priceService = appt.service?.price ?? 0;
+        const priceNumber = priceSnapshot
+          ? Number(priceSnapshot)
+          : Number(priceService);
+
+        const percentSnapshot = appt.barberPercentageAtTheTime;
+        const percentService = appt.service?.barberPercentage ?? 0;
+        const percentNumber = percentSnapshot
+          ? Number(percentSnapshot)
+          : Number(percentService);
+
+        const earningSnapshot = appt.barberEarningValue;
+        const earningNumber = earningSnapshot
+          ? Number(earningSnapshot)
+          : (priceNumber * percentNumber) / 100;
+
+        acc.totalGrossMonth += priceNumber;
+        acc.totalCommissionMonth += earningNumber;
+        acc.totalNetMonth += priceNumber - earningNumber;
+
+        return acc;
+      },
+      {
+        totalGrossMonth: 0,
+        totalCommissionMonth: 0,
+        totalNetMonth: 0,
+      },
+    );
+
+  const totalAppointmentsDoneMonth = monthAppointmentsPrisma.length;
+
+  // ====== AGRUPADO POR BARBEIRO (COM TOTAIS DIÁRIOS) ======
   const groupedByBarber = appointmentsPrisma.reduce<
     Record<
       string,
@@ -152,6 +258,9 @@ export default async function AdminDashboardPage({
         barberId: string | null;
         barberName: string;
         appointments: AppointmentWithBarberPrisma[];
+        totalGross: number;
+        totalCommission: number;
+        totalNet: number;
       }
     >
   >((acc, appt) => {
@@ -163,10 +272,37 @@ export default async function AdminDashboardPage({
         barberId: appt.barberId ?? null,
         barberName,
         appointments: [],
+        totalGross: 0,
+        totalCommission: 0,
+        totalNet: 0,
       };
     }
 
     acc[barberId].appointments.push(appt);
+
+    // Só conta financeiro se o atendimento foi concluído (visão diária por barbeiro)
+    if (appt.status === "DONE") {
+      const priceSnapshot = appt.servicePriceAtTheTime;
+      const priceService = appt.service?.price ?? 0;
+      const priceNumber = priceSnapshot
+        ? Number(priceSnapshot)
+        : Number(priceService);
+
+      const percentSnapshot = appt.barberPercentageAtTheTime;
+      const percentService = appt.service?.barberPercentage ?? 0;
+      const percentNumber = percentSnapshot
+        ? Number(percentSnapshot)
+        : Number(percentService);
+
+      const earningSnapshot = appt.barberEarningValue;
+      const earningNumber = earningSnapshot
+        ? Number(earningSnapshot)
+        : (priceNumber * percentNumber) / 100;
+
+      acc[barberId].totalGross += priceNumber;
+      acc[barberId].totalCommission += earningNumber;
+      acc[barberId].totalNet += priceNumber - earningNumber;
+    }
 
     return acc;
   }, {});
@@ -175,6 +311,7 @@ export default async function AdminDashboardPage({
 
   return (
     <div className="space-y-6">
+      {/* HEADER + DATA */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-title text-content-primary">Dashboard</h1>
@@ -185,6 +322,77 @@ export default async function AdminDashboardPage({
 
         <DatePicker />
       </div>
+
+      {/* RESUMO FINANCEIRO DO DIA */}
+      <section className="grid gap-4 md:grid-cols-3">
+        {/* Valor bruto do dia */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
+          <p className="text-label-small text-content-secondary">
+            Valor bruto (dia)
+          </p>
+          <p className="text-title text-content-primary">
+            {currencyFormatter.format(totalGrossDay)}
+          </p>
+        </div>
+
+        {/* Valor em comissão do dia */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
+          <p className="text-label-small text-content-secondary">
+            Valor em comissão (dia)
+          </p>
+          <p className="text-title text-content-primary">
+            {currencyFormatter.format(totalCommissionDay)}
+          </p>
+        </div>
+
+        {/* Valor líquido do dia */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
+          <p className="text-label-small text-content-secondary">
+            Valor líquido (dia)
+          </p>
+          <p className="text-title text-content-primary">
+            {currencyFormatter.format(totalNetDay)}
+          </p>
+        </div>
+      </section>
+
+      {/* RESUMO FINANCEIRO DO MÊS + ATENDIMENTOS */}
+      <section className="grid gap-4 md:grid-cols-3">
+        {/* Valor bruto do mês */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
+          <p className="text-label-small text-content-secondary">
+            Valor bruto (mês)
+          </p>
+          <p className="text-title text-content-primary">
+            {currencyFormatter.format(totalGrossMonth)}
+          </p>
+        </div>
+
+        {/* Valor líquido do mês */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
+          <p className="text-label-small text-content-secondary">
+            Valor líquido (mês)
+          </p>
+          <p className="text-title text-content-primary">
+            {currencyFormatter.format(totalNetMonth)}
+          </p>
+        </div>
+
+        {/* Atendimentos concluídos - dia e mês */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
+          <p className="text-label-small text-content-secondary">
+            Atendimentos concluídos
+          </p>
+          <p className="text-paragraph-medium text-content-primary">
+            Dia:{" "}
+            <span className="font-semibold">{totalAppointmentsDoneDay}</span>
+          </p>
+          <p className="text-paragraph-medium text-content-primary">
+            Mês:{" "}
+            <span className="font-semibold">{totalAppointmentsDoneMonth}</span>
+          </p>
+        </div>
+      </section>
 
       {appointmentsPrisma.length === 0 ? (
         <section className="border border-border-primary rounded-xl overflow-hidden bg-background-tertiary">
@@ -202,15 +410,43 @@ export default async function AdminDashboardPage({
               key={group.barberId ?? "no-barber"}
               className="border border-border-primary rounded-xl overflow-hidden bg-background-tertiary"
             >
-              <div className="border-b border-border-primary px-4 py-3 bg-muted/40 flex justify-between items-center">
+              <div className="border-b border-border-primary px-4 py-3 bg-muted/40 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="text-label-large text-content-primary">
                     {group.barberName}
                   </h2>
+                  <p className="text-paragraph-small text-content-secondary">
+                    Agendamento(s): {group.appointments.length}
+                  </p>
                 </div>
-                <span className="text-paragraph-small text-content-secondary">
-                  Agendamento(s): {group.appointments.length}
-                </span>
+
+                {/* Totais por barbeiro (no dia) */}
+                <div className="flex flex-wrap gap-4 text-right">
+                  <div className="space-y-0.5">
+                    <p className="text-label-small text-content-secondary">
+                      Bruto (dia)
+                    </p>
+                    <p className="text-paragraph-medium text-content-primary">
+                      {currencyFormatter.format(group.totalGross)}
+                    </p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-label-small text-content-secondary">
+                      Comissão (dia)
+                    </p>
+                    <p className="text-paragraph-medium text-content-primary">
+                      {currencyFormatter.format(group.totalCommission)}
+                    </p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-label-small text-content-secondary">
+                      Líquido (dia)
+                    </p>
+                    <p className="text-paragraph-medium text-content-primary">
+                      {currencyFormatter.format(group.totalNet)}
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
@@ -257,11 +493,7 @@ export default async function AdminDashboardPage({
                                   appointments={appointmentsForForm}
                                   barbers={barbers}
                                 >
-                                  <Button
-                                    variant="edit2"
-                                    size="sm"
-                                    //className="border-border-primary hover:bg-muted"
-                                  >
+                                  <Button variant="edit2" size="sm">
                                     Editar
                                   </Button>
                                 </AppointmentForm>

@@ -78,6 +78,9 @@ model Service {
   durationMinutes Int
   isActive        Boolean @default(true)
 
+  /// Porcentagem de ganho do barbeiro nesse serviço (%)
+  barberPercentage Decimal @default(50.0) @db.Decimal(5, 2)
+
   // Relacionamento com Appointment
   appointments Appointment[]
 
@@ -107,6 +110,15 @@ model Appointment {
   // Serviço escolhido (pode ser nulo para agendamentos antigos)
   serviceId String?
   service   Service? @relation(fields: [serviceId], references: [id])
+
+  /// Snapshot do valor do serviço na época do agendamento
+  servicePriceAtTheTime Decimal? @db.Decimal(10, 2)
+
+  /// Snapshot da porcentagem do barbeiro na época do agendamento (%)
+  barberPercentageAtTheTime Decimal? @db.Decimal(5, 2)
+
+  /// Valor em dinheiro que o barbeiro ganha neste agendamento
+  barberEarningValue Decimal? @db.Decimal(10, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

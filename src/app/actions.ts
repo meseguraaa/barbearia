@@ -136,7 +136,7 @@ async function withAppointmentMutation(
  * ---------------------------------------------------------*/
 export async function createAppointment(data: AppointmentData) {
   const parsed = appointmentSchema.parse(data);
-  const { scheduleAt, barberId } = parsed;
+  const { scheduleAt, barberId, serviceId } = parsed;
 
   const pastError = validateNotInPast(scheduleAt);
   if (pastError) return { error: pastError };
@@ -147,15 +147,34 @@ export async function createAppointment(data: AppointmentData) {
   const availabilityError = await ensureAvailability(scheduleAt, barberId);
   if (availabilityError) return { error: availabilityError };
 
+  // Verifica se o serviço existe para poder calcular os ganhos
+  const service = await prisma.service.findUnique({
+    where: { id: serviceId },
+  });
+
+  if (!service) {
+    return { error: "Serviço não encontrado" };
+  }
+
   // Enquanto não temos login de cliente,
   // associamos a um "cliente padrão" seguro.
   const clientId = await getDefaultClientId();
+
+  // Snapshots de valores para não depender de futuras mudanças no Service
+  const servicePriceAtTheTime = service.price; // Decimal
+  const barberPercentageAtTheTime = service.barberPercentage; // Decimal
+  const barberEarningValue = service.price
+    .mul(service.barberPercentage)
+    .div(100); // Decimal
 
   return withAppointmentMutation(async () => {
     await prisma.appointment.create({
       data: {
         ...parsed, // inclui serviceId, description, etc.
         clientId,
+        servicePriceAtTheTime,
+        barberPercentageAtTheTime,
+        barberEarningValue,
       },
     });
   }, "Falha ao criar o agendamento");
@@ -166,7 +185,7 @@ export async function createAppointment(data: AppointmentData) {
  * ---------------------------------------------------------*/
 export async function updateAppointment(id: string, data: AppointmentData) {
   const parsed = appointmentSchema.parse(data);
-  const { scheduleAt, barberId } = parsed;
+  const { scheduleAt, barberId, serviceId } = parsed;
 
   const pastError = validateNotInPast(scheduleAt);
   if (pastError) return { error: pastError };
@@ -177,11 +196,44 @@ export async function updateAppointment(id: string, data: AppointmentData) {
   const availabilityError = await ensureAvailability(scheduleAt, barberId, id);
   if (availabilityError) return { error: availabilityError };
 
+  // Busca o agendamento atual para decidir se recalcula snapshot
+  const existing = await prisma.appointment.findUnique({
+    where: { id },
+  });
+
+  if (!existing) {
+    return { error: "Agendamento não encontrado" };
+  }
+
+  let servicePriceAtTheTime = existing.servicePriceAtTheTime;
+  let barberPercentageAtTheTime = existing.barberPercentageAtTheTime;
+  let barberEarningValue = existing.barberEarningValue;
+
+  // Se o serviço foi alterado (ou não havia serviço antes), recalculamos os snapshots
+  if (!existing.serviceId || existing.serviceId !== serviceId) {
+    const service = await prisma.service.findUnique({
+      where: { id: serviceId },
+    });
+
+    if (!service) {
+      return { error: "Serviço não encontrado" };
+    }
+
+    servicePriceAtTheTime = service.price;
+    barberPercentageAtTheTime = service.barberPercentage;
+    barberEarningValue = service.price.mul(service.barberPercentage).div(100);
+  }
+
   return withAppointmentMutation(async () => {
     await prisma.appointment.update({
       where: { id },
       // aqui não mudamos o clientId, só os campos do formulário
-      data: parsed, // inclui serviceId, description, etc.
+      data: {
+        ...parsed, // inclui serviceId, description, etc.
+        servicePriceAtTheTime,
+        barberPercentageAtTheTime,
+        barberEarningValue,
+      },
     });
   }, "Falha ao atualizar o agendamento");
 }
