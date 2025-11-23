@@ -1,14 +1,17 @@
-// app/barber/dashboard/page.tsx
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { jwtVerify } from "jose";
 import { Metadata } from "next";
-import { startOfDay, endOfDay } from "date-fns";
+import { startOfDay, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
-import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/date-picker";
-import { markAppointmentDone, cancelAppointment } from "../actions";
+import { AppointmentActions } from "@/components/appointment-actions";
+import { AppointmentForm } from "@/components/appointment-form";
+import { Button } from "@/components/ui/button";
+import type { Appointment as AppointmentType } from "@/types/appointment";
+import type { Barber as BarberType } from "@/types/barber";
+import type { Service } from "@/types/service";
 
 const SESSION_COOKIE_NAME = "painel_session";
 
@@ -88,6 +91,53 @@ function parseDateParam(dateStr?: string): Date | null {
   return new Date(y, m - 1, d);
 }
 
+// ===== Services helper (igual ao admin) =====
+async function getServices(): Promise<Service[]> {
+  const services = await prisma.service.findMany({
+    where: {
+      isActive: true,
+    },
+    orderBy: {
+      name: "asc",
+    },
+  });
+
+  return services.map((service) => ({
+    id: service.id,
+    name: service.name,
+    price: Number(service.price),
+    durationMinutes: service.durationMinutes,
+    isActive: service.isActive,
+    barberPercentage: service.barberPercentage
+      ? Number(service.barberPercentage)
+      : 0,
+  })) as Service[];
+}
+
+// ===== Mapeia prisma -> AppointmentType (igual padrão do admin) =====
+function mapToAppointmentType(prismaAppt: any): AppointmentType {
+  return {
+    id: prismaAppt.id,
+    clientName: prismaAppt.clientName,
+    phone: prismaAppt.phone,
+    description: prismaAppt.description,
+    scheduleAt: prismaAppt.scheduleAt,
+    status: prismaAppt.status ?? "PENDING",
+    barberId: prismaAppt.barberId ?? "",
+    barber: prismaAppt.barber
+      ? {
+          id: prismaAppt.barber.id,
+          name: prismaAppt.barber.name,
+          email: prismaAppt.barber.email,
+          phone: prismaAppt.barber.phone,
+          isActive: prismaAppt.barber.isActive,
+          role: "BARBER",
+        }
+      : undefined,
+    serviceId: prismaAppt.serviceId ?? undefined,
+  };
+}
+
 type BarberDashboardPageProps = {
   searchParams: Promise<{
     date?: string;
@@ -122,22 +172,77 @@ export default async function BarberDashboardPage({
   const start = startOfDay(baseDate);
   const end = endOfDay(baseDate);
 
-  const appointments = await prisma.appointment.findMany({
-    where: {
-      barberId: barber.id,
-      scheduleAt: {
-        gte: start,
-        lte: end,
+  const monthStart = startOfMonth(baseDate);
+  const monthEnd = endOfMonth(baseDate);
+
+  const [appointments, monthAppointments, services] = await Promise.all([
+    prisma.appointment.findMany({
+      where: {
+        barberId: barber.id,
+        scheduleAt: {
+          gte: start,
+          lte: end,
+        },
       },
+      orderBy: {
+        scheduleAt: "asc",
+      },
+      include: {
+        service: true,
+        barber: true,
+      },
+    }),
+    prisma.appointment.findMany({
+      where: {
+        barberId: barber.id,
+        scheduleAt: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    }),
+    getServices(),
+  ]);
+
+  // lista que o AppointmentForm usa (igual admin)
+  const appointmentsForForm: AppointmentType[] =
+    appointments.map(mapToAppointmentType);
+
+  // barbers para o form (aqui só o barbeiro logado)
+  const barbersForForm: BarberType[] = [
+    {
+      id: barber.id,
+      name: barber.name,
+      email: barber.email,
+      phone: barber.phone ?? "",
+      isActive: barber.isActive ?? true,
+      role: "BARBER",
     },
-    orderBy: {
-      scheduleAt: "asc",
-    },
-  });
+  ];
+
+  const totalDoneDay = appointments.filter(
+    (appt) => appt.status === "DONE",
+  ).length;
+
+  const totalCanceledDay = appointments.filter(
+    (appt) => appt.status === "CANCELED",
+  ).length;
+
+  const totalDoneMonth = monthAppointments.filter(
+    (appt) => appt.status === "DONE",
+  ).length;
+
+  const totalCanceledMonth = monthAppointments.filter(
+    (appt) => appt.status === "CANCELED",
+  ).length;
 
   return (
     <div className="space-y-6">
-      {/* HEADER (igual ao antigo layout) */}
+      {/* HEADER */}
       <header className="flex items-center justify-between">
         <div className="space-y-1">
           <h1 className="text-title text-content-primary">Minha agenda</h1>
@@ -148,7 +253,34 @@ export default async function BarberDashboardPage({
         <DatePicker />
       </header>
 
-      {/* CONTEÚDO */}
+      {/* RESUMO DIÁRIO / MENSAL */}
+      <section className="grid gap-4 md:grid-cols-2">
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-2">
+          <p className="text-label-small text-content-secondary">
+            Atendimentos concluídos
+          </p>
+          <p className="text-paragraph-medium text-content-primary">
+            Dia: <span className="font-semibold">{totalDoneDay}</span>
+          </p>
+          <p className="text-paragraph-medium text-content-primary">
+            Mês: <span className="font-semibold">{totalDoneMonth}</span>
+          </p>
+        </div>
+
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-2">
+          <p className="text-label-small text-content-secondary">
+            Cancelamentos
+          </p>
+          <p className="text-paragraph-medium text-content-primary">
+            Dia: <span className="font-semibold">{totalCanceledDay}</span>
+          </p>
+          <p className="text-paragraph-medium text-content-primary">
+            Mês: <span className="font-semibold">{totalCanceledMonth}</span>
+          </p>
+        </div>
+      </section>
+
+      {/* LISTA DE AGENDAMENTOS */}
       {appointments.length === 0 ? (
         <p className="text-paragraph-small text-content-secondary">
           Você não tem agendamentos para esta data.
@@ -161,7 +293,20 @@ export default async function BarberDashboardPage({
               minute: "2-digit",
             });
 
-            const isPending = appt.status === "PENDING";
+            const priceSnapshot = appt.servicePriceAtTheTime;
+            const servicePrice = appt.service?.price ?? 0;
+
+            const servicePriceNumber = priceSnapshot
+              ? Number(priceSnapshot)
+              : Number(servicePrice);
+
+            const normalizedStatus =
+              (appt.status as AppointmentType["status"]) ?? "PENDING";
+            const isPending = normalizedStatus === "PENDING";
+
+            const apptForForm = appointmentsForForm.find(
+              (a) => a.id === appt.id,
+            )!;
 
             return (
               <div
@@ -169,59 +314,61 @@ export default async function BarberDashboardPage({
                 className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3"
               >
                 <div className="grid w-full grid-cols-1 gap-2 md:grid-cols-6 md:items-center">
-                  {/* Coluna 1: Nome */}
+                  {/* Nome */}
                   <div>
                     <span className="text-paragraph-medium text-content-primary font-medium">
                       {appt.clientName}
                     </span>
                   </div>
 
-                  {/* Coluna 2: Telefone */}
+                  {/* Telefone */}
                   <div className="text-paragraph-medium text-content-primary">
                     {appt.phone}
                   </div>
 
-                  {/* Coluna 3: Descrição */}
+                  {/* Descrição */}
                   <div className="text-paragraph-medium text-content-primary">
                     {appt.description}
                   </div>
 
-                  {/* Coluna 4: Status */}
+                  {/* Status */}
                   <div className="flex md:justify-center">
-                    <AppointmentStatusBadge status={appt.status} />
+                    <AppointmentStatusBadge status={normalizedStatus} />
                   </div>
 
-                  {/* Coluna 5: Horário */}
+                  {/* Horário */}
                   <div className="text-paragraph-medium text-content-primary md:text-center">
                     {timeStr}
                   </div>
 
-                  {/* Coluna 6: Botões */}
+                  {/* Ações */}
                   <div className="flex justify-end gap-2">
+                    {/* EDITAR – só aparece enquanto PENDENTE */}
                     {isPending && (
-                      <>
-                        <form action={markAppointmentDone}>
-                          <input
-                            type="hidden"
-                            name="appointmentId"
-                            value={appt.id}
-                          />
-                          <Button type="submit" size="sm" variant="active">
-                            Concluir
-                          </Button>
-                        </form>
+                      <AppointmentForm
+                        appointment={apptForForm}
+                        appointments={appointmentsForForm}
+                        barbers={barbersForForm}
+                        services={services}
+                      >
+                        <Button variant="edit2" size="sm">
+                          Editar
+                        </Button>
+                      </AppointmentForm>
+                    )}
 
-                        <form action={cancelAppointment}>
-                          <input
-                            type="hidden"
-                            name="appointmentId"
-                            value={appt.id}
-                          />
-                          <Button type="submit" size="sm" variant="destructive">
-                            Cancelar
-                          </Button>
-                        </form>
-                      </>
+                    {/* CONFERIR / CONCLUIR + CANCELAR – só aparece enquanto PENDENTE */}
+                    {isPending && (
+                      <AppointmentActions
+                        appointmentId={appt.id}
+                        status={normalizedStatus}
+                        clientName={appt.clientName}
+                        phone={appt.phone}
+                        description={appt.description}
+                        scheduleAt={appt.scheduleAt}
+                        barberName={barber.name}
+                        servicePrice={servicePriceNumber}
+                      />
                     )}
                   </div>
                 </div>

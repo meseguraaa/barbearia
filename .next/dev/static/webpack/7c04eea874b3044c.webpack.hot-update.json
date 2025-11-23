@@ -1,7 +1,0 @@
-{
-  "c": ["app/layout", "app/admin/services/page", "webpack"],
-  "r": [],
-  "m": [
-    "(app-pages-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-client-entry-loader.js?modules=%7B%22request%22%3A%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fui%2Fdialog.tsx%22%2C%22ids%22%3A%5B%22Dialog%22%2C%22DialogTrigger%22%2C%22DialogContent%22%2C%22DialogHeader%22%2C%22DialogTitle%22%5D%7D&server=false!"
-  ]
-}

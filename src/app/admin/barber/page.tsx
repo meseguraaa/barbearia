@@ -10,7 +10,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+// ⬇️ Agora usamos o componente reutilizável de status
+import { ServiceStatusBadge } from "@/components/service-status-badge";
 import { createBarber, toggleBarberStatus, updateBarber } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -56,18 +57,9 @@ export default async function BarbersPage() {
                   <td className="px-4 py-3">{barber.email}</td>
                   <td className="px-4 py-3">{barber.phone ?? "-"}</td>
 
-                  {/* STATUS com Badge do shadcn */}
+                  {/* STATUS usando ServiceStatusBadge */}
                   <td className="px-4 py-3">
-                    <Badge
-                      variant="outline"
-                      className={
-                        barber.isActive
-                          ? "text-green-700 bg-green-100 border border-green-300"
-                          : "text-red-700 bg-red-100 border border-red-300"
-                      }
-                    >
-                      {barber.isActive ? "Ativo" : "Inativo"}
-                    </Badge>
+                    <ServiceStatusBadge isActive={barber.isActive} />
                   </td>
 
                   <td className="px-4 py-3">
