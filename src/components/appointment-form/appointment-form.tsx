@@ -42,7 +42,11 @@ import {
   SelectValue,
 } from "../ui/select";
 import { toast } from "sonner";
-import { createAppointment, updateAppointment } from "@/app/actions";
+// 🔧 IMPORT CORRIGIDO: usamos o mesmo arquivo do admin/dashboard
+import {
+  createAppointment,
+  updateAppointment,
+} from "@/app/admin/dashboard/actions";
 import { useEffect, useState } from "react";
 import { Appointment } from "@/types/appointment";
 import { Barber } from "@/types/barber";
@@ -80,7 +84,9 @@ export const AppointmentForm = ({
 }: AppointmentFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  // ✅ garante array estável dentro do componente
+  const isEdit = !!appointment?.id;
+
+  // garante array estável dentro do componente
   const servicesList = services ?? [];
 
   const form = useForm<AppointFormValues>({
@@ -113,10 +119,8 @@ export const AppointmentForm = ({
       serviceId: data.serviceId,
     };
 
-    const isEdit = !!appointment?.id;
-
     const result = isEdit
-      ? await updateAppointment(appointment.id, payload)
+      ? await updateAppointment(appointment!.id, payload)
       : await createAppointment(payload);
 
     if (result?.error) {
@@ -174,23 +178,29 @@ export const AppointmentForm = ({
     const date = new Date(appointment.scheduleAt);
     const time = format(date, "HH:mm");
 
-    const matchedService = servicesList.find(
+    const matchedServiceById = appointment.serviceId
+      ? servicesList.find((service) => service.id === appointment.serviceId)
+      : undefined;
+
+    const matchedServiceByName = servicesList.find(
       (service) => service.name === appointment.description,
     );
+
+    const finalService = matchedServiceById ?? matchedServiceByName;
 
     form.reset({
       clientName: appointment.clientName,
       phone: appointment.phone,
-      serviceId: matchedService?.id ?? "",
-      description: appointment.description ?? "",
+      serviceId: finalService?.id ?? appointment.serviceId ?? "",
+      description: appointment.description ?? finalService?.name ?? "",
       scheduleAt: date,
       time,
       barberId: appointment.barberId,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appointment, servicesList.length]); // ✅ dependências estáveis
+  }, [appointment, servicesList.length]);
 
-  // 🕒 Observa campos que mandam no fluxo
+  // Observa campos que mandam no fluxo
   const selectedServiceId = form.watch("serviceId");
   const selectedDate = form.watch("scheduleAt");
   const selectedTime = form.watch("time");
@@ -218,9 +228,13 @@ export const AppointmentForm = ({
         showCloseButton
       >
         <DialogHeader>
-          <DialogTitle size="modal">Agende um atendimento</DialogTitle>
+          <DialogTitle size="modal">
+            {isEdit ? "Editar agendamento" : "Agende um atendimento"}
+          </DialogTitle>
           <DialogDescription size="modal">
-            Preencha os dados do cliente para realizar o agendamento:
+            {isEdit
+              ? "Atualize os dados deste atendimento:"
+              : "Preencha os dados do cliente para realizar o agendamento:"}
           </DialogDescription>
         </DialogHeader>
 
@@ -543,7 +557,7 @@ export const AppointmentForm = ({
                 {form.formState.isSubmitting && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Agendar
+                {isEdit ? "Salvar alterações" : "Agendar"}
               </Button>
             </div>
           </form>

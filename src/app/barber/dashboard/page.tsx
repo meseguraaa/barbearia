@@ -217,7 +217,7 @@ export default async function BarberDashboardPage({
                             name="appointmentId"
                             value={appt.id}
                           />
-                          <Button type="submit" size="sm" variant="outline">
+                          <Button type="submit" size="sm" variant="destructive">
                             Cancelar
                           </Button>
                         </form>

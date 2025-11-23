@@ -15,6 +15,7 @@ import { AppointmentForm } from "@/components/appointment-form";
 import { Button } from "@/components/ui/button";
 import type { Appointment as AppointmentType } from "@/types/appointment";
 import type { Barber } from "@/types/barber";
+import type { Service } from "@/types/service";
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
 
 export const dynamic = "force-dynamic";
@@ -108,6 +109,31 @@ async function getBarbers(): Promise<Barber[]> {
   }));
 }
 
+// 🔧 IMPORTANTE: transformar Decimal em number
+async function getServices(): Promise<Service[]> {
+  const services = await prisma.service.findMany({
+    where: {
+      isActive: true,
+    },
+    orderBy: {
+      name: "asc",
+    },
+  });
+
+  return services.map((service) => ({
+    id: service.id,
+    name: service.name,
+    // Prisma.Decimal -> number
+    price: Number(service.price),
+    durationMinutes: service.durationMinutes,
+    isActive: service.isActive,
+    // se esse campo existir no tipo Service:
+    barberPercentage: service.barberPercentage
+      ? Number(service.barberPercentage)
+      : 0,
+  })) as Service[];
+}
+
 function mapToAppointmentType(prismaAppt: any): AppointmentType {
   return {
     id: prismaAppt.id,
@@ -127,6 +153,8 @@ function mapToAppointmentType(prismaAppt: any): AppointmentType {
           role: "BARBER",
         }
       : undefined,
+    // se você quiser já guardar o serviceId aqui:
+    serviceId: prismaAppt.serviceId ?? undefined,
   };
 }
 
@@ -145,7 +173,7 @@ export default async function AdminDashboardPage({
   const monthStart = startOfMonth(selectedDate);
   const monthEnd = endOfMonth(selectedDate);
 
-  const [appointmentsPrisma, barbers, monthAppointmentsPrisma] =
+  const [appointmentsPrisma, barbers, monthAppointmentsPrisma, services] =
     await Promise.all([
       getAppointments(dateParam),
       getBarbers(),
@@ -161,6 +189,7 @@ export default async function AdminDashboardPage({
           service: true,
         },
       }),
+      getServices(),
     ]);
 
   const appointmentsForForm: AppointmentType[] =
@@ -492,6 +521,7 @@ export default async function AdminDashboardPage({
                                   appointment={apptForForm}
                                   appointments={appointmentsForForm}
                                   barbers={barbers}
+                                  services={services}
                                 >
                                   <Button variant="edit2" size="sm">
                                     Editar
@@ -513,9 +543,6 @@ export default async function AdminDashboardPage({
               </div>
             </div>
           ))}
-          <p className="text-paragraph-medium text-content-primary px-1 text-right">
-            Total de atendimentos no dia: {appointmentsPrisma.length}
-          </p>
         </section>
       )}
     </div>

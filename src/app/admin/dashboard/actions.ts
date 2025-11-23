@@ -10,8 +10,10 @@ import z from "zod";
 const appointmentSchema = z.object({
   clientName: z.string(),
   phone: z.string(),
+  // espelho do nome do serviço (pra exibir)
   description: z.string(),
   scheduleAt: z.date(),
+  serviceId: z.string().min(1, "O serviço é obrigatório"),
   barberId: z.string().min(1, "O barbeiro é obrigatório"),
 });
 
@@ -68,7 +70,7 @@ function validateBusinessHours(scheduleAt: Date): string | null {
 
 /* ---------------------------------------------------------
  * Checar se já existe um agendamento para o MESMO barbeiro
- * no mesmo horário
+ * no mesmo horário (ignorando CANCELADOS)
  * ---------------------------------------------------------*/
 async function ensureAvailability(
   scheduleAt: Date,
@@ -79,6 +81,9 @@ async function ensureAvailability(
     where: {
       scheduleAt,
       barberId,
+      status: {
+        not: "CANCELED", // 👈 CANCELADO NÃO BLOQUEIA MAIS HORÁRIO
+      },
       ...(excludeId && { id: { not: excludeId } }),
     },
   });
@@ -118,9 +123,9 @@ async function withAppointmentMutation(
 ) {
   try {
     await operation();
-    // Atualiza home (site público)
+    // site público
     revalidatePath("/");
-    // E também o painel admin, caso o form seja usado lá
+    // dashboard admin
     revalidatePath("/admin/dashboard");
   } catch (err) {
     console.log(err);
@@ -133,7 +138,7 @@ async function withAppointmentMutation(
  * ---------------------------------------------------------*/
 export async function createAppointment(data: AppointmentData) {
   const parsed = appointmentSchema.parse(data);
-  const { scheduleAt, barberId } = parsed;
+  const { scheduleAt, barberId, serviceId } = parsed;
 
   const pastError = validateNotInPast(scheduleAt);
   if (pastError) return { error: pastError };
@@ -144,16 +149,35 @@ export async function createAppointment(data: AppointmentData) {
   const availabilityError = await ensureAvailability(scheduleAt, barberId);
   if (availabilityError) return { error: availabilityError };
 
+  // Verifica se o serviço existe para poder calcular os ganhos
+  const service = await prisma.service.findUnique({
+    where: { id: serviceId },
+  });
+
+  if (!service) {
+    return { error: "Serviço não encontrado" };
+  }
+
   // Enquanto não temos login de cliente,
   // associamos a um "cliente padrão" seguro.
   const clientId = await getDefaultClientId();
 
+  // Snapshots de valores para não depender de futuras mudanças no Service
+  const servicePriceAtTheTime = service.price; // Decimal
+  const barberPercentageAtTheTime = service.barberPercentage; // Decimal
+  const barberEarningValue = service.price
+    .mul(service.barberPercentage)
+    .div(100); // Decimal
+
   return withAppointmentMutation(async () => {
     await prisma.appointment.create({
       data: {
-        ...parsed,
+        ...parsed, // inclui serviceId, description, etc.
         clientId,
-        status: "PENDING", // 👈 garante status inicial
+        servicePriceAtTheTime,
+        barberPercentageAtTheTime,
+        barberEarningValue,
+        status: "PENDING",
       },
     });
   }, "Falha ao criar o agendamento");
@@ -164,7 +188,7 @@ export async function createAppointment(data: AppointmentData) {
  * ---------------------------------------------------------*/
 export async function updateAppointment(id: string, data: AppointmentData) {
   const parsed = appointmentSchema.parse(data);
-  const { scheduleAt, barberId } = parsed;
+  const { scheduleAt, barberId, serviceId } = parsed;
 
   const pastError = validateNotInPast(scheduleAt);
   if (pastError) return { error: pastError };
@@ -175,11 +199,44 @@ export async function updateAppointment(id: string, data: AppointmentData) {
   const availabilityError = await ensureAvailability(scheduleAt, barberId, id);
   if (availabilityError) return { error: availabilityError };
 
+  // Busca o agendamento atual para decidir se recalcula snapshot
+  const existing = await prisma.appointment.findUnique({
+    where: { id },
+  });
+
+  if (!existing) {
+    return { error: "Agendamento não encontrado" };
+  }
+
+  let servicePriceAtTheTime = existing.servicePriceAtTheTime;
+  let barberPercentageAtTheTime = existing.barberPercentageAtTheTime;
+  let barberEarningValue = existing.barberEarningValue;
+
+  // Se o serviço foi alterado (ou não havia serviço antes), recalculamos os snapshots
+  if (!existing.serviceId || existing.serviceId !== serviceId) {
+    const service = await prisma.service.findUnique({
+      where: { id: serviceId },
+    });
+
+    if (!service) {
+      return { error: "Serviço não encontrado" };
+    }
+
+    servicePriceAtTheTime = service.price;
+    barberPercentageAtTheTime = service.barberPercentage;
+    barberEarningValue = service.price.mul(service.barberPercentage).div(100);
+  }
+
   return withAppointmentMutation(async () => {
     await prisma.appointment.update({
       where: { id },
       // aqui não mudamos o clientId, só os campos do formulário
-      data: parsed,
+      data: {
+        ...parsed, // inclui serviceId, description, etc.
+        servicePriceAtTheTime,
+        barberPercentageAtTheTime,
+        barberEarningValue,
+      },
     });
   }, "Falha ao atualizar o agendamento");
 }
@@ -200,6 +257,8 @@ export async function concludeAppointment(id: string) {
 
 /* ---------------------------------------------------------
  * CANCEL (CANCELED)
+ *  - NÃO DELETA, só marca como CANCELED
+ *  - ensureAvailability ignora esse status (libera horário)
  * ---------------------------------------------------------*/
 export async function cancelAppointment(id: string) {
   return withAppointmentMutation(async () => {
@@ -213,10 +272,13 @@ export async function cancelAppointment(id: string) {
 }
 
 /* ---------------------------------------------------------
- * DELETE
+ * DELETE – usado apenas na tela do USUÁRIO
+ * (admin/barbeiro não têm botão para isso)
  * ---------------------------------------------------------*/
 export async function deleteAppointment(id: string) {
   return withAppointmentMutation(async () => {
-    await prisma.appointment.delete({ where: { id } });
+    await prisma.appointment.delete({
+      where: { id },
+    });
   }, "Falha ao excluir o agendamento");
 }

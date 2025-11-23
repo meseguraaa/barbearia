@@ -38,6 +38,11 @@ export default async function Home({ searchParams }: HomeProps) {
         gte: dayStart,
         lte: dayEnd,
       },
+      // 👇 REGRA DE BACKEND: na agenda do barbeiro
+      // não exibimos agendamentos cancelados
+      status: {
+        not: "CANCELED",
+      },
     },
     orderBy: {
       scheduleAt: "asc",
@@ -63,7 +68,7 @@ export default async function Home({ searchParams }: HomeProps) {
     role: "BARBER",
   }));
 
-  // 🔥 serviços ativos vindos do model Service
+  // serviços ativos vindos do model Service
   const servicesPrisma = await prisma.service.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
@@ -99,13 +104,14 @@ export default async function Home({ searchParams }: HomeProps) {
       phone: apt.phone,
       description: apt.description,
       scheduleAt: apt.scheduleAt,
-      barberId: apt.barberId ?? "", // ✅ garante string para bater com AppointmentType
+      status: apt.status ?? "PENDING",
+      barberId: apt.barberId ?? "",
       barber: apt.barber
         ? {
             id: apt.barber.id,
             name: apt.barber.name,
             email: apt.barber.email,
-            phone: null,
+            phone: barberData?.phone ?? null,
             isActive: barberData?.isActive ?? true,
             role: "BARBER",
           }
