@@ -10,8 +10,13 @@ import z from "zod";
 const appointmentSchema = z.object({
   clientName: z.string(),
   phone: z.string(),
+  // espelho do nome do serviço (pra exibir)
   description: z.string(),
   scheduleAt: z.date(),
+
+  // ✅ novo: serviço é obrigatório
+  serviceId: z.string().min(1, "O serviço é obrigatório"),
+
   barberId: z.string().min(1, "O barbeiro é obrigatório"),
 });
 
@@ -118,6 +123,7 @@ async function withAppointmentMutation(
 ) {
   try {
     await operation();
+    // se quiser, depois podemos adicionar outros paths aqui
     revalidatePath("/");
   } catch (err) {
     console.log(err);
@@ -148,7 +154,7 @@ export async function createAppointment(data: AppointmentData) {
   return withAppointmentMutation(async () => {
     await prisma.appointment.create({
       data: {
-        ...parsed,
+        ...parsed, // inclui serviceId, description, etc.
         clientId,
       },
     });
@@ -175,7 +181,7 @@ export async function updateAppointment(id: string, data: AppointmentData) {
     await prisma.appointment.update({
       where: { id },
       // aqui não mudamos o clientId, só os campos do formulário
-      data: parsed,
+      data: parsed, // inclui serviceId, description, etc.
     });
   }, "Falha ao atualizar o agendamento");
 }

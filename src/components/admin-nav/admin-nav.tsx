@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Scissors } from "lucide-react";
+import { LayoutDashboard, Scissors, ListChecks } from "lucide-react";
 
 type AdminLink = {
   href: string;
@@ -13,7 +13,8 @@ type AdminLink = {
 
 const adminLinks: AdminLink[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/admin/barber", label: "Barbeiros", icon: Scissors },
+  { href: "/admin/barber", label: "Profissionais", icon: Scissors },
+  { href: "/admin/services", label: "Serviços", icon: ListChecks },
 ];
 
 export function AdminNav() {

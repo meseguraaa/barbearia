@@ -1,97 +1,103 @@
 import { prisma } from "@/lib/prisma";
 import { Metadata } from "next";
 import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogContent,
   DialogHeader,
+  DialogContent,
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { createBarber, toggleBarberStatus } from "./actions";
+import { Badge } from "@/components/ui/badge";
+
+import { createService, toggleServiceStatus } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Admin | Profissionais",
+  title: "Admin | Serviços",
 };
 
-export default async function BarbersPage() {
-  const barbers = await prisma.barber.findMany({
+export default async function ServicesPage() {
+  const services = await prisma.service.findMany({
     orderBy: { createdAt: "desc" },
   });
 
   return (
-    <div className="space-y-6 max-w-7xl ">
+    <div className="space-y-6 max-w-7xl">
+      {/* HEADER */}
       <header className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-title text-content-primary">Profissionais</h1>
+          <h1 className="text-title text-content-primary">Serviços</h1>
           <p className="text-paragraph-medium-size text-content-secondary">
-            Gerencie os Profissionais disponíveis para agendamento.
+            Gerencie os serviços disponíveis para agendamento.
           </p>
         </div>
 
-        <NewBarberDialog />
+        <NewServiceDialog />
       </header>
 
+      {/* TABELA */}
       <section className="overflow-x-auto rounded-xl border border-border-primary bg-background-tertiary">
         <table className="min-w-full text-sm">
           <tbody>
-            {barbers.length === 0 ? (
+            {services.length === 0 ? (
               <tr>
                 <td
                   colSpan={5}
                   className="px-4 py-6 text-center text-paragraph-small text-content-secondary"
                 >
-                  Nenhum barbeiro cadastrado ainda.
+                  Nenhum serviço cadastrado ainda.
                 </td>
               </tr>
             ) : (
-              barbers.map((barber) => (
-                <tr key={barber.id} className="border-t border-border-primary">
-                  <td className="px-4 py-3">{barber.name}</td>
-                  <td className="px-4 py-3">{barber.email}</td>
-                  <td className="px-4 py-3">{barber.phone ?? "-"}</td>
+              services.map((service) => (
+                <tr key={service.id} className="border-t border-border-primary">
+                  <td className="px-4 py-3">{service.name}</td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`px-3 py-1.5 text-xs font-medium rounded-full inline-block border ${
-                        barber.isActive
-                          ? "text-green-700 bg-green-100 border-green-300"
-                          : "text-red-700 bg-red-100 border-red-300"
-                      }`}
-                    >
-                      {barber.isActive ? "Ativo" : "Inativo"}
-                    </span>
+                    R$ {Number(service.price).toFixed(2)}
                   </td>
+                  <td className="px-4 py-3">{service.durationMinutes} min</td>
+
+                  <td className="px-4 py-3">
+                    <Badge
+                      variant={service.isActive ? "outline" : "destructive"}
+                    >
+                      {service.isActive ? "Ativo" : "Inativo"}
+                    </Badge>
+                  </td>
+
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-2">
-                      {/* Botão EDITAR */}
+                      {/* EDITAR (vamos implementar depois) */}
                       <Button
                         asChild
                         variant="edit2"
                         size="sm"
                         className="border-border-primary hover:bg-muted/40"
                       >
-                        <Link href={`/admin/barber/${barber.id}/edit`}>
+                        <Link href={`/admin/services/${service.id}/edit`}>
                           Editar
                         </Link>
                       </Button>
 
-                      <form action={toggleBarberStatus}>
+                      {/* ATIVAR / DESATIVAR */}
+                      <form action={toggleServiceStatus}>
                         <input
                           type="hidden"
-                          name="barberId"
-                          value={barber.id}
+                          name="serviceId"
+                          value={service.id}
                         />
                         <Button
-                          variant={barber.isActive ? "destructive" : "active"}
+                          variant={service.isActive ? "destructive" : "active"}
                           size="sm"
                           type="submit"
                           className="border-border-primary hover:bg-muted/40"
                         >
-                          {barber.isActive ? "Desativar" : "Ativar"}
+                          {service.isActive ? "Desativar" : "Ativar"}
                         </Button>
                       </form>
                     </div>
@@ -106,33 +112,34 @@ export default async function BarbersPage() {
   );
 }
 
-function NewBarberDialog() {
+function NewServiceDialog() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="brand">Novo profissional</Button>
+        <Button variant="brand">Novo serviço</Button>
       </DialogTrigger>
 
       <DialogContent className="bg-background-secondary border border-border-primary">
         <DialogHeader>
           <DialogTitle className="text-title text-content-primary">
-            Novo profissional
+            Novo serviço
           </DialogTitle>
         </DialogHeader>
 
         <form
           action={async (formData) => {
             "use server";
-            await createBarber(formData);
+            await createService(formData);
           }}
           className="space-y-4"
         >
+          {/* NOME */}
           <div className="space-y-1">
             <label
               className="text-label-small text-content-secondary"
               htmlFor="name"
             >
-              Nome
+              Nome do serviço
             </label>
             <Input
               id="name"
@@ -142,56 +149,44 @@ function NewBarberDialog() {
             />
           </div>
 
+          {/* VALOR */}
           <div className="space-y-1">
             <label
               className="text-label-small text-content-secondary"
-              htmlFor="email"
+              htmlFor="price"
             >
-              E-mail
+              Valor (R$)
             </label>
             <Input
-              id="email"
-              type="email"
-              name="email"
+              id="price"
+              name="price"
+              type="number"
+              step="0.01"
               required
               className="bg-background-tertiary border-border-primary text-content-primary"
             />
           </div>
 
+          {/* DURAÇÃO */}
           <div className="space-y-1">
             <label
               className="text-label-small text-content-secondary"
-              htmlFor="phone"
+              htmlFor="durationMinutes"
             >
-              Telefone (opcional)
+              Duração (minutos)
             </label>
             <Input
-              id="phone"
-              name="phone"
-              className="bg-background-tertiary border-border-primary text-content-primary"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label
-              className="text-label-small text-content-secondary"
-              htmlFor="password"
-            >
-              Senha para o barbeiro
-            </label>
-            <Input
-              id="password"
-              type="password"
-              name="password"
+              id="durationMinutes"
+              name="durationMinutes"
+              type="number"
               required
               className="bg-background-tertiary border-border-primary text-content-primary"
-              placeholder="Defina a senha de acesso do barbeiro"
             />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <Button type="submit" variant="brand">
-              Salvar
+              Criar
             </Button>
           </div>
         </form>

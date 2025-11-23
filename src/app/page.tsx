@@ -7,6 +7,7 @@ import { groupAppointmentByPeriod } from "@/utills/appoitment-utills";
 import { endOfDay, startOfDay } from "date-fns";
 import type { Appointment as AppointmentType } from "@/types/appointment";
 import type { Barber } from "@/types/barber";
+import type { Service } from "@/types/service";
 
 // força essa página a ser dinâmica (sem cache estático)
 export const dynamic = "force-dynamic";
@@ -60,6 +61,20 @@ export default async function Home({ searchParams }: HomeProps) {
     phone: barber.phone,
     isActive: barber.isActive,
     role: "BARBER",
+  }));
+
+  // 🔥 serviços ativos vindos do model Service
+  const servicesPrisma = await prisma.service.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+  });
+
+  const services: Service[] = servicesPrisma.map((service) => ({
+    id: service.id,
+    name: service.name,
+    price: Number(service.price),
+    durationMinutes: service.durationMinutes,
+    isActive: service.isActive,
   }));
 
   const appointments: AppointmentType[] = rawAppointments.map((apt) => {
@@ -124,7 +139,12 @@ export default async function Home({ searchParams }: HomeProps) {
 
       <div className="pb-24 md:pb-0">
         {periods.map((period, index) => (
-          <PeriodSection period={period} key={index} barbers={barbers} />
+          <PeriodSection
+            key={index}
+            period={period}
+            barbers={barbers}
+            services={services}
+          />
         ))}
       </div>
 
@@ -134,7 +154,11 @@ export default async function Home({ searchParams }: HomeProps) {
           bg-[#333333] py-[18px] px-6
         "
       >
-        <AppointmentForm appointments={appointments} barbers={barbers}>
+        <AppointmentForm
+          appointments={appointments}
+          barbers={barbers}
+          services={services}
+        >
           <Button variant="brand">Novo Agendamento</Button>
         </AppointmentForm>
       </div>

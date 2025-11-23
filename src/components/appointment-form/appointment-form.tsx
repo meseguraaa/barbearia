@@ -46,14 +46,12 @@ import { createAppointment, updateAppointment } from "@/app/actions";
 import { useEffect, useState } from "react";
 import { Appointment } from "@/types/appointment";
 import { Barber } from "@/types/barber";
-import {
-  SERVICE_OPTIONS,
-  getAvailableTimes,
-} from "@/components/appointment-form/constants-and-utils";
+import { getAvailableTimes } from "@/components/appointment-form/constants-and-utils";
 import {
   appointmentFormSchema,
   AppointFormValues,
 } from "@/components/appointment-form/schema";
+import { Service } from "@/types/service";
 
 type AppointmentFormProps = {
   appointment?: Appointment;
@@ -67,6 +65,10 @@ type AppointmentFormProps = {
    * Lista de barbeiros ativos
    */
   barbers: Barber[];
+  /**
+   * Lista de serviços ativos
+   */
+  services?: Service[];
 };
 
 export const AppointmentForm = ({
@@ -74,15 +76,20 @@ export const AppointmentForm = ({
   children,
   appointments = [],
   barbers,
+  services,
 }: AppointmentFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
+
+  // ✅ garante array estável dentro do componente
+  const servicesList = services ?? [];
 
   const form = useForm<AppointFormValues>({
     resolver: zodResolver(appointmentFormSchema),
     defaultValues: {
       clientName: "",
       phone: "",
-      description: undefined,
+      serviceId: "",
+      description: "",
       scheduleAt: undefined,
       time: "",
       barberId: "",
@@ -103,6 +110,7 @@ export const AppointmentForm = ({
       description: data.description,
       scheduleAt,
       barberId: data.barberId,
+      serviceId: data.serviceId,
     };
 
     const isEdit = !!appointment?.id;
@@ -121,7 +129,15 @@ export const AppointmentForm = ({
     );
 
     setIsOpen(false);
-    form.reset();
+    form.reset({
+      clientName: "",
+      phone: "",
+      serviceId: "",
+      description: "",
+      scheduleAt: undefined,
+      time: "",
+      barberId: "",
+    });
   };
 
   // Handler que transforma erros de validação em toast
@@ -140,11 +156,13 @@ export const AppointmentForm = ({
   });
 
   useEffect(() => {
+    // novo agendamento
     if (!appointment) {
       form.reset({
         clientName: "",
         phone: "",
-        description: undefined,
+        serviceId: "",
+        description: "",
         scheduleAt: undefined,
         time: "",
         barberId: "",
@@ -152,28 +170,40 @@ export const AppointmentForm = ({
       return;
     }
 
+    // edição
     const date = new Date(appointment.scheduleAt);
     const time = format(date, "HH:mm");
+
+    const matchedService = servicesList.find(
+      (service) => service.name === appointment.description,
+    );
 
     form.reset({
       clientName: appointment.clientName,
       phone: appointment.phone,
-      description: appointment.description as AppointFormValues["description"],
+      serviceId: matchedService?.id ?? "",
+      description: appointment.description ?? "",
       scheduleAt: date,
       time,
       barberId: appointment.barberId,
     });
-  }, [appointment, form]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appointment, servicesList.length]); // ✅ dependências estáveis
 
   // 🕒 Observa campos que mandam no fluxo
-  const selectedService = form.watch("description");
+  const selectedServiceId = form.watch("serviceId");
   const selectedDate = form.watch("scheduleAt");
   const selectedTime = form.watch("time");
-  const selectedBarberId = form.watch("barberId");
+
+  const selectedServiceData = servicesList.find(
+    (service) => service.id === selectedServiceId,
+  );
+
+  const selectedServiceName = selectedServiceData?.name ?? "";
 
   const availableTimes = getAvailableTimes({
     date: selectedDate,
-    service: selectedService,
+    service: selectedServiceName,
     appointments,
     currentAppointmentId: appointment?.id,
   });
@@ -252,7 +282,7 @@ export const AppointmentForm = ({
             {/* SERVIÇO (1º passo) */}
             <FormField
               control={form.control}
-              name="description"
+              name="serviceId"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-label-medium-size text-content-primary">
@@ -262,6 +292,14 @@ export const AppointmentForm = ({
                     <Select
                       onValueChange={(value) => {
                         field.onChange(value);
+
+                        const service = servicesList.find(
+                          (s) => s.id === value,
+                        );
+
+                        // espelha o nome do serviço na descrição
+                        form.setValue("description", service?.name ?? "");
+
                         // Mudou serviço → limpa data, hora e barbeiro
                         form.setValue("scheduleAt", undefined as any);
                         form.setValue("time", "");
@@ -276,14 +314,34 @@ export const AppointmentForm = ({
                         </div>
                       </SelectTrigger>
                       <SelectContent>
-                        {SERVICE_OPTIONS.map((service) => (
-                          <SelectItem key={service} value={service}>
-                            {service}
+                        {servicesList.length === 0 ? (
+                          <SelectItem disabled value="no-services">
+                            Nenhum serviço disponível
                           </SelectItem>
-                        ))}
+                        ) : (
+                          servicesList.map((service) => (
+                            <SelectItem key={service.id} value={service.id}>
+                              {service.name}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                   </FormControl>
+
+                  {/* Info do serviço selecionado: valor e duração */}
+                  {selectedServiceData && (
+                    <div className="mt-2 text-paragraph-small-size text-content-secondary">
+                      Valor:{" "}
+                      <span className="font-semibold">
+                        R$ {selectedServiceData.price.toFixed(2)}
+                      </span>{" "}
+                      • Duração:{" "}
+                      <span className="font-semibold">
+                        {selectedServiceData.durationMinutes} minutos
+                      </span>
+                    </div>
+                  )}
                 </FormItem>
               )}
             />
@@ -304,7 +362,7 @@ export const AppointmentForm = ({
                         <FormControl>
                           <Button
                             variant="outline"
-                            disabled={!selectedService}
+                            disabled={!selectedServiceId}
                             className={cn(
                               "w-full justify-between text-left font-normal bg-background-tertiary border-border-primary text-content-primary hover:bg-background-tertiary hover:border-border-secondary hover:text-content-primary focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand focus:border-border-brand focus-visible:border-border-brand disabled:opacity-60 disabled:cursor-not-allowed",
                               !field.value && "text-content-secondary",
@@ -319,7 +377,7 @@ export const AppointmentForm = ({
                                 format(field.value, "dd/MM/yyyy")
                               ) : (
                                 <span>
-                                  {!selectedService
+                                  {!selectedServiceId
                                     ? "Selecione um serviço"
                                     : "Selecione uma data"}
                                 </span>
@@ -340,7 +398,7 @@ export const AppointmentForm = ({
                             form.setValue("barberId", "");
                           }}
                           disabled={(date) =>
-                            !selectedService || date < startOfToday()
+                            !selectedServiceId || date < startOfToday()
                           }
                         />
                       </PopoverContent>
@@ -366,7 +424,7 @@ export const AppointmentForm = ({
                           form.setValue("barberId", "");
                         }}
                         value={field.value}
-                        disabled={!selectedService || !selectedDate}
+                        disabled={!selectedServiceId || !selectedDate}
                       >
                         <SelectTrigger
                           className="
@@ -381,7 +439,7 @@ export const AppointmentForm = ({
                             <Clock className="h-4 w-4 text-content-brand" />
                             <SelectValue
                               placeholder={
-                                !selectedService
+                                !selectedServiceId
                                   ? "Selecione um serviço"
                                   : !selectedDate
                                     ? "Selecione uma data"
@@ -392,7 +450,7 @@ export const AppointmentForm = ({
                         </SelectTrigger>
 
                         <SelectContent>
-                          {!selectedService || !selectedDate ? (
+                          {!selectedServiceId || !selectedDate ? (
                             <SelectItem disabled value="no-selection">
                               Selecione o serviço e a data
                             </SelectItem>
@@ -429,7 +487,7 @@ export const AppointmentForm = ({
                       onValueChange={field.onChange}
                       value={field.value}
                       disabled={
-                        !selectedService || !selectedDate || !selectedTime
+                        !selectedServiceId || !selectedDate || !selectedTime
                       }
                     >
                       <SelectTrigger
@@ -445,7 +503,7 @@ export const AppointmentForm = ({
                           <UserCircle className="h-4 w-4 text-content-brand" />
                           <SelectValue
                             placeholder={
-                              !selectedService
+                              !selectedServiceId
                                 ? "Selecione um serviço"
                                 : !selectedDate || !selectedTime
                                   ? "Selecione data e horário"
@@ -456,7 +514,9 @@ export const AppointmentForm = ({
                       </SelectTrigger>
 
                       <SelectContent>
-                        {!selectedService || !selectedDate || !selectedTime ? (
+                        {!selectedServiceId ||
+                        !selectedDate ||
+                        !selectedTime ? (
                           <SelectItem disabled value="no-selection">
                             Selecione o serviço, data e horário
                           </SelectItem>

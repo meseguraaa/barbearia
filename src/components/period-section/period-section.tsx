@@ -2,10 +2,12 @@ import { AppointmentPeriod, Appointment } from "@/types/appointment";
 import { Cloudy, Moon, Sun } from "lucide-react";
 import { AppointmentCard } from "../appoitment-card";
 import { Barber } from "@/types/barber";
+import { Service } from "@/types/service";
 
 type PeriodSectionProps = {
   period: AppointmentPeriod;
   barbers: Barber[];
+  services: Service[];
 };
 
 const periodIcons = {
@@ -14,7 +16,11 @@ const periodIcons = {
   evening: <Moon className="text-accent-yellow" />,
 };
 
-export const PeriodSection = ({ period, barbers }: PeriodSectionProps) => {
+export const PeriodSection = ({
+  period,
+  barbers,
+  services,
+}: PeriodSectionProps) => {
   return (
     <section className="mb-8 bg-background-tertiary rounded-xl">
       <div className="flex items-center px-5 py-3 justify-between border-b border-[#2E2C30]">
@@ -40,6 +46,7 @@ export const PeriodSection = ({ period, barbers }: PeriodSectionProps) => {
                   appointments={period.appointments}
                   isFirstInSection={index === 0}
                   barbers={barbers}
+                  services={services}
                 />
               ),
             )}
