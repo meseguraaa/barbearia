@@ -25,6 +25,7 @@ import { deleteAppointment } from "@/app/actions";
 import { toast } from "sonner";
 import { formatTimeSaoPaulo } from "@/utills/datetime";
 import { Barber } from "@/types/barber";
+import { Service } from "@/types/service";
 
 type AppointmentCardProps = {
   appointment: Appointment;
@@ -38,6 +39,10 @@ type AppointmentCardProps = {
    * Lista de barbeiros ativos (para o select de edição)
    */
   barbers: Barber[];
+  /**
+   * Lista de serviços ativos (para o select de edição)
+   */
+  services: Service[];
 };
 
 export const AppointmentCard = ({
@@ -45,6 +50,7 @@ export const AppointmentCard = ({
   isFirstInSection = false,
   appointments = [],
   barbers,
+  services,
 }: AppointmentCardProps) => {
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -99,6 +105,7 @@ export const AppointmentCard = ({
           appointment={appointment}
           appointments={appointments}
           barbers={barbers}
+          services={services}
         >
           <Button variant="edit" size="icon">
             <EditIcon size={16} />

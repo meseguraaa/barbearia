@@ -10,9 +10,27 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         async: false,
       },
     },
-    "(app-pages-browser)/./src/app/painel/login/login.tsx": {
+    "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx":
+      {
+        "*": {
+          id: "(ssr)/./src/components/appointment-form/appointment-form.tsx",
+          name: "*",
+          chunks: [],
+          async: false,
+        },
+      },
+    "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx":
+      {
+        "*": {
+          id: "(ssr)/./src/components/appoitment-card/appoitment-card.tsx",
+          name: "*",
+          chunks: [],
+          async: false,
+        },
+      },
+    "(app-pages-browser)/./src/components/date-picker/date-picker.tsx": {
       "*": {
-        id: "(ssr)/./src/app/painel/login/login.tsx",
+        id: "(ssr)/./src/components/date-picker/date-picker.tsx",
         name: "*",
         chunks: [],
         async: false,
@@ -99,32 +117,6 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
           async: false,
         },
       },
-    "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx":
-      {
-        "*": {
-          id: "(ssr)/./src/components/appointment-form/appointment-form.tsx",
-          name: "*",
-          chunks: [],
-          async: false,
-        },
-      },
-    "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx":
-      {
-        "*": {
-          id: "(ssr)/./src/components/appoitment-card/appoitment-card.tsx",
-          name: "*",
-          chunks: [],
-          async: false,
-        },
-      },
-    "(app-pages-browser)/./src/components/date-picker/date-picker.tsx": {
-      "*": {
-        id: "(ssr)/./src/components/date-picker/date-picker.tsx",
-        name: "*",
-        chunks: [],
-        async: false,
-      },
-    },
     "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx": {
       "*": {
         id: "(ssr)/./src/components/admin-nav/admin-nav.tsx",
@@ -153,6 +145,14 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
     "(app-pages-browser)/./src/components/ui/dialog.tsx": {
       "*": {
         id: "(ssr)/./src/components/ui/dialog.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
+    "(app-pages-browser)/./src/app/painel/login/login.tsx": {
+      "*": {
+        id: "(ssr)/./src/app/painel/login/login.tsx",
         name: "*",
         chunks: [],
         async: false,
@@ -189,11 +189,25 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         chunks: ["app/layout", "static/chunks/app/layout.js"],
         async: false,
       },
-    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/painel/login/login.tsx":
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx":
       {
-        id: "(app-pages-browser)/./src/app/painel/login/login.tsx",
+        id: "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx",
         name: "*",
-        chunks: [],
+        chunks: ["app/page", "static/chunks/app/page.js"],
+        async: false,
+      },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appoitment-card/appoitment-card.tsx":
+      {
+        id: "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx",
+        name: "*",
+        chunks: ["app/page", "static/chunks/app/page.js"],
+        async: false,
+      },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/date-picker/date-picker.tsx":
+      {
+        id: "(app-pages-browser)/./src/components/date-picker/date-picker.tsx",
+        name: "*",
+        chunks: ["app/page", "static/chunks/app/page.js"],
         async: false,
       },
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/node_modules/next/dist/client/components/builtin/global-error.js":
@@ -322,27 +336,6 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         chunks: ["app-pages-internals", "static/chunks/app-pages-internals.js"],
         async: false,
       },
-    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appointment-form/appointment-form.tsx":
-      {
-        id: "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx",
-        name: "*",
-        chunks: ["app/page", "static/chunks/app/page.js"],
-        async: false,
-      },
-    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/appoitment-card/appoitment-card.tsx":
-      {
-        id: "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx",
-        name: "*",
-        chunks: ["app/page", "static/chunks/app/page.js"],
-        async: false,
-      },
-    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/date-picker/date-picker.tsx":
-      {
-        id: "(app-pages-browser)/./src/components/date-picker/date-picker.tsx",
-        name: "*",
-        chunks: ["app/page", "static/chunks/app/page.js"],
-        async: false,
-      },
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/components/admin-nav/admin-nav.tsx":
       {
         id: "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx",
@@ -387,6 +380,13 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         ],
         async: false,
       },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/painel/login/login.tsx":
+      {
+        id: "(app-pages-browser)/./src/app/painel/login/login.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
   },
   entryCSSFiles: {
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/": [],
@@ -416,9 +416,27 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
         async: false,
       },
     },
-    "(app-pages-browser)/./src/app/painel/login/login.tsx": {
+    "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx":
+      {
+        "*": {
+          id: "(rsc)/./src/components/appointment-form/appointment-form.tsx",
+          name: "*",
+          chunks: [],
+          async: false,
+        },
+      },
+    "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx":
+      {
+        "*": {
+          id: "(rsc)/./src/components/appoitment-card/appoitment-card.tsx",
+          name: "*",
+          chunks: [],
+          async: false,
+        },
+      },
+    "(app-pages-browser)/./src/components/date-picker/date-picker.tsx": {
       "*": {
-        id: "(rsc)/./src/app/painel/login/login.tsx",
+        id: "(rsc)/./src/components/date-picker/date-picker.tsx",
         name: "*",
         chunks: [],
         async: false,
@@ -505,32 +523,6 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
           async: false,
         },
       },
-    "(app-pages-browser)/./src/components/appointment-form/appointment-form.tsx":
-      {
-        "*": {
-          id: "(rsc)/./src/components/appointment-form/appointment-form.tsx",
-          name: "*",
-          chunks: [],
-          async: false,
-        },
-      },
-    "(app-pages-browser)/./src/components/appoitment-card/appoitment-card.tsx":
-      {
-        "*": {
-          id: "(rsc)/./src/components/appoitment-card/appoitment-card.tsx",
-          name: "*",
-          chunks: [],
-          async: false,
-        },
-      },
-    "(app-pages-browser)/./src/components/date-picker/date-picker.tsx": {
-      "*": {
-        id: "(rsc)/./src/components/date-picker/date-picker.tsx",
-        name: "*",
-        chunks: [],
-        async: false,
-      },
-    },
     "(app-pages-browser)/./src/components/admin-nav/admin-nav.tsx": {
       "*": {
         id: "(rsc)/./src/components/admin-nav/admin-nav.tsx",
@@ -559,6 +551,14 @@ globalThis.__RSC_MANIFEST["/admin/barber/page"] = {
     "(app-pages-browser)/./src/components/ui/dialog.tsx": {
       "*": {
         id: "(rsc)/./src/components/ui/dialog.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
+    "(app-pages-browser)/./src/app/painel/login/login.tsx": {
+      "*": {
+        id: "(rsc)/./src/app/painel/login/login.tsx",
         name: "*",
         chunks: [],
         async: false,

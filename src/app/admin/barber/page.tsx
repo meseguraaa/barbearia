@@ -15,7 +15,7 @@ import { createBarber, toggleBarberStatus } from "./actions";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Admin | Barbeiros",
+  title: "Admin | Profissionais",
 };
 
 export default async function BarbersPage() {
@@ -27,9 +27,9 @@ export default async function BarbersPage() {
     <div className="space-y-6 max-w-7xl ">
       <header className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-title text-content-primary">Barbeiros</h1>
+          <h1 className="text-title text-content-primary">Profissionais</h1>
           <p className="text-paragraph-medium-size text-content-secondary">
-            Gerencie os barbeiros disponíveis para agendamento.
+            Gerencie os Profissionais disponíveis para agendamento.
           </p>
         </div>
 
@@ -110,13 +110,13 @@ function NewBarberDialog() {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button variant="brand">Novo barbeiro</Button>
+        <Button variant="brand">Novo profissional</Button>
       </DialogTrigger>
 
       <DialogContent className="bg-background-secondary border border-border-primary">
         <DialogHeader>
           <DialogTitle className="text-title text-content-primary">
-            Novo barbeiro
+            Novo profissional
           </DialogTitle>
         </DialogHeader>
 

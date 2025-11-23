@@ -353,19 +353,14 @@
     --color-red-500: oklch(63.7% 0.237 25.331);
     --color-red-600: oklch(57.7% 0.245 27.325);
     --color-red-700: oklch(50.5% 0.213 27.518);
-    --color-red-800: oklch(44.4% 0.177 26.899);
     --color-amber-50: oklch(98.7% 0.022 95.277);
     --color-yellow-100: oklch(97.3% 0.071 103.193);
     --color-yellow-300: oklch(90.5% 0.182 98.111);
     --color-yellow-700: oklch(55.4% 0.135 66.442);
-    --color-yellow-800: oklch(47.6% 0.114 61.907);
     --color-green-100: oklch(96.2% 0.044 156.743);
     --color-green-300: oklch(87.1% 0.15 154.449);
     --color-green-600: oklch(62.7% 0.194 149.214);
     --color-green-700: oklch(52.7% 0.154 150.069);
-    --color-green-800: oklch(44.8% 0.119 151.328);
-    --color-emerald-300: oklch(84.5% 0.143 164.978);
-    --color-emerald-500: oklch(69.6% 0.17 162.48);
     --color-blue-500: oklch(62.3% 0.214 259.815);
     --color-blue-600: oklch(54.6% 0.245 262.881);
     --color-gray-500: oklch(55.1% 0.027 264.364);
@@ -392,7 +387,6 @@
     --font-weight-medium: 500;
     --font-weight-semibold: 600;
     --font-weight-bold: 700;
-    --font-weight-black: 900;
     --tracking-tight: -0.025em;
     --radius-xs: 0.125rem;
     --radius-sm: 0.25rem;
@@ -1218,9 +1212,6 @@
   .border-\[\#2E2C30\] {
     border-color: #2e2c30;
   }
-  .border-accent-yellow {
-    border-color: var(--color-accent-yellow);
-  }
   .border-blue-500\/50 {
     border-color: color-mix(
       in srgb,
@@ -1237,31 +1228,11 @@
   .border-border-primary {
     border-color: var(--color-border-primary);
   }
-  .border-emerald-500\/40 {
-    border-color: color-mix(in srgb, oklch(69.6% 0.17 162.48) 40%, transparent);
-    @supports (color: color-mix(in lab, red, red)) {
-      border-color: color-mix(
-        in oklab,
-        var(--color-emerald-500) 40%,
-        transparent
-      );
-    }
-  }
   .border-green-300 {
     border-color: var(--color-green-300);
   }
   .border-red-300 {
     border-color: var(--color-red-300);
-  }
-  .border-red-500\/40 {
-    border-color: color-mix(
-      in srgb,
-      oklch(63.7% 0.237 25.331) 40%,
-      transparent
-    );
-    @supports (color: color-mix(in lab, red, red)) {
-      border-color: color-mix(in oklab, var(--color-red-500) 40%, transparent);
-    }
   }
   .border-red-500\/50 {
     border-color: color-mix(
@@ -1285,16 +1256,6 @@
   .bg-accent-primary {
     background-color: var(--color-accent-primary);
   }
-  .bg-accent-yellow\/15 {
-    background-color: color-mix(in srgb, #f0dc02 15%, transparent);
-    @supports (color: color-mix(in lab, red, red)) {
-      background-color: color-mix(
-        in oklab,
-        var(--color-accent-yellow) 15%,
-        transparent
-      );
-    }
-  }
   .bg-background-brand {
     background-color: var(--color-background-brand);
   }
@@ -1306,16 +1267,6 @@
   }
   .bg-background-tertiary {
     background-color: var(--color-background-tertiary);
-  }
-  .bg-background-tertiary\/50 {
-    background-color: color-mix(in srgb, #23242c 50%, transparent);
-    @supports (color: color-mix(in lab, red, red)) {
-      background-color: color-mix(
-        in oklab,
-        var(--color-background-tertiary) 50%,
-        transparent
-      );
-    }
   }
   .bg-black\/30 {
     background-color: color-mix(in srgb, #000 30%, transparent);
@@ -1357,20 +1308,6 @@
       );
     }
   }
-  .bg-emerald-500\/15 {
-    background-color: color-mix(
-      in srgb,
-      oklch(69.6% 0.17 162.48) 15%,
-      transparent
-    );
-    @supports (color: color-mix(in lab, red, red)) {
-      background-color: color-mix(
-        in oklab,
-        var(--color-emerald-500) 15%,
-        transparent
-      );
-    }
-  }
   .bg-green-100 {
     background-color: var(--color-green-100);
   }
@@ -1379,20 +1316,6 @@
   }
   .bg-red-100 {
     background-color: var(--color-red-100);
-  }
-  .bg-red-500\/15 {
-    background-color: color-mix(
-      in srgb,
-      oklch(63.7% 0.237 25.331) 15%,
-      transparent
-    );
-    @supports (color: color-mix(in lab, red, red)) {
-      background-color: color-mix(
-        in oklab,
-        var(--color-red-500) 15%,
-        transparent
-      );
-    }
   }
   .bg-red-600 {
     background-color: var(--color-red-600);
@@ -1462,9 +1385,6 @@
   }
   .py-4 {
     padding-block: calc(var(--spacing) * 4);
-  }
-  .py-5 {
-    padding-block: calc(var(--spacing) * 5);
   }
   .py-6 {
     padding-block: calc(var(--spacing) * 6);
@@ -1541,9 +1461,6 @@
   .text-\[0\.8rem\] {
     font-size: 0.8rem;
   }
-  .text-label-large-line-height {
-    font-size: var(--text-label-large-line-height);
-  }
   .text-label-large-size {
     font-size: var(--text-label-large-size);
   }
@@ -1565,10 +1482,6 @@
   .leading-none {
     --tw-leading: 1;
     line-height: 1;
-  }
-  .font-black {
-    --tw-font-weight: var(--font-weight-black);
-    font-weight: var(--font-weight-black);
   }
   .font-bold {
     --tw-font-weight: var(--font-weight-bold);
@@ -1636,20 +1549,11 @@
       );
     }
   }
-  .text-emerald-300 {
-    color: var(--color-emerald-300);
-  }
   .text-gray-500 {
     color: var(--color-gray-500);
   }
   .text-green-700 {
     color: var(--color-green-700);
-  }
-  .text-green-800 {
-    color: var(--color-green-800);
-  }
-  .text-red-300 {
-    color: var(--color-red-300);
   }
   .text-red-500 {
     color: var(--color-red-500);
@@ -1657,17 +1561,11 @@
   .text-red-700 {
     color: var(--color-red-700);
   }
-  .text-red-800 {
-    color: var(--color-red-800);
-  }
   .text-white {
     color: var(--color-white);
   }
   .text-yellow-700 {
     color: var(--color-yellow-700);
-  }
-  .text-yellow-800 {
-    color: var(--color-yellow-800);
   }
   .lowercase {
     text-transform: lowercase;
@@ -2469,16 +2367,6 @@
   .md\:grid-cols-2 {
     @media (width >= 48rem) {
       grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-  .md\:grid-cols-4 {
-    @media (width >= 48rem) {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-    }
-  }
-  .md\:grid-cols-5 {
-    @media (width >= 48rem) {
-      grid-template-columns: repeat(5, minmax(0, 1fr));
     }
   }
   .md\:grid-cols-6 {

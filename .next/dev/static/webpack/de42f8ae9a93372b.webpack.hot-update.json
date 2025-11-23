@@ -1,0 +1,5 @@
+{
+  "c": ["app/layout", "app/page", "app/admin/dashboard/page", "webpack"],
+  "r": [],
+  "m": []
+}
