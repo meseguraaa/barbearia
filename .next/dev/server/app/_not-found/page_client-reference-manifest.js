@@ -150,6 +150,14 @@ globalThis.__RSC_MANIFEST["/_not-found/page"] = {
         async: false,
       },
     },
+    "(app-pages-browser)/./src/app/painel/login/login.tsx": {
+      "*": {
+        id: "(ssr)/./src/app/painel/login/login.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
   },
   edgeSSRModuleMapping: {},
   clientModules: {
@@ -363,6 +371,13 @@ globalThis.__RSC_MANIFEST["/_not-found/page"] = {
         chunks: [],
         async: false,
       },
+    "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/app/painel/login/login.tsx":
+      {
+        id: "(app-pages-browser)/./src/app/painel/login/login.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
   },
   entryCSSFiles: {
     "/Users/brunoleal/Documents/Cursos/NEXTJS/barbearia/src/": [],
@@ -525,6 +540,14 @@ globalThis.__RSC_MANIFEST["/_not-found/page"] = {
     "(app-pages-browser)/./src/components/ui/dialog.tsx": {
       "*": {
         id: "(rsc)/./src/components/ui/dialog.tsx",
+        name: "*",
+        chunks: [],
+        async: false,
+      },
+    },
+    "(app-pages-browser)/./src/app/painel/login/login.tsx": {
+      "*": {
+        id: "(rsc)/./src/app/painel/login/login.tsx",
         name: "*",
         chunks: [],
         async: false,

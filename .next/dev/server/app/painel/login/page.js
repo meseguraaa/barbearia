@@ -681,10 +681,10 @@
     [
       "vendor-chunks/next",
       "vendor-chunks/@swc",
-      "vendor-chunks/@radix-ui",
-      "vendor-chunks/tailwind-merge",
       "vendor-chunks/sonner",
       "vendor-chunks/lucide-react",
+      "vendor-chunks/@radix-ui",
+      "vendor-chunks/tailwind-merge",
       "vendor-chunks/class-variance-authority",
       "vendor-chunks/clsx",
       "vendor-chunks/jose",
