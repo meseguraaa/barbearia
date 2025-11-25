@@ -46,7 +46,7 @@ import {
   createAppointment,
   updateAppointment,
 } from "@/app/admin/dashboard/actions";
-import { useEffect, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { Appointment } from "@/types/appointment";
 import { Barber } from "@/types/barber";
 import { getAvailableTimes } from "@/components/appointment-form/constants-and-utils";
@@ -71,6 +71,12 @@ type AppointmentFormProps = {
    * Lista de serviços ativos
    */
   services?: Service[];
+  /**
+   * Children para usos onde o componente é chamado como:
+   * <AppointmentForm>...</AppointmentForm>
+   * (não é obrigatório usar)
+   */
+  children?: ReactNode;
 };
 
 export const AppointmentForm = ({
