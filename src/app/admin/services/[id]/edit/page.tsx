@@ -40,6 +40,18 @@ export default async function EditServicePage({
       ? String((service as any).barberPercentage)
       : "";
 
+  const cancelLimitHoursDefault =
+    (service as any).cancelLimitHours !== undefined &&
+    (service as any).cancelLimitHours !== null
+      ? String((service as any).cancelLimitHours)
+      : "";
+
+  const cancelFeePercentageDefault =
+    (service as any).cancelFeePercentage !== undefined &&
+    (service as any).cancelFeePercentage !== null
+      ? String((service as any).cancelFeePercentage)
+      : "";
+
   // server action local para o submit
   async function handleSubmit(formData: FormData) {
     "use server";
@@ -137,6 +149,46 @@ export default async function EditServicePage({
               min={0}
               max={100}
               defaultValue={barberPercentageDefault}
+              className="bg-background-secondary border-border-primary text-content-primary"
+              placeholder="Ex: 50"
+            />
+          </div>
+
+          {/* LIMITE DE CANCELAMENTO */}
+          <div className="space-y-1">
+            <label
+              className="text-label-small text-content-secondary"
+              htmlFor="cancelLimitHours"
+            >
+              Limite para cobrança de taxa (horas antes do horário)
+            </label>
+            <Input
+              id="cancelLimitHours"
+              name="cancelLimitHours"
+              type="number"
+              min={0}
+              defaultValue={cancelLimitHoursDefault}
+              className="bg-background-secondary border-border-primary text-content-primary"
+              placeholder="Ex: 2 (até 2h antes)"
+            />
+          </div>
+
+          {/* TAXA DE CANCELAMENTO */}
+          <div className="space-y-1">
+            <label
+              className="text-label-small text-content-secondary"
+              htmlFor="cancelFeePercentage"
+            >
+              Taxa de cancelamento (%)
+            </label>
+            <Input
+              id="cancelFeePercentage"
+              name="cancelFeePercentage"
+              type="number"
+              step="0.01"
+              min={0}
+              max={100}
+              defaultValue={cancelFeePercentageDefault}
               className="bg-background-secondary border-border-primary text-content-primary"
               placeholder="Ex: 50"
             />

@@ -49,7 +49,7 @@ export default async function ServicesPage() {
             {services.length === 0 ? (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={8}
                   className="px-4 py-6 text-center text-paragraph-small text-content-secondary"
                 >
                   Nenhum serviço cadastrado ainda.
@@ -66,6 +66,22 @@ export default async function ServicesPage() {
                     ? Number(rawBarberPercentage)
                     : null;
 
+                const rawCancelLimitHours = (service as any)
+                  .cancelLimitHours as number | null | undefined;
+                const cancelLimitHours =
+                  rawCancelLimitHours !== undefined &&
+                  rawCancelLimitHours !== null
+                    ? Number(rawCancelLimitHours)
+                    : null;
+
+                const rawCancelFeePercentage = (service as any)
+                  .cancelFeePercentage as number | null | undefined;
+                const cancelFeePercentage =
+                  rawCancelFeePercentage !== undefined &&
+                  rawCancelFeePercentage !== null
+                    ? Number(rawCancelFeePercentage)
+                    : null;
+
                 return (
                   <tr
                     key={service.id}
@@ -80,6 +96,20 @@ export default async function ServicesPage() {
                     {/* PORCENTAGEM DO BARBEIRO */}
                     <td className="px-4 py-3">
                       {barberPercentage !== null ? `${barberPercentage}%` : "-"}
+                    </td>
+
+                    {/* LIMITE DE CANCELAMENTO */}
+                    <td className="px-4 py-3">
+                      {cancelLimitHours !== null
+                        ? `Até ${cancelLimitHours}h antes`
+                        : "—"}
+                    </td>
+
+                    {/* TAXA DE CANCELAMENTO */}
+                    <td className="px-4 py-3">
+                      {cancelFeePercentage !== null
+                        ? `${cancelFeePercentage}%`
+                        : "—"}
                     </td>
 
                     <td className="px-4 py-3">
@@ -218,6 +248,44 @@ function NewServiceDialog() {
             />
           </div>
 
+          {/* LIMITE DE CANCELAMENTO */}
+          <div className="space-y-1">
+            <label
+              className="text-label-small text-content-secondary"
+              htmlFor="cancelLimitHours"
+            >
+              Limite para cobrança de taxa (horas antes do horário)
+            </label>
+            <Input
+              id="cancelLimitHours"
+              name="cancelLimitHours"
+              type="number"
+              min={0}
+              placeholder="Ex: 2 (até 2h antes)"
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
+          {/* TAXA DE CANCELAMENTO */}
+          <div className="space-y-1">
+            <label
+              className="text-label-small text-content-secondary"
+              htmlFor="cancelFeePercentage"
+            >
+              Taxa de cancelamento (%)
+            </label>
+            <Input
+              id="cancelFeePercentage"
+              name="cancelFeePercentage"
+              type="number"
+              step="0.01"
+              min={0}
+              max={100}
+              placeholder="Ex: 50"
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
           <div className="flex justify-end gap-2 pt-2">
             <Button type="submit" variant="brand">
               Criar
@@ -240,6 +308,26 @@ function EditServiceDialog({ service }: { service: Service }) {
   const barberPercentageDefault =
     rawBarberPercentage !== undefined && rawBarberPercentage !== null
       ? String(Number(rawBarberPercentage))
+      : "";
+
+  const rawCancelLimitHours = (service as any).cancelLimitHours as
+    | number
+    | null
+    | undefined;
+
+  const cancelLimitHoursDefault =
+    rawCancelLimitHours !== undefined && rawCancelLimitHours !== null
+      ? String(Number(rawCancelLimitHours))
+      : "";
+
+  const rawCancelFeePercentage = (service as any).cancelFeePercentage as
+    | number
+    | null
+    | undefined;
+
+  const cancelFeePercentageDefault =
+    rawCancelFeePercentage !== undefined && rawCancelFeePercentage !== null
+      ? String(Number(rawCancelFeePercentage))
       : "";
 
   return (
@@ -324,6 +412,38 @@ function EditServiceDialog({ service }: { service: Service }) {
               min={0}
               max={100}
               defaultValue={barberPercentageDefault}
+              placeholder="Ex: 50"
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
+          {/* LIMITE DE CANCELAMENTO */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              Limite para cobrança de taxa (horas antes do horário)
+            </label>
+            <Input
+              name="cancelLimitHours"
+              type="number"
+              min={0}
+              defaultValue={cancelLimitHoursDefault}
+              placeholder="Ex: 2 (até 2h antes)"
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
+          {/* TAXA DE CANCELAMENTO */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              Taxa de cancelamento (%)
+            </label>
+            <Input
+              name="cancelFeePercentage"
+              type="number"
+              step="0.01"
+              min={0}
+              max={100}
+              defaultValue={cancelFeePercentageDefault}
               placeholder="Ex: 50"
               className="bg-background-tertiary border-border-primary text-content-primary"
             />

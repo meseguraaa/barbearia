@@ -1,3 +1,4 @@
+// app/barber/dashboard/page.tsx
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -203,6 +204,7 @@ export default async function BarberDashboardPage({
       select: {
         id: true,
         status: true,
+        cancelFeeApplied: true,
       },
     }),
     getServices(),
@@ -211,6 +213,21 @@ export default async function BarberDashboardPage({
   // lista que o AppointmentForm usa (igual admin)
   const appointmentsForForm: AppointmentType[] =
     appointments.map(mapToAppointmentType);
+
+  // LOG GERAL
+  console.log("BARBER DASHBOARD ▶ appointments length:", appointments.length);
+  console.log(
+    "BARBER DASHBOARD ▶ appointments IDs + status:",
+    appointments.map((a) => ({
+      id: a.id,
+      status: a.status,
+      barberId: a.barberId,
+    })),
+  );
+  console.log(
+    "BARBER DASHBOARD ▶ appointmentsForForm IDs:",
+    appointmentsForForm.map((a) => a.id),
+  );
 
   // barbers para o form (aqui só o barbeiro logado)
   const barbersForForm: BarberType[] = [
@@ -240,6 +257,17 @@ export default async function BarberDashboardPage({
     (appt) => appt.status === "CANCELED",
   ).length;
 
+  // cancelamentos com taxa (dia / mês)
+  const canceledWithFeeDay = appointments.filter(
+    (appt) => appt.status === "CANCELED" && appt.cancelFeeApplied,
+  );
+  const totalCanceledWithFeeDay = canceledWithFeeDay.length;
+
+  const canceledWithFeeMonth = monthAppointments.filter(
+    (appt) => appt.status === "CANCELED" && appt.cancelFeeApplied,
+  );
+  const totalCanceledWithFeeMonth = canceledWithFeeMonth.length;
+
   return (
     <div className="space-y-6">
       {/* HEADER */}
@@ -254,7 +282,7 @@ export default async function BarberDashboardPage({
       </header>
 
       {/* RESUMO DIÁRIO / MENSAL */}
-      <section className="grid gap-4 md:grid-cols-2">
+      <section className="grid gap-4 md:grid-cols-3">
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-2">
           <p className="text-label-small text-content-secondary">
             Atendimentos concluídos
@@ -278,6 +306,20 @@ export default async function BarberDashboardPage({
             Mês: <span className="font-semibold">{totalCanceledMonth}</span>
           </p>
         </div>
+
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-2">
+          <p className="text-label-small text-content-secondary">
+            Cancelamentos com taxa
+          </p>
+          <p className="text-paragraph-medium text-content-primary">
+            Dia:{" "}
+            <span className="font-semibold">{totalCanceledWithFeeDay}</span>
+          </p>
+          <p className="text-paragraph-medium text-content-primary">
+            Mês:{" "}
+            <span className="font-semibold">{totalCanceledWithFeeMonth}</span>
+          </p>
+        </div>
       </section>
 
       {/* LISTA DE AGENDAMENTOS */}
@@ -287,7 +329,7 @@ export default async function BarberDashboardPage({
         </p>
       ) : (
         <section className="space-y-3">
-          {appointments.map((appt) => {
+          {appointments.map((appt, index) => {
             const timeStr = appt.scheduleAt.toLocaleTimeString("pt-BR", {
               hour: "2-digit",
               minute: "2-digit",
@@ -306,69 +348,151 @@ export default async function BarberDashboardPage({
 
             const apptForForm = appointmentsForForm.find(
               (a) => a.id === appt.id,
-            )!;
+            );
+
+            const safeApptForForm = apptForForm ?? {
+              id: appt.id,
+              clientName: appt.clientName,
+              phone: appt.phone,
+              description: appt.description,
+              scheduleAt: appt.scheduleAt,
+              status: normalizedStatus,
+              barberId: appt.barberId ?? "",
+              barber: appt.barber
+                ? {
+                    id: appt.barber.id,
+                    name: appt.barber.name,
+                    email: appt.barber.email,
+                    phone: appt.barber.phone,
+                    isActive: appt.barber.isActive,
+                    role: "BARBER" as const,
+                  }
+                : undefined,
+              serviceId: appt.serviceId ?? undefined,
+            };
+
+            // 🔍 LOG POR LINHA
+            console.log("BARBER DASHBOARD ▶ ROW", {
+              index,
+              apptId: appt.id,
+              statusRaw: appt.status,
+              normalizedStatus,
+              isPending,
+              hasApptForForm: !!apptForForm,
+            });
+
+            // MINI LOG (mesma regra do admin)
+            let actionLog = "—";
+
+            if (appt.status === "DONE") {
+              if (appt.concludedByRole === "ADMIN") {
+                actionLog = "Concluído pelo ADMIN";
+              } else if (appt.concludedByRole === "BARBER") {
+                actionLog = "Concluído pelo Barbeiro";
+              } else {
+                actionLog = "Concluído";
+              }
+            } else if (appt.status === "CANCELED") {
+              const who =
+                appt.cancelledByRole === "ADMIN"
+                  ? "ADMIN"
+                  : appt.cancelledByRole === "BARBER"
+                    ? "Barbeiro"
+                    : null;
+
+              if (appt.cancelFeeApplied) {
+                // com taxa
+                if (who) {
+                  actionLog = `Cancelado pelo ${who} - com taxa`;
+                } else {
+                  actionLog = "Cancelado - com taxa";
+                }
+              } else {
+                // sem taxa
+                if (who) {
+                  actionLog = `Cancelado pelo ${who} - sem taxa`;
+                } else {
+                  actionLog = "Cancelado - sem taxa";
+                }
+              }
+            }
 
             return (
               <div
                 key={appt.id}
                 className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3"
               >
-                <div className="grid w-full grid-cols-1 gap-2 md:grid-cols-6 md:items-center">
-                  {/* Nome */}
-                  <div>
-                    <span className="text-paragraph-medium text-content-primary font-medium">
-                      {appt.clientName}
-                    </span>
-                  </div>
+                {/* Layout: infos em grid + ações separadas */}
+                <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  {/* Infos do agendamento */}
+                  <div className="grid flex-1 grid-cols-1 gap-2 md:grid-cols-6 md:items-center">
+                    {/* Nome */}
+                    <div>
+                      <span className="text-paragraph-medium text-content-primary font-medium">
+                        {appt.clientName}
+                      </span>
+                    </div>
 
-                  {/* Telefone */}
-                  <div className="text-paragraph-medium text-content-primary">
-                    {appt.phone}
-                  </div>
+                    {/* Telefone */}
+                    <div className="text-paragraph-medium text-content-primary">
+                      {appt.phone}
+                    </div>
 
-                  {/* Descrição */}
-                  <div className="text-paragraph-medium text-content-primary">
-                    {appt.description}
-                  </div>
+                    {/* Descrição */}
+                    <div className="text-paragraph-medium text-content-primary">
+                      {appt.description}
+                    </div>
 
-                  {/* Status */}
-                  <div className="flex md:justify-center">
-                    <AppointmentStatusBadge status={normalizedStatus} />
-                  </div>
+                    {/* Status */}
+                    <div className="flex md:justify-center">
+                      <AppointmentStatusBadge status={normalizedStatus} />
+                    </div>
 
-                  {/* Horário */}
-                  <div className="text-paragraph-medium text-content-primary md:text-center">
-                    {timeStr}
+                    {/* Log */}
+                    <div className="text-paragraph-small text-content-secondary md:text-center">
+                      {actionLog}
+                    </div>
+
+                    {/* Horário */}
+                    <div className="text-paragraph-medium text-content-primary md:text-center">
+                      {timeStr}
+                    </div>
                   </div>
 
                   {/* Ações */}
-                  <div className="flex justify-end gap-2">
-                    {/* EDITAR – só aparece enquanto PENDENTE */}
+                  <div className="flex flex-wrap justify-end gap-2 md:flex-nowrap md:min-w-[260px]">
                     {isPending && (
-                      <AppointmentForm
-                        appointment={apptForForm}
-                        appointments={appointmentsForForm}
-                        barbers={barbersForForm}
-                        services={services}
-                      >
-                        <Button variant="edit2" size="sm">
-                          Editar
-                        </Button>
-                      </AppointmentForm>
-                    )}
+                      <>
+                        {/* EDITAR – só aparece enquanto PENDENTE */}
+                        <AppointmentForm
+                          appointment={safeApptForForm}
+                          appointments={appointmentsForForm}
+                          barbers={barbersForForm}
+                          services={services}
+                        />
 
-                    {/* CONFERIR / CONCLUIR + CANCELAR – só aparece enquanto PENDENTE */}
-                    {isPending && (
-                      <AppointmentActions
-                        appointmentId={appt.id}
-                        status={normalizedStatus}
-                        clientName={appt.clientName}
-                        phone={appt.phone}
-                        description={appt.description}
-                        scheduleAt={appt.scheduleAt}
-                        barberName={barber.name}
-                        servicePrice={servicePriceNumber}
-                      />
+                        {/* CONFERIR / CONCLUIR + CANCELAR – só se PENDENTE */}
+                        <AppointmentActions
+                          appointmentId={appt.id}
+                          status={normalizedStatus}
+                          clientName={appt.clientName}
+                          phone={appt.phone}
+                          description={appt.description}
+                          scheduleAt={appt.scheduleAt}
+                          barberName={barber.name}
+                          servicePrice={servicePriceNumber}
+                          cancelFeePercentage={
+                            appt.service?.cancelFeePercentage
+                              ? Number(appt.service.cancelFeePercentage)
+                              : undefined
+                          }
+                          cancelLimitHours={
+                            appt.service?.cancelLimitHours ?? undefined
+                          }
+                          cancelledByRole="BARBER"
+                          concludedByRole="BARBER"
+                        />
+                      </>
                     )}
                   </div>
                 </div>

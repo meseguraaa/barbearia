@@ -208,6 +208,24 @@ export default async function AdminDashboardPage({
 
   type AppointmentWithBarberPrisma = (typeof appointmentsPrisma)[number];
 
+  // ===== LOG GERAL DOS AGENDAMENTOS =====
+  console.log(
+    "ADMIN DASHBOARD ▶ appointmentsPrisma length:",
+    appointmentsPrisma.length,
+  );
+  console.log(
+    "ADMIN DASHBOARD ▶ appointmentsPrisma IDs + status:",
+    appointmentsPrisma.map((a) => ({
+      id: a.id,
+      status: a.status,
+      barberId: a.barberId,
+    })),
+  );
+  console.log(
+    "ADMIN DASHBOARD ▶ appointmentsForForm IDs:",
+    appointmentsForForm.map((a) => a.id),
+  );
+
   // ====== FINANCEIRO GERAL DO DIA ======
   const currencyFormatter = new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -259,6 +277,16 @@ export default async function AdminDashboardPage({
   );
   const totalAppointmentsCanceledDay = canceledAppointmentsDay.length;
 
+  // 🔹 Taxas de cancelamento do dia
+  const canceledWithFeeDay = canceledAppointmentsDay.filter(
+    (appt) => appt.cancelFeeApplied,
+  );
+  const totalCancelFeeDay = canceledWithFeeDay.reduce((acc, appt) => {
+    const fee = appt.cancelFeeValue ? Number(appt.cancelFeeValue) : 0;
+    return acc + fee;
+  }, 0);
+  const totalCanceledWithFeeDay = canceledWithFeeDay.length;
+
   // ====== FINANCEIRO GERAL DO MÊS ======
   const { totalGrossMonth, totalCommissionMonth, totalNetMonth } =
     monthAppointmentsPrisma.reduce(
@@ -296,6 +324,16 @@ export default async function AdminDashboardPage({
   const totalAppointmentsDoneMonth = monthAppointmentsPrisma.length;
   const totalAppointmentsCanceledMonth = monthCanceledAppointmentsPrisma.length;
 
+  // 🔹 Taxas de cancelamento do mês
+  const canceledWithFeeMonth = monthCanceledAppointmentsPrisma.filter(
+    (appt) => appt.cancelFeeApplied,
+  );
+  const totalCancelFeeMonth = canceledWithFeeMonth.reduce((acc, appt) => {
+    const fee = appt.cancelFeeValue ? Number(appt.cancelFeeValue) : 0;
+    return acc + fee;
+  }, 0);
+  const totalCanceledWithFeeMonth = canceledWithFeeMonth.length;
+
   // ====== AGRUPADO POR BARBEIRO ======
   const groupedByBarber = appointmentsPrisma.reduce<
     Record<
@@ -307,6 +345,7 @@ export default async function AdminDashboardPage({
         totalGross: number;
         totalCommission: number;
         totalNet: number;
+        totalCancelFees: number;
       }
     >
   >((acc, appt) => {
@@ -321,6 +360,7 @@ export default async function AdminDashboardPage({
         totalGross: 0,
         totalCommission: 0,
         totalNet: 0,
+        totalCancelFees: 0,
       };
     }
 
@@ -350,10 +390,25 @@ export default async function AdminDashboardPage({
       acc[barberId].totalNet += priceNumber - earningNumber;
     }
 
+    // taxas de cancelamento por barbeiro (somente quando aplicado)
+    if (appt.status === "CANCELED" && appt.cancelFeeApplied) {
+      const fee = appt.cancelFeeValue ? Number(appt.cancelFeeValue) : 0;
+      acc[barberId].totalCancelFees += fee;
+    }
+
     return acc;
   }, {});
 
   const barberGroups = Object.values(groupedByBarber);
+
+  console.log(
+    "ADMIN DASHBOARD ▶ barberGroups:",
+    barberGroups.map((g) => ({
+      barberId: g.barberId,
+      barberName: g.barberName,
+      appointments: g.appointments.length,
+    })),
+  );
 
   return (
     <div className="space-y-6">
@@ -370,7 +425,7 @@ export default async function AdminDashboardPage({
       </div>
 
       {/* RESUMO FINANCEIRO DO DIA */}
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-4">
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
             Valor bruto (dia)
@@ -397,10 +452,22 @@ export default async function AdminDashboardPage({
             {currencyFormatter.format(totalNetDay)}
           </p>
         </div>
+
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
+          <p className="text-label-small text-content_secondary">
+            Taxas de cancelamento (dia)
+          </p>
+          <p className="text-title text-content-primary">
+            {currencyFormatter.format(totalCancelFeeDay)}
+          </p>
+          <p className="text-label-small text-content-secondary">
+            {totalCanceledWithFeeDay} cancelamento(s) com taxa
+          </p>
+        </div>
       </section>
 
       {/* RESUMO FINANCEIRO DO MÊS + ATENDIMENTOS */}
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-4">
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
             Valor bruto (mês)
@@ -462,6 +529,22 @@ export default async function AdminDashboardPage({
             </div>
           </div>
         </div>
+
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3">
+          <p className="text-label-small text-content-secondary">
+            Cancelamentos com taxa
+          </p>
+          <div className="space-y-1">
+            <p className="text-paragraph-medium text-content-primary">
+              Dia:{" "}
+              <span className="font-semibold">{totalCanceledWithFeeDay}</span>
+            </p>
+            <p className="text-paragraph-medium text-content-primary">
+              Mês:{" "}
+              <span className="font-semibold">{totalCanceledWithFeeMonth}</span>
+            </p>
+          </div>
+        </div>
       </section>
 
       {appointmentsPrisma.length === 0 ? (
@@ -515,13 +598,21 @@ export default async function AdminDashboardPage({
                       {currencyFormatter.format(group.totalNet)}
                     </p>
                   </div>
+                  <div className="space-y-0.5">
+                    <p className="text-label-small text-content-secondary">
+                      Taxas de cancelamento (dia)
+                    </p>
+                    <p className="text-paragraph-medium text-content-primary">
+                      {currencyFormatter.format(group.totalCancelFees)}
+                    </p>
+                  </div>
                 </div>
               </div>
 
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <tbody>
-                    {group.appointments.map((appt) => {
+                    {group.appointments.map((appt, index) => {
                       const date = new Date(appt.scheduleAt);
                       const dateStr = format(date, "dd/MM/yyyy", {
                         locale: ptBR,
@@ -532,11 +623,80 @@ export default async function AdminDashboardPage({
 
                       const apptForForm = appointmentsForForm.find(
                         (a) => a.id === appt.id,
-                      )!;
+                      );
 
                       const normalizedStatus =
                         (appt.status as AppointmentType["status"]) ?? "PENDING";
                       const isPending = normalizedStatus === "PENDING";
+
+                      // garante que se por algum motivo não encontrar, não quebre
+                      const safeApptForForm = apptForForm ?? {
+                        id: appt.id,
+                        clientName: appt.clientName,
+                        phone: appt.phone,
+                        description: appt.description,
+                        scheduleAt: appt.scheduleAt,
+                        status: normalizedStatus,
+                        barberId: appt.barberId ?? "",
+                        barber: appt.barber
+                          ? {
+                              id: appt.barber.id,
+                              name: appt.barber.name,
+                              email: appt.barber.email,
+                              phone: appt.barber.phone,
+                              isActive: appt.barber.isActive,
+                              role: "BARBER" as const,
+                            }
+                          : undefined,
+                        serviceId: appt.serviceId ?? undefined,
+                      };
+
+                      // 🔍 LOG POR LINHA
+                      console.log("ADMIN DASHBOARD ▶ ROW", {
+                        groupBarberId: group.barberId,
+                        groupBarberName: group.barberName,
+                        index,
+                        apptId: appt.id,
+                        statusRaw: appt.status,
+                        normalizedStatus,
+                        isPending,
+                        hasApptForForm: !!apptForForm,
+                      });
+
+                      // mini log de ações (conclusão/cancelamento)
+                      let actionLog = "—";
+
+                      if (appt.status === "DONE") {
+                        if (appt.concludedByRole === "ADMIN") {
+                          actionLog = "Concluído pelo ADMIN";
+                        } else if (appt.concludedByRole === "BARBER") {
+                          actionLog = "Concluído pelo Barbeiro";
+                        } else {
+                          actionLog = "Concluído";
+                        }
+                      } else if (appt.status === "CANCELED") {
+                        const hasFee = appt.cancelFeeApplied;
+                        const who =
+                          appt.cancelledByRole === "ADMIN"
+                            ? "ADMIN"
+                            : appt.cancelledByRole === "BARBER"
+                              ? "Barbeiro"
+                              : null;
+
+                        if (who === "ADMIN") {
+                          actionLog = hasFee
+                            ? "Cancelado pelo ADMIN - com taxa"
+                            : "Cancelado pelo ADMIN - sem taxa";
+                        } else if (who === "Barbeiro") {
+                          actionLog = hasFee
+                            ? "Cancelado pelo Barbeiro - com taxa"
+                            : "Cancelado pelo Barbeiro - sem taxa";
+                        } else {
+                          actionLog = hasFee
+                            ? "Cancelado - com taxa"
+                            : "Cancelado - sem taxa";
+                        }
+                      }
 
                       return (
                         <tr
@@ -553,26 +713,27 @@ export default async function AdminDashboardPage({
                           <td className="px-4 py-2">
                             <AppointmentStatusBadge status={normalizedStatus} />
                           </td>
-                          <td className="px-4 py-3">
-                            <div className="flex justify-end gap-2">
-                              {/* EDITAR: sempre aparece, só desabilita se não for pendente */}
-                              <AppointmentForm
-                                appointment={apptForForm}
-                                appointments={appointmentsForForm}
-                                barbers={barbers}
-                                services={services}
-                              >
-                                <Button
-                                  variant="edit2"
-                                  size="sm"
-                                  disabled={!isPending}
-                                >
-                                  Editar
-                                </Button>
-                              </AppointmentForm>
 
-                              {/* AÇÕES: só aparece enquanto PENDENTE */}
-                              {isPending && (
+                          {/* COLUNA: mini log de ações */}
+                          <td className="px-4 py-2">
+                            <span className="text-paragraph-small text-content-secondary">
+                              {actionLog}
+                            </span>
+                          </td>
+
+                          {/* COLUNA: ações (somente se PENDENTE) */}
+                          <td className="px-4 py-3">
+                            {isPending && (
+                              <div className="flex justify-end gap-2">
+                                {/* EDITAR – só aparece enquanto PENDENTE */}
+                                <AppointmentForm
+                                  appointment={safeApptForForm}
+                                  appointments={appointmentsForForm}
+                                  barbers={barbers}
+                                  services={services}
+                                />
+
+                                {/* AÇÕES – só aparece enquanto PENDENTE */}
                                 <AppointmentActions
                                   appointmentId={appt.id}
                                   status={normalizedStatus}
@@ -588,9 +749,19 @@ export default async function AdminDashboardPage({
                                         ? Number(appt.service.price)
                                         : undefined
                                   }
+                                  cancelFeePercentage={
+                                    appt.service?.cancelFeePercentage
+                                      ? Number(appt.service.cancelFeePercentage)
+                                      : undefined
+                                  }
+                                  cancelLimitHours={
+                                    appt.service?.cancelLimitHours ?? undefined
+                                  }
+                                  cancelledByRole="ADMIN"
+                                  concludedByRole="ADMIN"
                                 />
-                              )}
-                            </div>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
