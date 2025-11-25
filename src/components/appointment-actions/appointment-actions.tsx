@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +20,8 @@ import type { AppointmentStatus } from "@/types/appointment";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
+type RoleForAction = "ADMIN" | "BARBER";
+
 type AppointmentActionsProps = {
   appointmentId: string;
   status?: AppointmentStatus | null;
@@ -33,6 +35,14 @@ type AppointmentActionsProps = {
 
   // valor do serviço (já em número)
   servicePrice?: number | null;
+
+  // configuração da taxa de cancelamento vinda do serviço
+  cancelFeePercentage?: number | null;
+  cancelLimitHours?: number | null;
+
+  // quem está agindo (para log)
+  cancelledByRole?: RoleForAction;
+  concludedByRole?: RoleForAction;
 };
 
 export function AppointmentActions({
@@ -44,8 +54,13 @@ export function AppointmentActions({
   scheduleAt,
   barberName,
   servicePrice,
+  cancelFeePercentage,
+  cancelLimitHours,
+  cancelledByRole,
+  concludedByRole,
 }: AppointmentActionsProps) {
   const [isReviewOpen, setIsReviewOpen] = useState(false);
+  const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -65,24 +80,70 @@ export function AppointmentActions({
     minimumFractionDigits: 2,
   });
 
+  // cálculo se ESTÁ dentro da janela onde pode cobrar taxa
+  const { isInsideFeeWindow, estimatedFeeValue } = useMemo(() => {
+    if (
+      !servicePrice ||
+      !cancelLimitHours ||
+      cancelLimitHours <= 0 ||
+      !cancelFeePercentage ||
+      cancelFeePercentage <= 0
+    ) {
+      return {
+        isInsideFeeWindow: false,
+        estimatedFeeValue: 0,
+      };
+    }
+
+    const now = new Date().getTime();
+    const scheduleTime = new Date(scheduleAt).getTime();
+    const diffMs = scheduleTime - now;
+    const diffHours = diffMs / (1000 * 60 * 60); // horas para o horário agendado
+
+    const isInside = diffHours < cancelLimitHours;
+
+    const fee = (servicePrice * cancelFeePercentage) / 100;
+
+    return {
+      isInsideFeeWindow: isInside,
+      estimatedFeeValue: fee,
+    };
+  }, [servicePrice, cancelLimitHours, cancelFeePercentage, scheduleAt]);
+
+  /* ---------------------------
+   * CONCLUIR
+   * --------------------------- */
   function handleConfirmConclude() {
     startTransition(async () => {
-      await concludeAppointment(appointmentId);
+      await concludeAppointment(appointmentId, {
+        concludedByRole,
+      });
       setIsReviewOpen(false);
       router.refresh();
     });
   }
 
-  function handleCancel() {
+  /* ---------------------------
+   * CANCELAR SEM / COM TAXA
+   * --------------------------- */
+  function handleOpenCancelDialog() {
+    setIsCancelDialogOpen(true);
+  }
+
+  function runCancel(applyFee: boolean) {
     startTransition(async () => {
-      await cancelAppointment(appointmentId);
+      await cancelAppointment(appointmentId, {
+        applyFee,
+        cancelledByRole,
+      });
+      setIsCancelDialogOpen(false);
       router.refresh();
     });
   }
 
   return (
     <div className="flex items-center gap-2">
-      {/* CONFERIR / CONCLUIR – sempre aparece, mas desabilita em DONE/CANCELED ou durante ação */}
+      {/* CONFERIR / CONCLUIR */}
       <Dialog open={isReviewOpen} onOpenChange={setIsReviewOpen}>
         <DialogTrigger asChild>
           <Button
@@ -193,15 +254,111 @@ export function AppointmentActions({
         </DialogContent>
       </Dialog>
 
-      {/* CANCELAR – também sempre aparece, mas desabilita em DONE/CANCELED ou durante ação */}
-      <Button
-        size="sm"
-        variant="destructive"
-        onClick={handleCancel}
-        disabled={!canInteract}
-      >
-        Cancelar
-      </Button>
+      {/* CANCELAR – abre modal próprio de cancelamento */}
+      <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
+        <DialogTrigger asChild>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={handleOpenCancelDialog}
+            disabled={!canInteract}
+          >
+            Cancelar
+          </Button>
+        </DialogTrigger>
+
+        <DialogContent
+          variant="appointment"
+          overlayVariant="blurred"
+          showCloseButton
+        >
+          <DialogHeader>
+            <DialogTitle size="modal">Cancelar agendamento</DialogTitle>
+            <DialogDescription size="modal">
+              Confirme o cancelamento deste horário.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 mt-2">
+            <p className="text-paragraph-medium text-content-primary">
+              {clientName} — {description}
+            </p>
+            <p className="text-paragraph-small text-content-secondary">
+              Horário:{" "}
+              <span className="font-semibold">
+                {dateStr} às {timeStr}
+              </span>
+            </p>
+
+            {servicePrice != null && (
+              <p className="text-paragraph-small text-content-secondary">
+                Valor do serviço:{" "}
+                <span className="font-semibold">
+                  {currencyFormatter.format(servicePrice)}
+                </span>
+              </p>
+            )}
+
+            {isInsideFeeWindow && estimatedFeeValue > 0 ? (
+              <div className="mt-3 space-y-1">
+                <p className="text-paragraph-small text-content-secondary">
+                  Este cancelamento está{" "}
+                  <span className="font-semibold">dentro do prazo</span> para
+                  cobrança de taxa.
+                </p>
+                <p className="text-paragraph-small text-content-secondary">
+                  Taxa configurada:{" "}
+                  <span className="font-semibold">
+                    {cancelFeePercentage?.toFixed(2)}%
+                  </span>{" "}
+                  ({currencyFormatter.format(estimatedFeeValue)}).
+                </p>
+                <p className="text-paragraph-small text-content-secondary">
+                  Deseja aplicar a taxa de cancelamento?
+                </p>
+              </div>
+            ) : (
+              <p className="text-paragraph-small text-content-secondary mt-3">
+                Este cancelamento não está dentro da janela configurada para
+                cobrança de taxa, ou o serviço não possui taxa configurada.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter className="mt-4">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setIsCancelDialogOpen(false)}
+              disabled={isPending}
+            >
+              Voltar
+            </Button>
+
+            {/* Cancelar SEM taxa */}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => runCancel(false)}
+              disabled={isPending}
+            >
+              {isPending ? "Cancelando..." : "Cancelar sem taxa"}
+            </Button>
+
+            {/* Cancelar COM taxa (só faz sentido se estiver na janela) */}
+            {isInsideFeeWindow && estimatedFeeValue > 0 && (
+              <Button
+                type="button"
+                variant="brand"
+                onClick={() => runCancel(true)}
+                disabled={isPending}
+              >
+                {isPending ? "Aplicando taxa..." : "Cancelar com taxa"}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -42,7 +42,6 @@ import {
   SelectValue,
 } from "../ui/select";
 import { toast } from "sonner";
-// 🔧 IMPORT CORRIGIDO: usamos o mesmo arquivo do admin/dashboard
 import {
   createAppointment,
   updateAppointment,
@@ -59,7 +58,6 @@ import { Service } from "@/types/service";
 
 type AppointmentFormProps = {
   appointment?: Appointment;
-  children?: React.ReactNode;
   /**
    * Lista de agendamentos já existentes (do dia atual ou vários dias).
    * A função interna filtra por data.
@@ -77,7 +75,6 @@ type AppointmentFormProps = {
 
 export const AppointmentForm = ({
   appointment,
-  children,
   appointments = [],
   barbers,
   services,
@@ -200,6 +197,16 @@ export const AppointmentForm = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appointment, servicesList.length]);
 
+  // log leve pra garantir que está renderizando por agendamento
+  useEffect(() => {
+    if (appointment?.id) {
+      console.log("AppointmentForm ▶ render para agendamento", {
+        id: appointment.id,
+        clientName: appointment.clientName,
+      });
+    }
+  }, [appointment?.id, appointment?.clientName]);
+
   // Observa campos que mandam no fluxo
   const selectedServiceId = form.watch("serviceId");
   const selectedDate = form.watch("scheduleAt");
@@ -211,16 +218,32 @@ export const AppointmentForm = ({
 
   const selectedServiceName = selectedServiceData?.name ?? "";
 
-  const availableTimes = getAvailableTimes({
-    date: selectedDate,
-    service: selectedServiceName,
-    appointments,
-    currentAppointmentId: appointment?.id,
-  });
+  // Protege contra qualquer erro em getAvailableTimes
+  let availableTimes: string[] = [];
+  try {
+    availableTimes =
+      getAvailableTimes({
+        date: selectedDate,
+        service: selectedServiceName,
+        appointments,
+        currentAppointmentId: appointment?.id,
+      }) ?? [];
+  } catch (error) {
+    console.error("AppointmentForm ▶ erro em getAvailableTimes", {
+      error,
+      hasAppointments: appointments?.length,
+      currentAppointmentId: appointment?.id,
+    });
+    availableTimes = [];
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
-      {children && <DialogTrigger asChild>{children}</DialogTrigger>}
+      <DialogTrigger asChild>
+        <Button variant={isEdit ? "edit2" : "brand"} size="sm">
+          {isEdit ? "Editar" : "Agendar"}
+        </Button>
+      </DialogTrigger>
 
       <DialogContent
         variant="appointment"

@@ -141,7 +141,7 @@ export default async function BarberEarningsPage({
     },
   });
 
-  // ❌ Atendimentos CANCELADOS do DIA (para contagem)
+  // Atendimentos CANCELADOS do DIA (para contagem + taxa)
   const dayCanceledAppointments = await prisma.appointment.findMany({
     where: {
       barberId: barber.id,
@@ -171,7 +171,7 @@ export default async function BarberEarningsPage({
     },
   });
 
-  // ❌ Atendimentos CANCELADOS do MÊS (para contagem)
+  // Atendimentos CANCELADOS do MÊS (para contagem + taxa)
   const monthCanceledAppointments = await prisma.appointment.findMany({
     where: {
       barberId: barber.id,
@@ -189,7 +189,7 @@ export default async function BarberEarningsPage({
     minimumFractionDigits: 2,
   });
 
-  // ===== GANHOS NO DIA (soma do que o barbeiro ganha) =====
+  // ===== GANHOS NO DIA (soma do que o barbeiro ganha em serviços) =====
   const totalEarningsDay = dayAppointments.reduce((sum, appt) => {
     const earningSnapshot = appt.barberEarningValue;
     const priceSnapshot = appt.servicePriceAtTheTime;
@@ -214,8 +214,8 @@ export default async function BarberEarningsPage({
     return sum + earningNumber;
   }, 0);
 
-  // ===== GANHOS DO MÊS (soma dos ganhos de todos os dias do mês) =====
-  const totalEarningsMonth = monthAppointments.reduce((sum, appt) => {
+  // ===== GANHOS DO MÊS (somente serviços concluídos – base) =====
+  const totalEarningsMonthBase = monthAppointments.reduce((sum, appt) => {
     const earningSnapshot = appt.barberEarningValue;
     const priceSnapshot = appt.servicePriceAtTheTime;
     const priceService = appt.service?.price ?? 0;
@@ -247,6 +247,29 @@ export default async function BarberEarningsPage({
   const totalAppointmentsCanceledDay = dayCanceledAppointments.length;
   const totalAppointmentsCanceledMonth = monthCanceledAppointments.length;
 
+  // 💰 TAXAS DE CANCELAMENTO (100% do barbeiro)
+
+  const canceledWithFeeDay = dayCanceledAppointments.filter(
+    (appt) => appt.cancelFeeApplied,
+  );
+
+  const totalCancelFeeDay = canceledWithFeeDay.reduce((sum, appt) => {
+    const fee = appt.cancelFeeValue ? Number(appt.cancelFeeValue) : 0;
+    return sum + fee;
+  }, 0);
+
+  const canceledWithFeeMonth = monthCanceledAppointments.filter(
+    (appt) => appt.cancelFeeApplied,
+  );
+
+  const totalCancelFeeMonth = canceledWithFeeMonth.reduce((sum, appt) => {
+    const fee = appt.cancelFeeValue ? Number(appt.cancelFeeValue) : 0;
+    return sum + fee;
+  }, 0);
+
+  // 🔗 Faturamento do mês = ganhos em serviços + taxas de cancelamento do mês
+  const totalEarningsMonth = totalEarningsMonthBase + totalCancelFeeMonth;
+
   return (
     <div className="space-y-6">
       {/* HEADER LOCAL (com DatePicker na mesma linha) */}
@@ -254,15 +277,15 @@ export default async function BarberEarningsPage({
         <div className="space-y-1">
           <h1 className="text-title text-content-primary">Meus ganhos</h1>
           <p className="text-paragraph-medium-size text-content-secondary">
-            Ganhos do dia selecionado e faturamento acumulado no mês.
+            Ganhos do dia e faturamento acumulado no mês.
           </p>
         </div>
         <DatePicker />
       </header>
 
       {/* RESUMO */}
-      <section className="grid gap-4 md:grid-cols-3">
-        {/* Ganhos no dia */}
+      <section className="grid gap-4 md:grid-cols-4">
+        {/* Ganhos no dia (serviços) */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
             Ganhos no dia
@@ -272,13 +295,22 @@ export default async function BarberEarningsPage({
           </p>
         </div>
 
-        {/* Faturamento do mês (soma dos ganhos do mês) */}
+        {/* Taxas de cancelamento (agora usadas também no faturamento do mês) */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
-            Faturamento do mês
+            Taxas de cancelamento
           </p>
-          <p className="text-title text-content-primary">
-            {currencyFormatter.format(totalEarningsMonth)}
+          <p className="text-paragraph-medium text-content-primary">
+            Dia:{" "}
+            <span className="font-semibold">
+              {currencyFormatter.format(totalCancelFeeDay)}
+            </span>
+          </p>
+          <p className="text-paragraph-medium text-content-primary">
+            Mês:{" "}
+            <span className="font-semibold">
+              {currencyFormatter.format(totalCancelFeeMonth)}
+            </span>
           </p>
         </div>
 
@@ -323,6 +355,16 @@ export default async function BarberEarningsPage({
               </p>
             </div>
           </div>
+        </div>
+
+        {/* Faturamento do mês (serviços + taxas de cancelamento) */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
+          <p className="text-label-small text-content-secondary">
+            Faturamento do mês
+          </p>
+          <p className="text-title text-content-primary">
+            {currencyFormatter.format(totalEarningsMonth)}
+          </p>
         </div>
       </section>
 

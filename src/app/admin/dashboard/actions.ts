@@ -19,6 +19,8 @@ const appointmentSchema = z.object({
 
 export type AppointmentData = z.infer<typeof appointmentSchema>;
 
+type RoleForAction = "ADMIN" | "BARBER";
+
 /* ---------------------------------------------------------
  * Helper: hora + minuto em São Paulo (America/Sao_Paulo)
  * ---------------------------------------------------------*/
@@ -127,8 +129,11 @@ async function withAppointmentMutation(
     revalidatePath("/");
     // dashboard admin
     revalidatePath("/admin/dashboard");
+    // dashboards barbeiro
+    revalidatePath("/barber");
+    revalidatePath("/barber/earnings");
   } catch (err) {
-    console.log(err);
+    console.error(err);
     return { error: defaultError };
   }
 }
@@ -242,30 +247,74 @@ export async function updateAppointment(id: string, data: AppointmentData) {
 }
 
 /* ---------------------------------------------------------
- * CONCLUDE (DONE)
+ * CONCLUDE (DONE) – agora com log de quem concluiu
  * ---------------------------------------------------------*/
-export async function concludeAppointment(id: string) {
+type ConcludeOptions = {
+  concludedByRole?: RoleForAction;
+};
+
+export async function concludeAppointment(
+  id: string,
+  options?: ConcludeOptions,
+) {
   return withAppointmentMutation(async () => {
     await prisma.appointment.update({
       where: { id },
       data: {
         status: "DONE",
+        concludedByRole: options?.concludedByRole ?? null,
       },
     });
   }, "Falha ao concluir o agendamento");
 }
 
 /* ---------------------------------------------------------
- * CANCEL (CANCELED)
- *  - NÃO DELETA, só marca como CANCELED
- *  - ensureAvailability ignora esse status (libera horário)
+ * CANCEL (CANCELED) COM OU SEM TAXA
  * ---------------------------------------------------------*/
-export async function cancelAppointment(id: string) {
+type CancelOptions = {
+  applyFee?: boolean;
+  cancelledByRole?: RoleForAction;
+};
+
+export async function cancelAppointment(id: string, options?: CancelOptions) {
   return withAppointmentMutation(async () => {
+    const appt = await prisma.appointment.findUnique({
+      where: { id },
+      include: { service: true },
+    });
+
+    if (!appt) {
+      throw new Error("Agendamento não encontrado");
+    }
+
+    let cancelFeeApplied = false;
+    let cancelFeeValue: any = null;
+    let cancelledByRole: RoleForAction | null = null;
+
+    if (options?.applyFee && appt.service) {
+      const feePercentage = appt.service.cancelFeePercentage;
+
+      if (feePercentage && Number(feePercentage) > 0) {
+        const basePrice = appt.servicePriceAtTheTime ?? appt.service.price; // Decimal
+
+        const feeDecimal = basePrice.mul(feePercentage).div(100);
+
+        cancelFeeApplied = true;
+        cancelFeeValue = feeDecimal;
+        cancelledByRole = options.cancelledByRole ?? null;
+      }
+    } else if (!options?.applyFee) {
+      // cancelamento sem taxa, mas ainda assim queremos saber quem cancelou
+      cancelledByRole = options?.cancelledByRole ?? null;
+    }
+
     await prisma.appointment.update({
       where: { id },
       data: {
         status: "CANCELED",
+        cancelFeeApplied,
+        cancelFeeValue,
+        cancelledByRole,
       },
     });
   }, "Falha ao cancelar o agendamento");

@@ -81,6 +81,13 @@ model Service {
   /// Porcentagem de ganho do barbeiro nesse serviço (%)
   barberPercentage Decimal @default(50.0) @db.Decimal(5, 2)
 
+  /// Limite (em horas) antes do horário para cobrar taxa de cancelamento
+  /// Ex: 2 = se cancelar com menos de 2h, pode aplicar taxa
+  cancelLimitHours Int?
+
+  /// Porcentagem da taxa de cancelamento sobre o valor do serviço (%)
+  cancelFeePercentage Decimal? @db.Decimal(5, 2)
+
   // Relacionamento com Appointment
   appointments Appointment[]
 
@@ -119,6 +126,18 @@ model Appointment {
 
   /// Valor em dinheiro que o barbeiro ganha neste agendamento
   barberEarningValue Decimal? @db.Decimal(10, 2)
+
+  /// Se uma taxa de cancelamento foi aplicada neste agendamento
+  cancelFeeApplied Boolean @default(false)
+
+  /// Valor em dinheiro da taxa de cancelamento aplicada
+  cancelFeeValue Decimal? @db.Decimal(10, 2)
+
+  /// Quem decidiu aplicar a taxa (ADMIN ou BARBER)
+  cancelledByRole Role?
+
+  /// Quem concluiu o atendimento (ADMIN ou BARBER)
+  concludedByRole Role?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

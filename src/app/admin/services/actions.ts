@@ -10,12 +10,16 @@ import { revalidatePath } from "next/cache";
  * - price
  * - durationMinutes
  * - barberPercentage
+ * - cancelLimitHours (opcional)
+ * - cancelFeePercentage (opcional)
  */
 export async function createService(formData: FormData) {
   const rawName = formData.get("name");
   const rawPrice = formData.get("price");
   const rawDuration = formData.get("durationMinutes");
   const rawBarberPercentage = formData.get("barberPercentage");
+  const rawCancelLimitHours = formData.get("cancelLimitHours");
+  const rawCancelFeePercentage = formData.get("cancelFeePercentage");
 
   const name = String(rawName ?? "").trim();
 
@@ -26,6 +30,12 @@ export async function createService(formData: FormData) {
   const durationString = String(rawDuration ?? "").trim();
 
   const barberPercentageString = String(rawBarberPercentage ?? "")
+    .replace(",", ".")
+    .trim();
+
+  const cancelLimitHoursString = String(rawCancelLimitHours ?? "").trim();
+
+  const cancelFeePercentageString = String(rawCancelFeePercentage ?? "")
     .replace(",", ".")
     .trim();
 
@@ -43,7 +53,7 @@ export async function createService(formData: FormData) {
     throw new Error("A duração deve ser um número maior que zero.");
   }
 
-  const barberPercentage = Number(barberPercentageString);
+  const barberPercentage = Number(barberPercentageString || "0");
   if (
     isNaN(barberPercentage) ||
     barberPercentage < 0 ||
@@ -54,6 +64,28 @@ export async function createService(formData: FormData) {
     );
   }
 
+  let cancelLimitHours: number | null = null;
+  if (cancelLimitHoursString) {
+    const parsed = Number(cancelLimitHoursString);
+    if (isNaN(parsed) || parsed < 0) {
+      throw new Error(
+        "O limite de cancelamento deve ser um número maior ou igual a zero.",
+      );
+    }
+    cancelLimitHours = parsed;
+  }
+
+  let cancelFeePercentage: number | null = null;
+  if (cancelFeePercentageString) {
+    const parsed = Number(cancelFeePercentageString);
+    if (isNaN(parsed) || parsed < 0 || parsed > 100) {
+      throw new Error(
+        "A taxa de cancelamento deve ser um número entre 0 e 100.",
+      );
+    }
+    cancelFeePercentage = parsed;
+  }
+
   await prisma.service.create({
     data: {
       name,
@@ -61,6 +93,8 @@ export async function createService(formData: FormData) {
       durationMinutes,
       isActive: true,
       barberPercentage,
+      cancelLimitHours,
+      cancelFeePercentage,
     },
   });
 
@@ -106,12 +140,16 @@ export async function toggleServiceStatus(formData: FormData) {
  * - price
  * - durationMinutes
  * - barberPercentage
+ * - cancelLimitHours (opcional)
+ * - cancelFeePercentage (opcional)
  */
 export async function updateService(id: string, formData: FormData) {
   const rawName = formData.get("name");
   const rawPrice = formData.get("price");
   const rawDuration = formData.get("durationMinutes");
   const rawBarberPercentage = formData.get("barberPercentage");
+  const rawCancelLimitHours = formData.get("cancelLimitHours");
+  const rawCancelFeePercentage = formData.get("cancelFeePercentage");
 
   const name = String(rawName ?? "").trim();
 
@@ -122,6 +160,12 @@ export async function updateService(id: string, formData: FormData) {
   const durationString = String(rawDuration ?? "").trim();
 
   const barberPercentageString = String(rawBarberPercentage ?? "")
+    .replace(",", ".")
+    .trim();
+
+  const cancelLimitHoursString = String(rawCancelLimitHours ?? "").trim();
+
+  const cancelFeePercentageString = String(rawCancelFeePercentage ?? "")
     .replace(",", ".")
     .trim();
 
@@ -143,7 +187,7 @@ export async function updateService(id: string, formData: FormData) {
     throw new Error("A duração deve ser um número maior que zero.");
   }
 
-  const barberPercentage = Number(barberPercentageString);
+  const barberPercentage = Number(barberPercentageString || "0");
   if (
     isNaN(barberPercentage) ||
     barberPercentage < 0 ||
@@ -154,6 +198,28 @@ export async function updateService(id: string, formData: FormData) {
     );
   }
 
+  let cancelLimitHours: number | null = null;
+  if (cancelLimitHoursString) {
+    const parsed = Number(cancelLimitHoursString);
+    if (isNaN(parsed) || parsed < 0) {
+      throw new Error(
+        "O limite de cancelamento deve ser um número maior ou igual a zero.",
+      );
+    }
+    cancelLimitHours = parsed;
+  }
+
+  let cancelFeePercentage: number | null = null;
+  if (cancelFeePercentageString) {
+    const parsed = Number(cancelFeePercentageString);
+    if (isNaN(parsed) || parsed < 0 || parsed > 100) {
+      throw new Error(
+        "A taxa de cancelamento deve ser um número entre 0 e 100.",
+      );
+    }
+    cancelFeePercentage = parsed;
+  }
+
   await prisma.service.update({
     where: { id },
     data: {
@@ -161,6 +227,8 @@ export async function updateService(id: string, formData: FormData) {
       price,
       durationMinutes,
       barberPercentage,
+      cancelLimitHours,
+      cancelFeePercentage,
     },
   });
 
