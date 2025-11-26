@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "@/styles/globals.css";
 import { Toaster } from "sonner";
 import { Header } from "@/components/header";
+import { AuthSessionProvider } from "@/components/auth-session-provider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -30,11 +31,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} ${interTight.variable} antialiased`}>
-        <Toaster position="top-right" richColors /> {/* único Toaster da app */}
-        <Header />
-        <div className="max-w-7xl mx-auto">
-          <main className="flex-1 flex flex-col mt-14">{children}</main>
-        </div>
+        <AuthSessionProvider>
+          <Toaster position="top-right" richColors />{" "}
+          {/* único Toaster da app */}
+          <Header />
+          <div className="max-w-7xl mx-auto">
+            <main className="flex-1 flex flex-col mt-14">{children}</main>
+          </div>
+        </AuthSessionProvider>
       </body>
     </html>
   );

@@ -34,9 +34,10 @@ enum AppointmentStatus {
 model User {
   id String @id @default(cuid())
 
-  name  String?
-  email String  @unique
-  image String?
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
 
   // Para barbeiro/admin: hash da senha (nunca em texto puro!)
   passwordHash String?
@@ -45,12 +46,64 @@ model User {
 
   // Relacionamentos
   appointmentsAsClient Appointment[] @relation("ClientAppointments")
-  // 🔥 removi o appointmentsAsBarber, agora quem se relaciona com Appointment é o model Barber
+
+  // relação com Barber (1-1 opcional)
+  barber Barber?
+
+  // relações com NextAuth
+  accounts Account[]
+  sessions Session[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  barber    Barber?
 }
+
+// =======================
+// NEXTAUTH MODELS
+// =======================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// =======================
+// DOMÍNIO DO SISTEMA
+// =======================
 
 model Barber {
   id        String   @id @default(cuid())
@@ -149,4 +202,18 @@ model Appointment {
   @@index([serviceId])
   // Mantém o nome da tabela como "appointments"
   @@map("appointments")
+}
+
+model Product {
+  id               String  @id @default(cuid())
+  name             String
+  imageUrl         String // foto obrigatória (URL)
+  description      String
+  price            Decimal // valor do produto (sem @db.Numeric)
+  barberPercentage Int // porcentagem de comissão do barbeiro (0-100)
+  category         String // finalidade: "Barba", "Cabelo", etc
+  isActive         Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
