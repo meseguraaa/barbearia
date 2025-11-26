@@ -214,21 +214,6 @@ export default async function BarberDashboardPage({
   const appointmentsForForm: AppointmentType[] =
     appointments.map(mapToAppointmentType);
 
-  // LOG GERAL
-  console.log("BARBER DASHBOARD ▶ appointments length:", appointments.length);
-  console.log(
-    "BARBER DASHBOARD ▶ appointments IDs + status:",
-    appointments.map((a) => ({
-      id: a.id,
-      status: a.status,
-      barberId: a.barberId,
-    })),
-  );
-  console.log(
-    "BARBER DASHBOARD ▶ appointmentsForForm IDs:",
-    appointmentsForForm.map((a) => a.id),
-  );
-
   // barbers para o form (aqui só o barbeiro logado)
   const barbersForForm: BarberType[] = [
     {
@@ -370,16 +355,6 @@ export default async function BarberDashboardPage({
                 : undefined,
               serviceId: appt.serviceId ?? undefined,
             };
-
-            // 🔍 LOG POR LINHA
-            console.log("BARBER DASHBOARD ▶ ROW", {
-              index,
-              apptId: appt.id,
-              statusRaw: appt.status,
-              normalizedStatus,
-              isPending,
-              hasApptForForm: !!apptForForm,
-            });
 
             // MINI LOG (mesma regra do admin)
             let actionLog = "—";

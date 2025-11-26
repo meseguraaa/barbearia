@@ -176,6 +176,7 @@ export default async function AdminDashboardPage({
     monthAppointmentsPrisma,
     services,
     monthCanceledAppointmentsPrisma,
+    products,
   ] = await Promise.all([
     getAppointments(dateParam),
     getBarbers(),
@@ -201,30 +202,17 @@ export default async function AdminDashboardPage({
         },
       },
     }),
+    prisma.product.findMany({
+      where: {
+        isActive: true,
+      },
+    }),
   ]);
 
   const appointmentsForForm: AppointmentType[] =
     appointmentsPrisma.map(mapToAppointmentType);
 
   type AppointmentWithBarberPrisma = (typeof appointmentsPrisma)[number];
-
-  // ===== LOG GERAL DOS AGENDAMENTOS =====
-  console.log(
-    "ADMIN DASHBOARD ▶ appointmentsPrisma length:",
-    appointmentsPrisma.length,
-  );
-  console.log(
-    "ADMIN DASHBOARD ▶ appointmentsPrisma IDs + status:",
-    appointmentsPrisma.map((a) => ({
-      id: a.id,
-      status: a.status,
-      barberId: a.barberId,
-    })),
-  );
-  console.log(
-    "ADMIN DASHBOARD ▶ appointmentsForForm IDs:",
-    appointmentsForForm.map((a) => a.id),
-  );
 
   // ====== FINANCEIRO GERAL DO DIA ======
   const currencyFormatter = new Intl.NumberFormat("pt-BR", {
@@ -334,6 +322,12 @@ export default async function AdminDashboardPage({
   }, 0);
   const totalCanceledWithFeeMonth = canceledWithFeeMonth.length;
 
+  // ====== PRODUTOS ATIVOS (quantidade + soma dos preços) ======
+  const totalActiveProducts = products.length;
+  const totalActiveProductsValue = products.reduce((acc, product) => {
+    return acc + Number(product.price);
+  }, 0);
+
   // ====== AGRUPADO POR BARBEIRO ======
   const groupedByBarber = appointmentsPrisma.reduce<
     Record<
@@ -401,15 +395,6 @@ export default async function AdminDashboardPage({
 
   const barberGroups = Object.values(groupedByBarber);
 
-  console.log(
-    "ADMIN DASHBOARD ▶ barberGroups:",
-    barberGroups.map((g) => ({
-      barberId: g.barberId,
-      barberName: g.barberName,
-      appointments: g.appointments.length,
-    })),
-  );
-
   return (
     <div className="space-y-6">
       {/* HEADER + DATA */}
@@ -466,7 +451,7 @@ export default async function AdminDashboardPage({
         </div>
       </section>
 
-      {/* RESUMO FINANCEIRO DO MÊS + ATENDIMENTOS */}
+      {/* RESUMO FINANCEIRO DO MÊS + ATENDIMENTOS + PRODUTOS */}
       <section className="grid gap-4 md:grid-cols-4">
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
@@ -545,6 +530,23 @@ export default async function AdminDashboardPage({
             </p>
           </div>
         </div>
+
+        {/* PRODUTOS ATIVOS */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-2">
+          <p className="text-label-small text-content-secondary">
+            Produtos ativos
+          </p>
+          <p className="text-paragraph-medium text-content-primary">
+            Quantidade:{" "}
+            <span className="font-semibold">{totalActiveProducts}</span>
+          </p>
+          <p className="text-paragraph-medium text-content-primary">
+            Soma dos preços:{" "}
+            <span className="font-semibold">
+              {currencyFormatter.format(totalActiveProductsValue)}
+            </span>
+          </p>
+        </div>
       </section>
 
       {appointmentsPrisma.length === 0 ? (
@@ -612,7 +614,7 @@ export default async function AdminDashboardPage({
               <div className="overflow-x-auto">
                 <table className="min-w-full text-sm">
                   <tbody>
-                    {group.appointments.map((appt, index) => {
+                    {group.appointments.map((appt) => {
                       const date = new Date(appt.scheduleAt);
                       const dateStr = format(date, "dd/MM/yyyy", {
                         locale: ptBR,
@@ -650,18 +652,6 @@ export default async function AdminDashboardPage({
                           : undefined,
                         serviceId: appt.serviceId ?? undefined,
                       };
-
-                      // 🔍 LOG POR LINHA
-                      console.log("ADMIN DASHBOARD ▶ ROW", {
-                        groupBarberId: group.barberId,
-                        groupBarberName: group.barberName,
-                        index,
-                        apptId: appt.id,
-                        statusRaw: appt.status,
-                        normalizedStatus,
-                        isPending,
-                        hasApptForForm: !!apptForForm,
-                      });
 
                       // mini log de ações (conclusão/cancelamento)
                       let actionLog = "—";

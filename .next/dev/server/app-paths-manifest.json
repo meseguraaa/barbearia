@@ -1,7 +1,7 @@
 {
-  "/page": "app/page.js",
-  "/barber/dashboard/page": "app/barber/dashboard/page.js",
-  "/barber/earnings/page": "app/barber/earnings/page.js",
-  "/admin/barber/page": "app/admin/barber/page.js",
-  "/admin/services/page": "app/admin/services/page.js"
+  "/painel/login/page": "app/painel/login/page.js",
+  "/admin/services/page": "app/admin/services/page.js",
+  "/admin/dashboard/page": "app/admin/dashboard/page.js",
+  "/admin/products/page": "app/admin/products/page.js",
+  "/barber/earnings/page": "app/barber/earnings/page.js"
 }

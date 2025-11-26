@@ -183,6 +183,18 @@ export default async function BarberEarningsPage({
     },
   });
 
+  // PRODUTOS ATIVOS (compartilhado para todos os barbeiros)
+  const activeProducts = await prisma.product.findMany({
+    where: {
+      isActive: true,
+    },
+  });
+
+  const totalActiveProducts = activeProducts.length;
+  const totalActiveProductsValue = activeProducts.reduce((sum, product) => {
+    return sum + Number(product.price);
+  }, 0);
+
   const currencyFormatter = new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
@@ -248,7 +260,6 @@ export default async function BarberEarningsPage({
   const totalAppointmentsCanceledMonth = monthCanceledAppointments.length;
 
   // 💰 TAXAS DE CANCELAMENTO (100% do barbeiro)
-
   const canceledWithFeeDay = dayCanceledAppointments.filter(
     (appt) => appt.cancelFeeApplied,
   );
@@ -364,6 +375,23 @@ export default async function BarberEarningsPage({
           </p>
           <p className="text-title text-content-primary">
             {currencyFormatter.format(totalEarningsMonth)}
+          </p>
+        </div>
+
+        {/* Produtos disponíveis */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-2">
+          <p className="text-label-small text-content-secondary">
+            Produtos disponíveis
+          </p>
+          <p className="text-paragraph-medium text-content-primary">
+            Quantidade:{" "}
+            <span className="font-semibold">{totalActiveProducts}</span>
+          </p>
+          <p className="text-paragraph-medium text-content-primary">
+            Soma dos preços:{" "}
+            <span className="font-semibold">
+              {currencyFormatter.format(totalActiveProductsValue)}
+            </span>
           </p>
         </div>
       </section>

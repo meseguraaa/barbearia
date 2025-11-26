@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, Scissors, ListChecks } from "lucide-react";
+import { LayoutDashboard, Scissors, ListChecks, Package } from "lucide-react";
 
 type AdminLink = {
   href: string;
@@ -15,6 +15,7 @@ const adminLinks: AdminLink[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/barber", label: "Profissionais", icon: Scissors },
   { href: "/admin/services", label: "Serviços", icon: ListChecks },
+  { href: "/admin/products", label: "Produtos", icon: Package },
 ];
 
 export function AdminNav() {
@@ -34,8 +35,8 @@ export function AdminNav() {
               "flex items-center justify-center gap-2 px-4 py-2 text-label-small transition-colors",
               // estado padrão
               "text-content-secondary hover:bg-background-tertiary/50",
-              // ativo
-              isActive && " text-content-brand font-medium",
+              // estado ativo
+              isActive && "text-content-brand font-medium",
             )}
           >
             <Icon
