@@ -15,16 +15,19 @@ export const metadata: Metadata = {
   title: "Admin | Editar produto",
 };
 
+type EditProductPageParams = {
+  id: string;
+};
+
 type EditProductPageProps = {
-  params: {
-    id: string;
-  };
+  // Tipado como Promise pra bater com o `PageProps` gerado pelo Next
+  params: Promise<EditProductPageParams>;
 };
 
 export default async function EditProductPage({
   params,
 }: EditProductPageProps) {
-  const id = params?.id;
+  const { id } = await params;
 
   if (!id) {
     redirect("/admin/products");
