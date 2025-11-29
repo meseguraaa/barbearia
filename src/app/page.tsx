@@ -123,6 +123,16 @@ export default async function Home({ searchParams }: HomeProps) {
 
   const periods = groupAppointmentByPeriod(appointments);
 
+  // Array específico para o AppointmentForm: garante name/phone como string
+  const barbersForForm = barbers.map((barber) => ({
+    id: barber.id,
+    name: barber.name ?? "Barbeiro",
+    email: barber.email,
+    phone: barber.phone ?? "",
+    isActive: barber.isActive ?? true,
+    role: "BARBER" as const,
+  }));
+
   return (
     <div className="bg-background-primary p-6">
       <div className="flex items-center justify-between mb-8 gap-4">
@@ -162,7 +172,7 @@ export default async function Home({ searchParams }: HomeProps) {
       >
         <AppointmentForm
           appointments={appointments}
-          barbers={barbers}
+          barbers={barbersForForm}
           services={services}
         >
           <Button variant="brand">Novo Agendamento</Button>
