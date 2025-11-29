@@ -656,6 +656,9 @@
   .mt-14 {
     margin-top: calc(var(--spacing) * 14);
   }
+  .mt-auto {
+    margin-top: auto;
+  }
   .mr-2 {
     margin-right: calc(var(--spacing) * 2);
   }
@@ -938,6 +941,9 @@
   .items-end {
     align-items: flex-end;
   }
+  .items-start {
+    align-items: flex-start;
+  }
   .justify-between {
     justify-content: space-between;
   }
@@ -1115,6 +1121,9 @@
       border-color: color-mix(in oklab, var(--color-blue-500) 50%, transparent);
     }
   }
+  .border-border-brand {
+    border-color: var(--color-border-brand);
+  }
   .border-border-divisor {
     border-color: var(--color-border-divisor);
   }
@@ -1159,6 +1168,12 @@
   }
   .bg-background-tertiary {
     background-color: var(--color-background-tertiary);
+  }
+  .bg-background-tertiary\/80 {
+    background-color: color-mix(in srgb, #23242c 80%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-background-tertiary) 80%, transparent);
+    }
   }
   .bg-black\/30 {
     background-color: color-mix(in srgb, #000 30%, transparent);
@@ -1313,9 +1328,6 @@
   .pb-24 {
     padding-bottom: calc(var(--spacing) * 24);
   }
-  .pb-\[2px\] {
-    padding-bottom: 2px;
-  }
   .pl-2 {
     padding-left: calc(var(--spacing) * 2);
   }
@@ -1366,6 +1378,9 @@
   }
   .text-\[11px\] {
     font-size: 11px;
+  }
+  .text-\[12px\] {
+    font-size: 12px;
   }
   .text-label-large-size {
     font-size: var(--text-label-large-size);
@@ -1456,6 +1471,12 @@
     color: color-mix(in srgb, #98959d 70%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
       color: color-mix(in oklab, var(--color-content-secondary) 70%, transparent);
+    }
+  }
+  .text-content-secondary\/80 {
+    color: color-mix(in srgb, #98959d 80%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      color: color-mix(in oklab, var(--color-content-secondary) 80%, transparent);
     }
   }
   .text-content-tertiary {
@@ -2258,6 +2279,11 @@
   .md\:text-right {
     @media (width >= 48rem) {
       text-align: right;
+    }
+  }
+  .lg\:grid-cols-7 {
+    @media (width >= 64rem) {
+      grid-template-columns: repeat(7, minmax(0, 1fr));
     }
   }
   .\[\&_svg\]\:pointer-events-none {

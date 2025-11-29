@@ -431,15 +431,17 @@ export default async function BarberEarningsPage({
                 key={appt.id}
                 className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3"
               >
-                <div className="grid w-full grid-cols-1 gap-2 md:grid-cols-5 md:items-center">
-                  {/* Cliente + serviço */}
+                <div className="grid w-full grid-cols-1 gap-2 md:grid-cols-6 md:items-center">
+                  {/* Cliente*/}
                   <div>
                     <span className="text-paragraph-medium text-content-primary font-medium">
                       {appt.clientName}
                     </span>
-                    <p className="text-paragraph-small text-content-secondary">
-                      {appt.description}
-                    </p>
+                  </div>
+
+                  {/* Serviço */}
+                  <div className="text-paragraph-medium text-content-primary md:text-center">
+                    {appt.description}
                   </div>
 
                   {/* Horário */}

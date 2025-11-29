@@ -40,11 +40,10 @@ export function DeleteExceptionButton({
   return (
     <Button
       type="button"
-      variant="ghost"
+      variant="destructive"
       size="icon"
       onClick={handleClick}
       disabled={isPending}
-      className="text-content-secondary hover:text-destructive"
       title="Remover exceção"
     >
       {isPending ? (
