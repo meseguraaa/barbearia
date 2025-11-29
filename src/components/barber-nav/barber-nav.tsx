@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, WalletCards } from "lucide-react";
+import { LayoutDashboard, WalletCards, CalendarCheck } from "lucide-react";
 
 type BarberLink = {
   href: string;
@@ -16,6 +16,11 @@ const barberLinks: BarberLink[] = [
     href: "/barber/dashboard",
     label: "Minha agenda",
     icon: LayoutDashboard,
+  },
+  {
+    href: "/barber/availability",
+    label: "Disponibilidade",
+    icon: CalendarCheck,
   },
   {
     href: "/barber/earnings",
@@ -39,10 +44,8 @@ export function BarberNav() {
             href={link.href}
             className={cn(
               "flex items-center justify-center gap-2 px-4 py-2 text-label-small transition-colors",
-              // estado padrão
               "text-content-secondary hover:bg-background-tertiary/50",
-              // ativo
-              isActive && " text-content-brand font-medium",
+              isActive && "text-content-brand font-medium",
             )}
           >
             <Icon

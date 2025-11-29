@@ -263,7 +263,10 @@ export default async function BarberDashboardPage({
             Veja os horários agendados para a data selecionada.
           </p>
         </div>
-        <DatePicker />
+
+        <div className="flex items-center gap-3">
+          <DatePicker />
+        </div>
       </header>
 
       {/* RESUMO DIÁRIO / MENSAL */}
@@ -309,12 +312,12 @@ export default async function BarberDashboardPage({
 
       {/* LISTA DE AGENDAMENTOS */}
       {appointments.length === 0 ? (
-        <p className="text-paragraph-small text-content-secondary">
+        <p className="text-paragraph-small text-content_secondary">
           Você não tem agendamentos para esta data.
         </p>
       ) : (
         <section className="space-y-3">
-          {appointments.map((appt, index) => {
+          {appointments.map((appt) => {
             const timeStr = appt.scheduleAt.toLocaleTimeString("pt-BR", {
               hour: "2-digit",
               minute: "2-digit",
@@ -395,7 +398,7 @@ export default async function BarberDashboardPage({
             return (
               <div
                 key={appt.id}
-                className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3"
+                className="rounded-xl border border-border_primary bg-background-tertiary px-4 py-3"
               >
                 {/* Layout: infos em grid + ações separadas */}
                 <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -403,18 +406,18 @@ export default async function BarberDashboardPage({
                   <div className="grid flex-1 grid-cols-1 gap-2 md:grid-cols-6 md:items-center">
                     {/* Nome */}
                     <div>
-                      <span className="text-paragraph-medium text-content-primary font-medium">
+                      <span className="text-paragraph-medium text-content_primary font-medium">
                         {appt.clientName}
                       </span>
                     </div>
 
                     {/* Telefone */}
-                    <div className="text-paragraph-medium text-content-primary">
+                    <div className="text-paragraph-medium text-content_primary">
                       {appt.phone}
                     </div>
 
                     {/* Descrição */}
-                    <div className="text-paragraph-medium text-content-primary">
+                    <div className="text-paragraph-medium text-content_primary">
                       {appt.description}
                     </div>
 
@@ -424,12 +427,12 @@ export default async function BarberDashboardPage({
                     </div>
 
                     {/* Log */}
-                    <div className="text-paragraph-small text-content-secondary md:text-center">
+                    <div className="text-paragraph-small text-content_secondary md:text-center">
                       {actionLog}
                     </div>
 
                     {/* Horário */}
-                    <div className="text-paragraph-medium text-content-primary md:text-center">
+                    <div className="text-paragraph-medium text-content_primary md:text-center">
                       {timeStr}
                     </div>
                   </div>

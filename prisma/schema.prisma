@@ -27,6 +27,14 @@ enum AppointmentStatus {
   CANCELED
 }
 
+// Tipo de disponibilidade diária do barbeiro
+// DAY_OFF  = folga nesse dia específico
+// CUSTOM   = horários customizados só para esse dia (override do padrão semanal)
+enum BarberDailyAvailabilityType {
+  DAY_OFF
+  CUSTOM
+}
+
 // ============
 // MODELS
 // ============
@@ -120,6 +128,12 @@ model Barber {
 
   // 🔗 relação com Appointment
   appointments Appointment[]
+
+  // 🔗 disponibilidade padrão semanal
+  weeklyAvailabilities BarberWeeklyAvailability[]
+
+  // 🔗 exceções de disponibilidade por dia
+  dailyAvailabilities BarberDailyAvailability[]
 
   @@map("barbers")
 }
@@ -216,4 +230,90 @@ model Product {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+// =======================
+// DISPONIBILIDADE DO BARBEIRO
+// =======================
+
+// Padrão semanal de disponibilidade do barbeiro
+// Ex.: segunda, terça, etc, com intervalos de horário
+model BarberWeeklyAvailability {
+  id String @id @default(cuid())
+
+  barberId String
+  barber   Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  /// 0 = domingo ... 6 = sábado
+  weekday Int
+
+  /// Se o barbeiro trabalha nesse dia da semana
+  isActive Boolean @default(true)
+
+  /// Intervalos de horário padrão nesse dia (ex.: 09:00–12:00, 13:00–18:00)
+  intervals BarberWeeklyTimeInterval[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Um registro por barbeiro + dia da semana
+  @@unique([barberId, weekday])
+  @@map("barber_weekly_availabilities")
+}
+
+// Intervalos de horário para o padrão semanal
+// Armazena "hora:minuto" como string (ex.: "09:00")
+model BarberWeeklyTimeInterval {
+  id String @id @default(cuid())
+
+  weeklyAvailabilityId String
+  weeklyAvailability   BarberWeeklyAvailability @relation(fields: [weeklyAvailabilityId], references: [id], onDelete: Cascade)
+
+  startTime String // "HH:mm"
+  endTime   String // "HH:mm"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("barber_weekly_time_intervals")
+}
+
+// Disponibilidade diária específica (exceções)
+// - DAY_OFF: folga nesse dia
+// - CUSTOM: horários customizados só para este dia
+model BarberDailyAvailability {
+  id String @id @default(cuid())
+
+  barberId String
+  barber   Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  /// Dia específico (data inteira; você trata como "yyyy-MM-dd" na aplicação)
+  date DateTime
+
+  type BarberDailyAvailabilityType
+
+  intervals BarberDailyTimeInterval[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Um registro por barbeiro + dia específico
+  @@unique([barberId, date])
+  @@map("barber_daily_availabilities")
+}
+
+// Intervalos de horário específicos para um dia (quando type = CUSTOM)
+model BarberDailyTimeInterval {
+  id String @id @default(cuid())
+
+  dailyAvailabilityId String
+  dailyAvailability   BarberDailyAvailability @relation(fields: [dailyAvailabilityId], references: [id], onDelete: Cascade)
+
+  startTime String // "HH:mm"
+  endTime   String // "HH:mm"
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("barber_daily_time_intervals")
 }

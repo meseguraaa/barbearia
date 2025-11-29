@@ -45,16 +45,33 @@ import { toast } from "sonner";
 import {
   createAppointment,
   updateAppointment,
+  getAvailabilityWindowsForBarberOnDateAction,
+  getAvailableBarbersForDateAction,
 } from "@/app/admin/dashboard/actions";
 import { ReactNode, useEffect, useState } from "react";
 import { Appointment } from "@/types/appointment";
-import { Barber } from "@/types/barber";
 import { getAvailableTimes } from "@/components/appointment-form/constants-and-utils";
 import {
   appointmentFormSchema,
   AppointFormValues,
 } from "@/components/appointment-form/schema";
 import { Service } from "@/types/service";
+
+// mesmo formato do util
+type AvailabilityWindow = {
+  startTime: string;
+  endTime: string;
+};
+
+// Tipo normalizado de barbeiro só para o formulário
+type AppointmentBarber = {
+  id: string;
+  name: string; // sempre string pra exibir direitinho
+  email: string;
+  phone: string;
+  isActive: boolean;
+  role: "BARBER";
+};
 
 type AppointmentFormProps = {
   appointment?: Appointment;
@@ -64,9 +81,9 @@ type AppointmentFormProps = {
    */
   appointments?: Appointment[];
   /**
-   * Lista de barbeiros ativos
+   * Lista de barbeiros ativos já normalizados
    */
-  barbers: Barber[];
+  barbers: AppointmentBarber[];
   /**
    * Lista de serviços ativos
    */
@@ -217,6 +234,7 @@ export const AppointmentForm = ({
   const selectedServiceId = form.watch("serviceId");
   const selectedDate = form.watch("scheduleAt");
   const selectedTime = form.watch("time");
+  const selectedBarberId = form.watch("barberId");
 
   const selectedServiceData = servicesList.find(
     (service) => service.id === selectedServiceId,
@@ -224,16 +242,134 @@ export const AppointmentForm = ({
 
   const selectedServiceName = selectedServiceData?.name ?? "";
 
+  // ===== NOVO: buscar barbeiros disponíveis para a data =====
+  const [availableBarbers, setAvailableBarbers] =
+    useState<AppointmentBarber[]>(barbers);
+  const [isLoadingBarbers, setIsLoadingBarbers] = useState(false);
+
+  useEffect(() => {
+    // sem data → lista padrão (todos ativos)
+    if (!selectedDate) {
+      setAvailableBarbers(barbers);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setIsLoadingBarbers(true);
+        const isoDate = selectedDate.toISOString();
+
+        let result = (await getAvailableBarbersForDateAction(
+          isoDate,
+        )) as AppointmentBarber[];
+
+        // Garantir que sempre seja array
+        result = Array.isArray(result) ? result : [];
+
+        // Se estamos editando e o barbeiro do agendamento não estiver na lista,
+        // adiciona ele pra não "sumir" da edição.
+        if (isEdit && appointment?.barberId) {
+          const existsInResult = result.some(
+            (b) => b.id === appointment.barberId,
+          );
+          if (!existsInResult) {
+            const apptBarber = barbers.find(
+              (b) => b.id === appointment.barberId,
+            );
+            if (apptBarber) {
+              result = [...result, apptBarber];
+            }
+          }
+        }
+
+        if (!cancelled) {
+          setAvailableBarbers(result);
+        }
+      } catch (error) {
+        console.error(
+          "AppointmentForm ▶ erro ao buscar barbeiros disponíveis na data",
+          error,
+        );
+        if (!cancelled) {
+          // fallback: mostra todos
+          setAvailableBarbers(barbers);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingBarbers(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, barbers, isEdit, appointment?.barberId]);
+
+  // ===== NOVO: buscar janelas de disponibilidade do barbeiro =====
+  const [availabilityWindows, setAvailabilityWindows] = useState<
+    AvailabilityWindow[] | undefined
+  >(undefined);
+
+  useEffect(() => {
+    // se não tem data ou barbeiro, não tem por que buscar
+    if (!selectedDate || !selectedBarberId) {
+      setAvailabilityWindows(undefined);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const iso = selectedDate.toISOString();
+        const windows = await getAvailabilityWindowsForBarberOnDateAction(
+          selectedBarberId,
+          iso,
+        );
+
+        if (!cancelled) {
+          // windows pode ser null, [] ou array de janelas
+          if (!windows) {
+            setAvailabilityWindows(undefined);
+          } else {
+            setAvailabilityWindows(windows as AvailabilityWindow[]);
+          }
+        }
+      } catch (error) {
+        console.error(
+          "AppointmentForm ▶ erro ao buscar disponibilidade do barbeiro",
+          error,
+        );
+        if (!cancelled) {
+          setAvailabilityWindows(undefined);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedDate, selectedBarberId]);
+
   // Protege contra qualquer erro em getAvailableTimes
   let availableTimes: string[] = [];
+
   try {
-    availableTimes =
-      getAvailableTimes({
-        date: selectedDate,
-        service: selectedServiceName,
-        appointments,
-        currentAppointmentId: appointment?.id,
-      }) ?? [];
+    if (selectedServiceId && selectedDate && selectedBarberId) {
+      availableTimes =
+        getAvailableTimes({
+          date: selectedDate,
+          service: selectedServiceName,
+          appointments,
+          currentAppointmentId: appointment?.id,
+          availabilityWindows,
+        }) ?? [];
+    } else {
+      availableTimes = [];
+    }
   } catch (error) {
     console.error("AppointmentForm ▶ erro em getAvailableTimes", {
       error,
@@ -389,132 +525,64 @@ export const AppointmentForm = ({
               )}
             />
 
-            {/* DATA & HORA (2º passo) */}
-            <div className="space-y-4 md:grid md:grid-cols-2 md:gap-4 md:space-y-0">
-              {/* DATA */}
-              <FormField
-                control={form.control}
-                name="scheduleAt"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel className="text-label-medium-size text-content-primary">
-                      Data
-                    </FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            disabled={!selectedServiceId}
-                            className={cn(
-                              "w-full justify-between text-left font-normal bg-background-tertiary border-border-primary text-content-primary hover:bg-background-tertiary hover:border-border-secondary hover:text-content-primary focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand focus:border-border-brand focus-visible:border-border-brand disabled:opacity-60 disabled:cursor-not-allowed",
-                              !field.value && "text-content-secondary",
-                            )}
-                          >
-                            <div className="flex items-center gap-2">
-                              <CalendarIcon
-                                className=" text-content-brand"
-                                size={20}
-                              />
-                              {field.value ? (
-                                format(field.value, "dd/MM/yyyy")
-                              ) : (
-                                <span>
-                                  {!selectedServiceId
-                                    ? "Selecione um serviço"
-                                    : "Selecione uma data"}
-                                </span>
-                              )}
-                            </div>
-                            <ChevronDownIcon className="opacity-50 h-4 w-4" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={(date) => {
-                            field.onChange(date ?? undefined);
-                            // Mudou data → limpa hora e barbeiro
-                            form.setValue("time", "");
-                            form.setValue("barberId", "");
-                          }}
-                          disabled={(date) =>
-                            !selectedServiceId || date < startOfToday()
-                          }
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </FormItem>
-                )}
-              />
-
-              {/* HORA */}
-              <FormField
-                control={form.control}
-                name="time"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="text-label-medium-size text-content-primary">
-                      Hora
-                    </FormLabel>
-                    <FormControl>
-                      <Select
-                        onValueChange={(value) => {
-                          field.onChange(value);
-                          // Mudou horário → limpa barbeiro
-                          form.setValue("barberId", "");
-                        }}
-                        value={field.value}
-                        disabled={!selectedServiceId || !selectedDate}
-                      >
-                        <SelectTrigger
-                          className="
-    w-full justify-between text-left font-normal
-    bg-background-tertiary border-border-primary text-content-primary
-    focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
-    focus:border-border-brand focus-visible:border-border-brand
-    disabled:opacity-60 disabled:cursor-not-allowed disabled:pointer-events-none
-  "
+            {/* DATA (2º passo) */}
+            <FormField
+              control={form.control}
+              name="scheduleAt"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel className="text-label-medium-size text-content-primary">
+                    Data
+                  </FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <FormControl>
+                        <Button
+                          variant="outline"
+                          disabled={!selectedServiceId}
+                          className={cn(
+                            "w-full justify-between text-left font-normal bg-background-tertiary border-border-primary text-content-primary hover:bg-background-tertiary hover:border-border-secondary hover:text-content-primary focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand focus:border-border-brand focus-visible:border-border-brand disabled:opacity-60 disabled:cursor-not-allowed",
+                            !field.value && "text-content-secondary",
+                          )}
                         >
                           <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-content-brand" />
-                            <SelectValue
-                              placeholder={
-                                !selectedServiceId
-                                  ? "Selecione um serviço"
-                                  : !selectedDate
-                                    ? "Selecione uma data"
-                                    : "Selecione um horário"
-                              }
+                            <CalendarIcon
+                              className=" text-content-brand"
+                              size={20}
                             />
+                            {field.value ? (
+                              format(field.value, "dd/MM/yyyy")
+                            ) : (
+                              <span>
+                                {!selectedServiceId
+                                  ? "Selecione um serviço"
+                                  : "Selecione uma data"}
+                              </span>
+                            )}
                           </div>
-                        </SelectTrigger>
-
-                        <SelectContent>
-                          {!selectedServiceId || !selectedDate ? (
-                            <SelectItem disabled value="no-selection">
-                              Selecione o serviço e a data
-                            </SelectItem>
-                          ) : availableTimes.length === 0 ? (
-                            <SelectItem disabled value="no-times">
-                              Sem horários disponíveis
-                            </SelectItem>
-                          ) : (
-                            availableTimes.map((time) => (
-                              <SelectItem key={time} value={time}>
-                                {time}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-            </div>
+                          <ChevronDownIcon className="opacity-50 h-4 w-4" />
+                        </Button>
+                      </FormControl>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={(date) => {
+                          field.onChange(date ?? undefined);
+                          // Mudou data → limpa hora e barbeiro
+                          form.setValue("time", "");
+                          form.setValue("barberId", "");
+                        }}
+                        disabled={(date) =>
+                          !selectedServiceId || date < startOfToday()
+                        }
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </FormItem>
+              )}
+            />
 
             {/* BARBEIRO (3º passo) */}
             <FormField
@@ -527,11 +595,13 @@ export const AppointmentForm = ({
                   </FormLabel>
                   <FormControl>
                     <Select
-                      onValueChange={field.onChange}
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        // Mudou barbeiro → limpa horário
+                        form.setValue("time", "");
+                      }}
                       value={field.value}
-                      disabled={
-                        !selectedServiceId || !selectedDate || !selectedTime
-                      }
+                      disabled={!selectedServiceId || !selectedDate}
                     >
                       <SelectTrigger
                         className="
@@ -548,9 +618,80 @@ export const AppointmentForm = ({
                             placeholder={
                               !selectedServiceId
                                 ? "Selecione um serviço"
-                                : !selectedDate || !selectedTime
-                                  ? "Selecione data e horário"
+                                : !selectedDate
+                                  ? "Selecione uma data"
                                   : "Selecione o barbeiro"
+                            }
+                          />
+                        </div>
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {!selectedServiceId || !selectedDate ? (
+                          <SelectItem disabled value="no-selection">
+                            Selecione o serviço e a data
+                          </SelectItem>
+                        ) : isLoadingBarbers ? (
+                          <SelectItem disabled value="loading-barbers">
+                            Carregando barbeiros disponíveis...
+                          </SelectItem>
+                        ) : availableBarbers.length === 0 ? (
+                          <SelectItem disabled value="no-barbers">
+                            Nenhum barbeiro disponível nessa data
+                          </SelectItem>
+                        ) : (
+                          availableBarbers.map((barber) => (
+                            <SelectItem key={barber.id} value={barber.id}>
+                              {barber.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {/* HORA (4º passo) */}
+            <FormField
+              control={form.control}
+              name="time"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="text-label-medium-size text-content-primary">
+                    Hora
+                  </FormLabel>
+                  <FormControl>
+                    <Select
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                      }}
+                      value={field.value}
+                      disabled={
+                        !selectedServiceId || !selectedDate || !selectedBarberId
+                      }
+                    >
+                      <SelectTrigger
+                        className="
+    w-full justify-between text-left font-normal
+    bg-background-tertiary border-border-primary text-content-primary
+    focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
+    focus:border-border-brand focus-visible:border-border-brand
+    disabled:opacity-60 disabled:cursor-not-allowed disabled:pointer-events-none
+  "
+                      >
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-content-brand" />
+                          <SelectValue
+                            placeholder={
+                              !selectedServiceId
+                                ? "Selecione um serviço"
+                                : !selectedDate
+                                  ? "Selecione uma data"
+                                  : !selectedBarberId
+                                    ? "Selecione o barbeiro"
+                                    : "Selecione um horário"
                             }
                           />
                         </div>
@@ -559,14 +700,18 @@ export const AppointmentForm = ({
                       <SelectContent>
                         {!selectedServiceId ||
                         !selectedDate ||
-                        !selectedTime ? (
+                        !selectedBarberId ? (
                           <SelectItem disabled value="no-selection">
-                            Selecione o serviço, data e horário
+                            Selecione o serviço, a data e o barbeiro
+                          </SelectItem>
+                        ) : availableTimes.length === 0 ? (
+                          <SelectItem disabled value="no-times">
+                            Sem horários disponíveis
                           </SelectItem>
                         ) : (
-                          barbers.map((barber) => (
-                            <SelectItem key={barber.id} value={barber.id}>
-                              {barber.name}
+                          availableTimes.map((time) => (
+                            <SelectItem key={time} value={time}>
+                              {time}
                             </SelectItem>
                           ))
                         )}
