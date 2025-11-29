@@ -60,6 +60,14 @@ const generateTimeOptions = (): string[] => {
 export const TIME_OPTIONS = generateTimeOptions();
 
 /**
+ * Janela de disponibilidade (HH:mm)
+ */
+export type AvailabilityWindow = {
+  startTime: string; // "09:00"
+  endTime: string; // "18:00"
+};
+
+/**
  * Calcula horários disponíveis
  */
 export const getAvailableTimes = (params: {
@@ -67,14 +75,33 @@ export const getAvailableTimes = (params: {
   service?: string;
   appointments: Appointment[];
   currentAppointmentId?: string;
+  /**
+   * Janelas de disponibilidade para esse dia.
+   *
+   * - undefined  -> usa o comportamento padrão (09:00–21:00)
+   * - []         -> dia sem disponibilidade (retorna [])
+   * - [{...},..] -> restringe os horários para caber dentro de pelo menos uma janela
+   */
+  availabilityWindows?: AvailabilityWindow[];
 }): string[] => {
-  const { date, service, appointments, currentAppointmentId } = params;
+  const {
+    date,
+    service,
+    appointments,
+    currentAppointmentId,
+    availabilityWindows,
+  } = params;
 
   if (!date || !service) return [];
 
   const now = new Date();
-
   const selectedDuration = getServiceDuration(service);
+
+  // Se foi passado availabilityWindows, mas veio array vazio, significa:
+  // "esse dia não tem disponibilidade"
+  if (availabilityWindows && availabilityWindows.length === 0) {
+    return [];
+  }
 
   let baseTimes = [...TIME_OPTIONS];
 
@@ -89,6 +116,28 @@ export const getAvailableTimes = (params: {
       const timeMinutes = hour * 60 + minute;
 
       return timeMinutes > currentMinutes;
+    });
+  }
+
+  // Se existirem janelas de disponibilidade, restringe os horários para caber nelas
+  if (availabilityWindows && availabilityWindows.length > 0) {
+    baseTimes = baseTimes.filter((time) => {
+      const [hourStr, minuteStr] = time.split(":");
+      const hour = Number(hourStr);
+      const minute = Number(minuteStr);
+      const candidateStart = hour * 60 + minute;
+      const candidateEnd = candidateStart + selectedDuration;
+
+      // horário é válido se couber totalmente em pelo menos uma janela
+      return availabilityWindows.some((window) => {
+        const [startHourStr, startMinuteStr] = window.startTime.split(":");
+        const [endHourStr, endMinuteStr] = window.endTime.split(":");
+
+        const windowStart = Number(startHourStr) * 60 + Number(startMinuteStr);
+        const windowEnd = Number(endHourStr) * 60 + Number(endMinuteStr);
+
+        return candidateStart >= windowStart && candidateEnd <= windowEnd;
+      });
     });
   }
 

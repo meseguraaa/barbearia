@@ -3,6 +3,10 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import z from "zod";
+import {
+  getAvailabilityWindowsForBarberOnDate,
+  getAvailableBarbersOnDate,
+} from "@/utills/barber-availability";
 
 /* ---------------------------------------------------------
  * Schema
@@ -330,4 +334,40 @@ export async function deleteAppointment(id: string) {
       where: { id },
     });
   }, "Falha ao excluir o agendamento");
+}
+
+/* ---------------------------------------------------------
+ * DISPONIBILIDADE DO BARBEIRO
+ * ---------------------------------------------------------*/
+export async function getAvailabilityWindowsForBarberOnDateAction(
+  barberId: string,
+  dateISO: string,
+) {
+  const date = new Date(dateISO);
+  const windows = await getAvailabilityWindowsForBarberOnDate(barberId, date);
+  return windows ?? null; // null pra ficar mais amigável na serialização pro client
+}
+
+/* ---------------------------------------------------------
+ * BARBEIROS DISPONÍVEIS PARA UMA DATA
+ * ---------------------------------------------------------*/
+export async function getAvailableBarbersForDateAction(dateISO: string) {
+  const date = new Date(dateISO);
+
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(
+      "Data inválida recebida em getAvailableBarbersForDateAction",
+    );
+  }
+
+  const barbers = await getAvailableBarbersOnDate(date);
+
+  return barbers.map((b) => ({
+    id: b.id,
+    name: b.name,
+    email: b.email,
+    phone: b.phone ?? "",
+    isActive: b.isActive,
+    role: "BARBER" as const,
+  }));
 }
