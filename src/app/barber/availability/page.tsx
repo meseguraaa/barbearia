@@ -67,13 +67,13 @@ export const metadata: Metadata = {
 // helper para criar o default (segunda–sábado ON, domingo OFF)
 function createDefaultWeeklyState(): WeeklyAvailabilityState {
   return {
-    0: { active: false, startTime: "09:00", endTime: "18:00" }, // domingo
-    1: { active: true, startTime: "09:00", endTime: "18:00" }, // segunda
-    2: { active: true, startTime: "09:00", endTime: "18:00" }, // terça
-    3: { active: true, startTime: "09:00", endTime: "18:00" }, // quarta
-    4: { active: true, startTime: "09:00", endTime: "18:00" }, // quinta
-    5: { active: true, startTime: "09:00", endTime: "18:00" }, // sexta
-    6: { active: true, startTime: "09:00", endTime: "18:00" }, // sábado
+    0: { active: false, startTime: "09:00", endTime: "21:00" }, // domingo
+    1: { active: true, startTime: "10:00", endTime: "19:00" }, // segunda
+    2: { active: true, startTime: "10:00", endTime: "19:00" }, // terça
+    3: { active: true, startTime: "10:00", endTime: "19:00" }, // quarta
+    4: { active: true, startTime: "10:00", endTime: "19:00" }, // quinta
+    5: { active: true, startTime: "10:00", endTime: "19:00" }, // sexta
+    6: { active: true, startTime: "09:00", endTime: "21:00" }, // sábado
   };
 }
 
@@ -132,15 +132,6 @@ export default async function BarberAvailabilityPage() {
       <section className="space-y-6">
         {/* PADRÃO SEMANAL */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-4 space-y-3">
-          <div>
-            <h2 className="text-paragraph-large-size text-content-primary font-semibold">
-              Padrão semanal
-            </h2>
-            <p className="text-paragraph-small-size text-content-secondary">
-              Configure como normalmente funciona sua semana de trabalho.
-            </p>
-          </div>
-
           <WeeklyAvailabilityForm initialValue={initialState} />
         </div>
 

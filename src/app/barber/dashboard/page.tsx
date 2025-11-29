@@ -9,9 +9,7 @@ import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
 import { DatePicker } from "@/components/date-picker";
 import { AppointmentActions } from "@/components/appointment-actions";
 import { AppointmentForm } from "@/components/appointment-form";
-import { Button } from "@/components/ui/button";
 import type { Appointment as AppointmentType } from "@/types/appointment";
-import type { Barber as BarberType } from "@/types/barber";
 import type { Service } from "@/types/service";
 
 const SESSION_COOKIE_NAME = "painel_session";
@@ -215,14 +213,15 @@ export default async function BarberDashboardPage({
     appointments.map(mapToAppointmentType);
 
   // barbers para o form (aqui só o barbeiro logado)
-  const barbersForForm: BarberType[] = [
+  // garantimos que name nunca seja null para bater com o tipo esperado em AppointmentForm
+  const barbersForForm = [
     {
       id: barber.id,
-      name: barber.name,
+      name: barber.name ?? "Barbeiro",
       email: barber.email,
       phone: barber.phone ?? "",
       isActive: barber.isActive ?? true,
-      role: "BARBER",
+      role: "BARBER" as const,
     },
   ];
 
@@ -398,9 +397,9 @@ export default async function BarberDashboardPage({
             return (
               <div
                 key={appt.id}
-                className="rounded-xl border border-border_primary bg-background-tertiary px-4 py-3"
+                className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3"
               >
-                {/* Layout: infos em grid + ações separadas */}
+                {/* Layout: infos em grid + ações separadas, tudo em uma linha no desktop */}
                 <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   {/* Infos do agendamento */}
                   <div className="grid flex-1 grid-cols-1 gap-2 md:grid-cols-6 md:items-center">
@@ -457,7 +456,7 @@ export default async function BarberDashboardPage({
                           phone={appt.phone}
                           description={appt.description}
                           scheduleAt={appt.scheduleAt}
-                          barberName={barber.name}
+                          barberName={barber.name ?? "Barbeiro"}
                           servicePrice={servicePriceNumber}
                           cancelFeePercentage={
                             appt.service?.cancelFeePercentage

@@ -67,7 +67,7 @@ export function DailyExceptionModal({ barberId }: DailyExceptionModalProps) {
     {
       id: "1",
       startTime: "09:00",
-      endTime: "18:00",
+      endTime: "19:00",
     },
   ]);
 
@@ -80,7 +80,7 @@ export function DailyExceptionModal({ barberId }: DailyExceptionModalProps) {
       {
         id: "1",
         startTime: "09:00",
-        endTime: "18:00",
+        endTime: "19:00",
       },
     ]);
   }

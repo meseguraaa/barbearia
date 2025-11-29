@@ -1,18 +1,25 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { saveWeeklyAvailability } from "@/app/barber/availability/actions";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Clock } from "lucide-react";
 
 type DayKey = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = domingo ... 6 = sábado
 
 type DayState = {
   active: boolean;
   startTime: string; // "09:00"
-  endTime: string; // "18:00"
+  endTime: string; // "19:00"
 };
 
 export type WeeklyAvailabilityState = Record<DayKey, DayState>;
@@ -25,7 +32,7 @@ type WeeklyAvailabilityFormProps = {
 const defaultDayState: DayState = {
   active: false,
   startTime: "09:00",
-  endTime: "18:00",
+  endTime: "19:00",
 };
 
 const WEEK_DAYS: { key: DayKey; label: string; short: string }[] = [
@@ -50,6 +57,21 @@ function createDefaultState(): WeeklyAvailabilityState {
     6: { ...defaultDayState, active: true }, // sábado ON
   };
 }
+
+// Mesmo padrão da agenda: 09:00 até 21:00, de 30 em 30
+const TIME_OPTIONS = (() => {
+  const times: string[] = [];
+  for (let hour = 9; hour <= 21; hour++) {
+    for (let minute = 0; minute < 60; minute += 30) {
+      if (hour === 21 && minute > 0) break;
+      const timeString = `${hour.toString().padStart(2, "0")}:${minute
+        .toString()
+        .padStart(2, "0")}`;
+      times.push(timeString);
+    }
+  }
+  return times;
+})();
 
 export function WeeklyAvailabilityForm({
   initialValue,
@@ -84,33 +106,13 @@ export function WeeklyAvailabilityForm({
     }));
   };
 
-  const handleCopyMondayToWeekdays = () => {
-    const monday = state[1];
-    setState((prev) => {
-      const next = { ...prev };
-      [2, 3, 4, 5].forEach((d) => {
-        next[d as DayKey] = {
-          ...next[d as DayKey],
-          active: monday.active,
-          startTime: monday.startTime,
-          endTime: monday.endTime,
-        };
-      });
-      return next;
-    });
-  };
-
-  const handleResetWeek = () => {
-    setState(createDefaultState());
-  };
-
-  // Verifica se há algum erro de horário em dias ativos
-  const hasAnyError = Object.entries(state).some(([_, dayState]) => {
-    const d = dayState as DayState;
-    return d.active && d.startTime && d.endTime && d.startTime >= d.endTime;
-  });
-
   const handleSave = () => {
+    // Verifica se há algum erro de horário em dias ativos
+    const hasAnyError = Object.entries(state).some(([_, dayState]) => {
+      const d = dayState as DayState;
+      return d.active && d.startTime && d.endTime && d.startTime >= d.endTime;
+    });
+
     if (hasAnyError) {
       toast.error(
         "Verifique os horários: em dias ativos, o horário inicial deve ser menor que o final.",
@@ -140,33 +142,16 @@ export function WeeklyAvailabilityForm({
     });
   };
 
+  // recomputa erro global só pra desabilitar botão
+  const hasAnyError = Object.entries(state).some(([_, dayState]) => {
+    const d = dayState as DayState;
+    return d.active && d.startTime && d.endTime && d.startTime >= d.endTime;
+  });
+
   return (
     <div className="space-y-4">
-      {/* Ações rápidas + Salvar */}
+      {/* Botão salvar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={handleCopyMondayToWeekdays}
-            disabled={isPending}
-          >
-            Copiar segunda para dias úteis
-          </Button>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive hover:bg-destructive/5"
-            onClick={handleResetWeek}
-            disabled={isPending}
-          >
-            Zerar semana
-          </Button>
-        </div>
-
         <Button
           type="button"
           variant="brand"
@@ -178,101 +163,128 @@ export function WeeklyAvailabilityForm({
         </Button>
       </div>
 
-      {/* Tabela de dias */}
-      <div className="overflow-hidden rounded-xl border border-border-primary bg-background-tertiary">
-        <div className="grid grid-cols-[1.5fr,auto,1fr,1fr] gap-3 border-b border-border-secondary px-4 py-2 text-label-small text-content-secondary">
-          <span>Dia</span>
-          <span className="text-center">Trabalha?</span>
-          <span>Das</span>
-          <span>Até</span>
-        </div>
+      {/* Dias em grid (lado a lado) */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
+        {WEEK_DAYS.map((day) => {
+          const dayState = state[day.key];
 
-        <div className="divide-y divide-border-secondary">
-          {WEEK_DAYS.map((day) => {
-            const dayState = state[day.key];
+          const hasError =
+            dayState.active &&
+            dayState.startTime &&
+            dayState.endTime &&
+            dayState.startTime >= dayState.endTime;
 
-            const hasError =
-              dayState.active &&
-              dayState.startTime &&
-              dayState.endTime &&
-              dayState.startTime >= dayState.endTime;
-
-            return (
-              <div
-                key={day.key}
-                className="grid grid-cols-[1.5fr,auto,1fr,1fr] items-center gap-3 px-4 py-3 text-paragraph-small-size"
-              >
-                {/* Dia */}
+          return (
+            <div
+              key={day.key}
+              className={cn(
+                "flex flex-col rounded-xl border px-3 py-3 text-paragraph-small-size transition-colors",
+                dayState.active
+                  ? "border-border-brand bg-background-tertiary/80"
+                  : "border-border-secondary bg-background-tertiary",
+              )}
+            >
+              {/* Cabeçalho do dia */}
+              <div className="mb-2 flex items-center justify-between gap-2">
                 <div className="flex flex-col">
                   <span className="text-content-primary font-medium">
-                    {day.label}
-                  </span>
-                  <span className="text-content-secondary text-[11px] uppercase tracking-wide">
                     {day.short}
                   </span>
+                  <span className="text-[11px] text-content-primary">
+                    {day.label}
+                  </span>
                 </div>
 
-                {/* Toggle trabalha? */}
-                <div className="flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => handleToggleDay(day.key)}
-                    disabled={isPending}
-                    className={cn(
-                      "inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
-                      dayState.active
-                        ? "bg-background-brand text-content-on-brand"
-                        : "bg-background-primary text-content-secondary border border-border-secondary",
-                      isPending && "opacity-60 cursor-not-allowed",
-                    )}
-                  >
-                    {dayState.active ? "Sim" : "Não"}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => handleToggleDay(day.key)}
+                  disabled={isPending}
+                  className={cn(
+                    "inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
+                    dayState.active
+                      ? "bg-background-brand text-content-on-brand"
+                      : "bg-background-primary text-content-secondary border border-border-secondary",
+                    isPending && "opacity-60 cursor-not-allowed",
+                  )}
+                >
+                  {dayState.active ? "Sim" : "Não"}
+                </button>
+              </div>
 
+              {/* Inputs de horário (dropdowns) */}
+              <div className="mt-auto space-y-2">
                 {/* Das */}
-                <div>
-                  <Input
-                    type="time"
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] text-content-primary">Das</span>
+                  <Select
                     value={dayState.startTime}
-                    onChange={(e) =>
-                      handleTimeChange(day.key, "startTime", e.target.value)
+                    onValueChange={(value) =>
+                      handleTimeChange(day.key, "startTime", value)
                     }
                     disabled={!dayState.active || isPending}
-                    className={cn(
-                      "h-9",
-                      hasError &&
-                        "border-destructive focus-visible:ring-destructive/40",
-                    )}
-                  />
+                  >
+                    <SelectTrigger
+                      className={cn(
+                        "h-9 w-full justify-between text-left font-normal bg-background-tertiary border-border-primary text-content-primary focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand focus:border-border-brand focus-visible:border-border-brand",
+                        hasError &&
+                          "border-destructive focus-visible:ring-destructive/40",
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-content-brand" />
+                        <SelectValue placeholder="Horário inicial" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIME_OPTIONS.map((time) => (
+                        <SelectItem key={time} value={time}>
+                          {time}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {/* Até */}
-                <div>
-                  <Input
-                    type="time"
+                <div className="flex flex-col gap-1">
+                  <span className="text-[11px] text-content-primary">Até</span>
+                  <Select
                     value={dayState.endTime}
-                    onChange={(e) =>
-                      handleTimeChange(day.key, "endTime", e.target.value)
+                    onValueChange={(value) =>
+                      handleTimeChange(day.key, "endTime", value)
                     }
                     disabled={!dayState.active || isPending}
-                    className={cn(
-                      "h-9",
-                      hasError &&
-                        "border-destructive focus-visible:ring-destructive/40",
-                    )}
-                  />
+                  >
+                    <SelectTrigger
+                      className={cn(
+                        "h-9 w-full justify-between text-left font-normal bg-background-tertiary border-border-primary text-content-primary focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand focus:border-border-brand focus-visible:border-border-brand",
+                        hasError &&
+                          "border-destructive focus-visible:ring-destructive/40",
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-content-brand" />
+                        <SelectValue placeholder="Horário final" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {TIME_OPTIONS.map((time) => (
+                        <SelectItem key={time} value={time}>
+                          {time}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
 
       <p className="text-[11px] text-content-secondary">
-        Dica: marque apenas os dias em que você trabalha e ajuste os horários.
-        Em breve você poderá criar exceções para dias específicos (folgas,
-        eventos, etc.).
+        Marque apenas os dias em que você trabalha e ajuste os horários. As
+        exceções por dia (folgas, eventos, etc.) são configuradas logo abaixo.
       </p>
     </div>
   );
