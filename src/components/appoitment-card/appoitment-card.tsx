@@ -68,6 +68,17 @@ export const AppointmentCard = ({
     setIsDeleting(false);
   };
 
+  // Converte Barber[] em objetos compatíveis com o AppointmentForm,
+  // garantindo name e phone como string (sem null/undefined)
+  const barbersForForm = barbers.map((barber) => ({
+    id: barber.id,
+    name: barber.name ?? "Barbeiro",
+    email: barber.email,
+    phone: barber.phone ?? "",
+    isActive: barber.isActive ?? true,
+    role: "BARBER" as const,
+  }));
+
   return (
     <div
       className={cn(
@@ -109,7 +120,7 @@ export const AppointmentCard = ({
         <AppointmentForm
           appointment={appointment}
           appointments={appointments}
-          barbers={barbers}
+          barbers={barbersForForm}
           services={services}
         >
           <Button variant="edit" size="icon">
