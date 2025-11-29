@@ -14,7 +14,6 @@ import { DatePicker } from "@/components/date-picker";
 import { AppointmentForm } from "@/components/appointment-form";
 import { Button } from "@/components/ui/button";
 import type { Appointment as AppointmentType } from "@/types/appointment";
-import type { Barber } from "@/types/barber";
 import type { Service } from "@/types/service";
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
 
@@ -89,7 +88,8 @@ async function getAppointments(dateParam?: string) {
   return appointments;
 }
 
-async function getBarbers(): Promise<Barber[]> {
+// Busca barbeiros ativos direto do Prisma
+async function getBarbers() {
   const barbers = await prisma.barber.findMany({
     where: {
       isActive: true,
@@ -99,14 +99,7 @@ async function getBarbers(): Promise<Barber[]> {
     },
   });
 
-  return barbers.map((barber) => ({
-    id: barber.id,
-    name: barber.name,
-    email: barber.email,
-    phone: barber.phone,
-    isActive: barber.isActive,
-    role: "BARBER",
-  }));
+  return barbers;
 }
 
 // 🔧 transforma Decimal em number
@@ -172,7 +165,7 @@ export default async function AdminDashboardPage({
 
   const [
     appointmentsPrisma,
-    barbers,
+    barbersPrisma,
     monthAppointmentsPrisma,
     services,
     monthCanceledAppointmentsPrisma,
@@ -211,6 +204,16 @@ export default async function AdminDashboardPage({
 
   const appointmentsForForm: AppointmentType[] =
     appointmentsPrisma.map(mapToAppointmentType);
+
+  // 👉 lista de barbeiros normalizada para o AppointmentForm
+  const barbersForForm = barbersPrisma.map((barber) => ({
+    id: barber.id,
+    name: barber.name, // aqui já é string (no schema é obrigatório)
+    email: barber.email,
+    phone: barber.phone ?? "",
+    isActive: barber.isActive,
+    role: "BARBER" as const,
+  }));
 
   type AppointmentWithBarberPrisma = (typeof appointmentsPrisma)[number];
 
@@ -719,7 +722,7 @@ export default async function AdminDashboardPage({
                                 <AppointmentForm
                                   appointment={safeApptForForm}
                                   appointments={appointmentsForForm}
-                                  barbers={barbers}
+                                  barbers={barbersForForm}
                                   services={services}
                                 />
 

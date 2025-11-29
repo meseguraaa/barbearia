@@ -1,7 +1,6 @@
 {
-  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
   "/page": "app/page.js",
   "/barber/availability/page": "app/barber/availability/page.js",
-  "/barber/earnings/page": "app/barber/earnings/page.js",
-  "/barber/dashboard/page": "app/barber/dashboard/page.js"
+  "/barber/dashboard/page": "app/barber/dashboard/page.js",
+  "/barber/earnings/page": "app/barber/earnings/page.js"
 }
