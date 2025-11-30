@@ -35,6 +35,14 @@ enum BarberDailyAvailabilityType {
   CUSTOM
 }
 
+enum ExpenseCategory {
+  RENT // Aluguel
+  UTILITIES // Luz, água, internet, etc
+  TAXES // Impostos
+  SUPPLIES // Suprimentos / compras
+  OTHER // Outros
+}
+
 // ============
 // MODELS
 // ============
@@ -230,6 +238,22 @@ model Product {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model Expense {
+  id          String          @id @default(cuid())
+  description String
+  category    ExpenseCategory
+  amount      Decimal         @db.Decimal(10, 2)
+  dueDate     DateTime // data de vencimento (usada para saber o mês)
+  isRecurring Boolean         @default(false) // se é uma conta fixa mês a mês
+  isPaid      Boolean         @default(false) // se já foi paga ou não
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([dueDate])
+  @@map("expenses")
 }
 
 // =======================

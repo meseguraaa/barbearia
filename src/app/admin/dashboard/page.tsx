@@ -12,7 +12,6 @@ import type { Metadata } from "next";
 import { AppointmentActions } from "@/components/appointment-actions";
 import { DatePicker } from "@/components/date-picker";
 import { AppointmentForm } from "@/components/appointment-form";
-import { Button } from "@/components/ui/button";
 import type { Appointment as AppointmentType } from "@/types/appointment";
 import type { Service } from "@/types/service";
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
@@ -170,6 +169,7 @@ export default async function AdminDashboardPage({
     services,
     monthCanceledAppointmentsPrisma,
     products,
+    monthExpensesPrisma,
   ] = await Promise.all([
     getAppointments(dateParam),
     getBarbers(),
@@ -200,6 +200,14 @@ export default async function AdminDashboardPage({
         isActive: true,
       },
     }),
+    prisma.expense.findMany({
+      where: {
+        dueDate: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+      },
+    }),
   ]);
 
   const appointmentsForForm: AppointmentType[] =
@@ -208,7 +216,7 @@ export default async function AdminDashboardPage({
   // 👉 lista de barbeiros normalizada para o AppointmentForm
   const barbersForForm = barbersPrisma.map((barber) => ({
     id: barber.id,
-    name: barber.name, // aqui já é string (no schema é obrigatório)
+    name: barber.name,
     email: barber.email,
     phone: barber.phone ?? "",
     isActive: barber.isActive,
@@ -278,7 +286,7 @@ export default async function AdminDashboardPage({
   }, 0);
   const totalCanceledWithFeeDay = canceledWithFeeDay.length;
 
-  // ====== FINANCEIRO GERAL DO MÊS ======
+  // ====== FINANCEIRO GERAL DO MÊS (sem despesas fixas) ======
   const { totalGrossMonth, totalCommissionMonth, totalNetMonth } =
     monthAppointmentsPrisma.reduce(
       (acc, appt) => {
@@ -324,6 +332,14 @@ export default async function AdminDashboardPage({
     return acc + fee;
   }, 0);
   const totalCanceledWithFeeMonth = canceledWithFeeMonth.length;
+
+  // ====== DESPESAS DO MÊS (Financeiro) ======
+  const totalExpensesMonth = monthExpensesPrisma.reduce((acc, expense) => {
+    return acc + Number(expense.amount);
+  }, 0);
+
+  // 🔹 Lucro real: líquido do mês (após comissão) - despesas do mês
+  const realNetMonth = totalNetMonth - totalExpensesMonth;
 
   // ====== PRODUTOS ATIVOS (quantidade + soma dos preços) ======
   const totalActiveProducts = products.length;
@@ -456,6 +472,7 @@ export default async function AdminDashboardPage({
 
       {/* RESUMO FINANCEIRO DO MÊS + ATENDIMENTOS + PRODUTOS */}
       <section className="grid gap-4 md:grid-cols-4">
+        {/* 1. Bruto mês */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
             Valor bruto (mês)
@@ -465,15 +482,50 @@ export default async function AdminDashboardPage({
           </p>
         </div>
 
+        {/* 2. Líquido mês (após comissão, SEM despesas fixas) */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
-            Valor líquido (mês)
+            Valor líquido (mês - sem despesas)
           </p>
           <p className="text-title text-content-primary">
             {currencyFormatter.format(totalNetMonth)}
           </p>
+          <p className="text-paragraph-small text-content-secondary">
+            Receita após pagar comissão dos barbeiros.
+          </p>
         </div>
 
+        {/* 3. Despesas do mês (Financeiro) */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
+          <p className="text-label-small text-content-secondary">
+            Despesas (mês)
+          </p>
+          <p className="text-title text-content-primary">
+            {currencyFormatter.format(totalExpensesMonth)}
+          </p>
+          <p className="text-paragraph-small text-content-secondary">
+            Soma das despesas cadastradas no módulo Financeiro.
+          </p>
+        </div>
+
+        {/* 4. Lucro real do mês */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
+          <p className="text-label-small text-content-secondary">
+            Lucro real (mês)
+          </p>
+          <p
+            className={`text-title ${
+              realNetMonth >= 0 ? "text-green-500" : "text-red-600"
+            }`}
+          >
+            {currencyFormatter.format(realNetMonth)}
+          </p>
+          <p className="text-paragraph-small text-content-secondary">
+            Valor líquido do mês menos as despesas fixas.
+          </p>
+        </div>
+
+        {/* 5. Atendimentos */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3">
           <p className="text-label-small text-content-secondary">
             Atendimentos
@@ -518,6 +570,7 @@ export default async function AdminDashboardPage({
           </div>
         </div>
 
+        {/* 6. Cancelamentos com taxa */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3">
           <p className="text-label-small text-content-secondary">
             Cancelamentos com taxa
@@ -534,7 +587,7 @@ export default async function AdminDashboardPage({
           </div>
         </div>
 
-        {/* PRODUTOS ATIVOS */}
+        {/* 7. Produtos ativos */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-2">
           <p className="text-label-small text-content-secondary">
             Produtos ativos
@@ -634,7 +687,6 @@ export default async function AdminDashboardPage({
                         (appt.status as AppointmentType["status"]) ?? "PENDING";
                       const isPending = normalizedStatus === "PENDING";
 
-                      // garante que se por algum motivo não encontrar, não quebre
                       const safeApptForForm = apptForForm ?? {
                         id: appt.id,
                         clientName: appt.clientName,
@@ -718,7 +770,6 @@ export default async function AdminDashboardPage({
                           <td className="px-4 py-3">
                             {isPending && (
                               <div className="flex justify-end gap-2">
-                                {/* EDITAR – só aparece enquanto PENDENTE */}
                                 <AppointmentForm
                                   appointment={safeApptForForm}
                                   appointments={appointmentsForForm}
@@ -726,7 +777,6 @@ export default async function AdminDashboardPage({
                                   services={services}
                                 />
 
-                                {/* AÇÕES – só aparece enquanto PENDENTE */}
                                 <AppointmentActions
                                   appointmentId={appt.id}
                                   status={normalizedStatus}
