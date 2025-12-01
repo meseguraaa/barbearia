@@ -1,11 +1,13 @@
 "use client";
 
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useSession, signIn } from "next-auth/react";
+
 import { loginPainel } from "./actions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Chrome } from "lucide-react";
-import { signIn } from "next-auth/react";
 
 type ErrorType = "credenciais" | "desconhecido" | "permissao" | undefined;
 
@@ -14,6 +16,27 @@ export function PainelLoginPageComponent({
 }: {
   errorType?: ErrorType;
 }) {
+  const router = useRouter();
+  const { data: session, status } = useSession();
+
+  // Se já estiver logado, redireciona conforme o role
+  useEffect(() => {
+    if (status !== "authenticated" || !session?.user) return;
+
+    const role = (session.user as any).role;
+
+    if (role === "ADMIN") {
+      router.replace("/admin/dashboard");
+    } else if (role === "BARBER") {
+      router.replace("/painel");
+    } else if (role === "CLIENT") {
+      router.replace("/client/schedule");
+    } else {
+      // fallback genérico
+      router.replace("/");
+    }
+  }, [status, session, router]);
+
   let errorMessage: string | null = null;
 
   if (errorType === "credenciais") {
@@ -40,7 +63,7 @@ export function PainelLoginPageComponent({
           </div>
         )}
 
-        {/* Formulário – login do painel */}
+        {/* Formulário – login do painel (ADMIN / BARBER) */}
         <form action={loginPainel} className="space-y-5">
           <div className="space-y-2">
             <Label
@@ -89,7 +112,7 @@ export function PainelLoginPageComponent({
           <div className="h-px flex-1 bg-border-primary" />
         </div>
 
-        {/* Login social (Google + Facebook na 1ª linha, Apple na 2ª) */}
+        {/* Login social (CLIENT) */}
         <div className="grid grid-cols-2 gap-3">
           {/* GOOGLE */}
           <Button
@@ -103,7 +126,7 @@ export function PainelLoginPageComponent({
             "
             onClick={() =>
               signIn("google", {
-                callbackUrl: "/",
+                callbackUrl: "/client/schedule",
               })
             }
           >
@@ -145,7 +168,7 @@ export function PainelLoginPageComponent({
             "
             onClick={() =>
               signIn("facebook", {
-                callbackUrl: "/",
+                callbackUrl: "/client/schedule",
               })
             }
           >
@@ -160,7 +183,7 @@ export function PainelLoginPageComponent({
             Facebook
           </Button>
 
-          {/* APPLE */}
+          {/* APPLE (se for usar) */}
           <Button
             type="button"
             variant="outline"
@@ -172,7 +195,7 @@ export function PainelLoginPageComponent({
             "
             onClick={() =>
               signIn("apple", {
-                callbackUrl: "/",
+                callbackUrl: "/client/schedule",
               })
             }
           >
