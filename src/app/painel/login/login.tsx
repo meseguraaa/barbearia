@@ -40,7 +40,7 @@ export function PainelLoginPageComponent({
           </div>
         )}
 
-        {/* Formulário – login do painel (ADMIN / BARBER) */}
+        {/* Formulário – login do painel */}
         <form action={loginPainel} className="space-y-5">
           <div className="space-y-2">
             <Label
@@ -89,24 +89,25 @@ export function PainelLoginPageComponent({
           <div className="h-px flex-1 bg-border-primary" />
         </div>
 
-        {/* Login social (Google + Apple lado a lado) */}
+        {/* Login social (Google + Facebook na 1ª linha, Apple na 2ª) */}
         <div className="grid grid-cols-2 gap-3">
           {/* GOOGLE */}
           <Button
             type="button"
             variant="outline"
             className="
-      w-full flex items-center justify-center gap-2
-      bg-white text-black border border-border-primary
-      hover:bg-zinc-100
-      h-11 rounded-lg shadow-sm
-    "
+              w-full flex items-center justify-center gap-2
+              bg-white text-black border border-border-primary
+              hover:bg-zinc-100
+              h-11 rounded-lg shadow-sm
+            "
             onClick={() =>
               signIn("google", {
                 callbackUrl: "/",
               })
             }
           >
+            {/* Ícone Google */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 48 48"
@@ -132,16 +133,43 @@ export function PainelLoginPageComponent({
             Google
           </Button>
 
+          {/* FACEBOOK */}
+          <Button
+            type="button"
+            variant="outline"
+            className="
+              w-full flex items-center justify-center gap-2
+              bg-white text-black border border-border-primary
+              hover:bg-zinc-100
+              h-11 rounded-lg shadow-sm
+            "
+            onClick={() =>
+              signIn("facebook", {
+                callbackUrl: "/",
+              })
+            }
+          >
+            {/* Ícone Facebook */}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 320 512"
+              className="w-5 h-5 fill-blue-600"
+            >
+              <path d="M279.14 288l14.22-92.66h-88.91V127.77c0-25.35 12.42-50.06 52.24-50.06H295V6.26S259.43 0 225.36 0C141.09 0 89.33 54.42 89.33 153.31V195.3H0v92.66h89.33V512h107.82V288z" />
+            </svg>
+            Facebook
+          </Button>
+
           {/* APPLE */}
           <Button
             type="button"
             variant="outline"
             className="
-      w-full flex items-center justify-center gap-2
-      bg-white text-black border border-border-primary
-      hover:bg-zinc-100
-      h-11 rounded-lg shadow-sm
-    "
+              w-full flex items-center justify-center gap-2 col-span-2
+              bg-white text-black border border-border-primary
+              hover:bg-zinc-100
+              h-11 rounded-lg shadow-sm
+            "
             onClick={() =>
               signIn("apple", {
                 callbackUrl: "/",
