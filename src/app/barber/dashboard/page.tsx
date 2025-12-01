@@ -189,6 +189,8 @@ export default async function BarberDashboardPage({
       include: {
         service: true,
         barber: true,
+        // 🔹 traz também o cliente pra foto
+        client: true,
       },
     }),
     prisma.appointment.findMany({
@@ -213,7 +215,6 @@ export default async function BarberDashboardPage({
     appointments.map(mapToAppointmentType);
 
   // barbers para o form (aqui só o barbeiro logado)
-  // garantimos que name nunca seja null para bater com o tipo esperado em AppointmentForm
   const barbersForForm = [
     {
       id: barber.id,
@@ -311,7 +312,7 @@ export default async function BarberDashboardPage({
 
       {/* LISTA DE AGENDAMENTOS */}
       {appointments.length === 0 ? (
-        <p className="text-paragraph-small text-content_secondary">
+        <p className="text-paragraph-small text-content-secondary">
           Você não tem agendamentos para esta data.
         </p>
       ) : (
@@ -358,6 +359,10 @@ export default async function BarberDashboardPage({
               serviceId: appt.serviceId ?? undefined,
             };
 
+            // 🔹 avatar do cliente
+            const clientImage = appt.client?.image ?? null;
+            const clientInitial = appt.clientName?.[0]?.toUpperCase() ?? "?";
+
             // MINI LOG (mesma regra do admin)
             let actionLog = "—";
 
@@ -403,20 +408,34 @@ export default async function BarberDashboardPage({
                 <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   {/* Infos do agendamento */}
                   <div className="grid flex-1 grid-cols-1 gap-2 md:grid-cols-6 md:items-center">
-                    {/* Nome */}
+                    {/* Nome + avatar */}
                     <div>
-                      <span className="text-paragraph-medium text-content_primary font-medium">
-                        {appt.clientName}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        {clientImage ? (
+                          <img
+                            src={clientImage}
+                            alt={appt.clientName}
+                            className="h-8 w-8 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-8 w-8 rounded-full bg-background-secondary flex items-center justify-center text-xs font-medium text-content-secondary">
+                            {clientInitial}
+                          </div>
+                        )}
+
+                        <span className="text-paragraph-medium text-content-primary font-medium">
+                          {appt.clientName}
+                        </span>
+                      </div>
                     </div>
 
                     {/* Telefone */}
-                    <div className="text-paragraph-medium text-content_primary">
+                    <div className="text-paragraph-medium text-content-primary">
                       {appt.phone}
                     </div>
 
                     {/* Descrição */}
-                    <div className="text-paragraph-medium text-content_primary">
+                    <div className="text-paragraph-medium text-content-primary">
                       {appt.description}
                     </div>
 
@@ -426,12 +445,12 @@ export default async function BarberDashboardPage({
                     </div>
 
                     {/* Log */}
-                    <div className="text-paragraph-small text-content_secondary md:text-center">
+                    <div className="text-paragraph-small text-content-secondary md:text-center">
                       {actionLog}
                     </div>
 
                     {/* Horário */}
-                    <div className="text-paragraph-medium text-content_primary md:text-center">
+                    <div className="text-paragraph-medium text-content-primary md:text-center">
                       {timeStr}
                     </div>
                   </div>
@@ -448,7 +467,7 @@ export default async function BarberDashboardPage({
                           services={services}
                         />
 
-                        {/* CONFERIR / CONCLUIR + CANCELAR – só se PENDENTE */}
+                        {/* CONCLUIR / CANCELAR – só se PENDENTE */}
                         <AppointmentActions
                           appointmentId={appt.id}
                           status={normalizedStatus}
