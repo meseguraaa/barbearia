@@ -1261,6 +1261,9 @@
   .fill-black {
     fill: var(--color-black);
   }
+  .fill-blue-600 {
+    fill: var(--color-blue-600);
+  }
   .object-cover {
     object-fit: cover;
   }

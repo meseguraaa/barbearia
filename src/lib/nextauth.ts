@@ -3,6 +3,7 @@ import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import type { NextAuthOptions } from "next-auth";
 import GoogleProvider from "next-auth/providers/google";
 import AppleProvider from "next-auth/providers/apple";
+import FacebookProvider from "next-auth/providers/facebook";
 import { prisma } from "@/lib/prisma";
 
 // Helper para envs obrigatórias
@@ -18,6 +19,10 @@ const providers: NextAuthOptions["providers"] = [
   GoogleProvider({
     clientId: requiredEnv("GOOGLE_CLIENT_ID"),
     clientSecret: requiredEnv("GOOGLE_CLIENT_SECRET"),
+  }),
+  FacebookProvider({
+    clientId: requiredEnv("FACEBOOK_CLIENT_ID"),
+    clientSecret: requiredEnv("FACEBOOK_CLIENT_SECRET"),
   }),
 ];
 
