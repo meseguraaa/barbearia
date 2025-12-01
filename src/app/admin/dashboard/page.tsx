@@ -81,6 +81,8 @@ async function getAppointments(dateParam?: string) {
     include: {
       barber: true,
       service: true,
+      // 🔹 agora traz também o usuário cliente (pra foto)
+      client: true,
     },
   });
 
@@ -708,6 +710,11 @@ export default async function AdminDashboardPage({
                         serviceId: appt.serviceId ?? undefined,
                       };
 
+                      // 🔹 avatar do cliente (sem borda branca, sem path fake)
+                      const clientImage = appt.client?.image ?? null;
+                      const clientInitial =
+                        appt.clientName?.[0]?.toUpperCase() ?? "?";
+
                       // mini log de ações (conclusão/cancelamento)
                       let actionLog = "—";
 
@@ -748,6 +755,23 @@ export default async function AdminDashboardPage({
                           key={appt.id}
                           className="border-b border-border-primary hover:bg-muted/30"
                         >
+                          {/* NOVO: coluna de foto */}
+                          <td className="px-4 py-2">
+                            <div className="flex items-center justify-center">
+                              {clientImage ? (
+                                <img
+                                  src={clientImage}
+                                  alt={appt.clientName}
+                                  className="h-8 w-8 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="h-8 w-8 rounded-full bg-background-secondary flex items-center justify-center text-xs font-medium text-content-secondary">
+                                  {clientInitial}
+                                </div>
+                              )}
+                            </div>
+                          </td>
+
                           <td className="px-4 py-2 font-medium">
                             {appt.clientName}
                           </td>

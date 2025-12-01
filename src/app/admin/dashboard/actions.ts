@@ -7,6 +7,8 @@ import {
   getAvailabilityWindowsForBarberOnDate,
   getAvailableBarbersOnDate,
 } from "@/utills/barber-availability";
+import { getServerSession } from "next-auth";
+import { nextAuthOptions } from "@/lib/nextauth";
 
 /* ---------------------------------------------------------
  * Schema
@@ -102,7 +104,7 @@ async function ensureAvailability(
 }
 
 /* ---------------------------------------------------------
- * Helper TEMPORÁRIO: cliente padrão (sem login)
+ * Helper: cliente padrão (sem login) – continua existindo
  * ---------------------------------------------------------*/
 async function getDefaultClientId(): Promise<string> {
   const email = "anon@barbearia.local";
@@ -121,6 +123,31 @@ async function getDefaultClientId(): Promise<string> {
 }
 
 /* ---------------------------------------------------------
+ * NOVO: descobrir clientId
+ * 1) Se tiver sessão NextAuth → usa o user.id (cliente logado)
+ * 2) Se não tiver → cai no cliente padrão (anon@barbearia.local)
+ * ---------------------------------------------------------*/
+async function getCurrentClientId(): Promise<string> {
+  try {
+    const session = await getServerSession(nextAuthOptions);
+
+    const userId = (session?.user as any)?.id as string | undefined;
+
+    if (userId) {
+      return userId;
+    }
+  } catch (error) {
+    console.error(
+      "Erro ao obter sessão do NextAuth em getCurrentClientId:",
+      error,
+    );
+  }
+
+  // fallback seguro (admin / barbeiro criando agendamento manual)
+  return getDefaultClientId();
+}
+
+/* ---------------------------------------------------------
  * Wrapper para operações com try/catch + revalidate
  * ---------------------------------------------------------*/
 async function withAppointmentMutation(
@@ -131,6 +158,8 @@ async function withAppointmentMutation(
     await operation();
     // site público
     revalidatePath("/");
+    // página do cliente
+    revalidatePath("/client/schedule");
     // dashboard admin
     revalidatePath("/admin/dashboard");
     // dashboards barbeiro
@@ -167,9 +196,9 @@ export async function createAppointment(data: AppointmentData) {
     return { error: "Serviço não encontrado" };
   }
 
-  // Enquanto não temos login de cliente,
-  // associamos a um "cliente padrão" seguro.
-  const clientId = await getDefaultClientId();
+  // 🔹 AGORA: tenta usar o cliente logado (NextAuth)
+  // se não tiver, cai no cliente padrão
+  const clientId = await getCurrentClientId();
 
   // Snapshots de valores para não depender de futuras mudanças no Service
   const servicePriceAtTheTime = service.price; // Decimal
