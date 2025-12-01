@@ -56,6 +56,7 @@ import {
   AppointFormValues,
 } from "@/components/appointment-form/schema";
 import { Service } from "@/types/service";
+import { useSession } from "next-auth/react"; // 🔹 NOVO
 
 // mesmo formato do util
 type AvailabilityWindow = {
@@ -94,6 +95,12 @@ type AppointmentFormProps = {
    * (não é obrigatório usar)
    */
   children?: ReactNode;
+  /**
+   * Nome padrão do cliente (ex.: vindo do usuário logado)
+   * Continua existindo, mas agora é opcional — se não vier,
+   * usamos o nome do CLIENT da sessão.
+   */
+  defaultClientName?: string;
 };
 
 export const AppointmentForm = ({
@@ -101,6 +108,8 @@ export const AppointmentForm = ({
   appointments = [],
   barbers,
   services,
+  children, // mantido para compatibilidade
+  defaultClientName,
 }: AppointmentFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -109,10 +118,22 @@ export const AppointmentForm = ({
   // garante array estável dentro do componente
   const servicesList = services ?? [];
 
+  // 🔹 NOVO: pegar sessão pra saber se é CLIENT e qual o nome
+  const { data: session } = useSession();
+  const role = (session?.user as any)?.role;
+  const sessionClientName =
+    role === "CLIENT" ? ((session?.user as any)?.name ?? "") : "";
+
+  // Nome inicial que o formulário vai usar:
+  // 1º prioridade: prop defaultClientName (se vier explícito)
+  // 2º prioridade: nome do CLIENT autenticado
+  // 3º: string vazia
+  const initialClientName = defaultClientName ?? sessionClientName ?? "";
+
   const form = useForm<AppointFormValues>({
     resolver: zodResolver(appointmentFormSchema),
     defaultValues: {
-      clientName: "",
+      clientName: initialClientName,
       phone: "",
       serviceId: "",
       description: "",
@@ -154,7 +175,7 @@ export const AppointmentForm = ({
 
     setIsOpen(false);
     form.reset({
-      clientName: "",
+      clientName: initialClientName,
       phone: "",
       serviceId: "",
       description: "",
@@ -183,7 +204,7 @@ export const AppointmentForm = ({
     // novo agendamento
     if (!appointment) {
       form.reset({
-        clientName: "",
+        clientName: initialClientName,
         phone: "",
         serviceId: "",
         description: "",
@@ -218,7 +239,7 @@ export const AppointmentForm = ({
       barberId: appointment.barberId,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appointment, servicesList.length]);
+  }, [appointment, servicesList.length, initialClientName]);
 
   // log leve pra garantir que está renderizando por agendamento
   useEffect(() => {
@@ -382,6 +403,8 @@ export const AppointmentForm = ({
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
+        {/* TODO: se quiser usar children custom no futuro,
+            aqui é o lugar pra trocar o Button pelo children */}
         <Button variant={isEdit ? "edit2" : "brand"} size="sm">
           {isEdit ? "Editar" : "Agendar"}
         </Button>

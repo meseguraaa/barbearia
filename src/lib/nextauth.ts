@@ -6,7 +6,6 @@ import AppleProvider from "next-auth/providers/apple";
 import FacebookProvider from "next-auth/providers/facebook";
 import { prisma } from "@/lib/prisma";
 
-// Helper para envs obrigatórias
 function requiredEnv(name: string): string {
   const value = process.env[name];
   if (!value) {
@@ -26,7 +25,6 @@ const providers: NextAuthOptions["providers"] = [
   }),
 ];
 
-// Apple OPCIONAL: só adiciona se tiver as envs mínimas
 const hasAppleEnv =
   process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET;
 
@@ -34,7 +32,6 @@ if (hasAppleEnv) {
   providers.push(
     AppleProvider({
       clientId: requiredEnv("APPLE_CLIENT_ID"),
-      // Versão simples: clientSecret é uma string (por ex. JWT gerado e guardado em env)
       clientSecret: requiredEnv("APPLE_CLIENT_SECRET"),
     }),
   );
@@ -54,15 +51,12 @@ export const nextAuthOptions: NextAuthOptions = {
   callbacks: {
     async session({ session, user }) {
       if (session.user) {
-        // id e role expostos para o front
         (session.user as any).id = user.id;
         (session.user as any).role = (user as any).role;
       }
       return session;
     },
-
-    async signIn({ user, account }) {
-      // Se no futuro quiser bloquear por domínio, etc, fazemos aqui.
+    async signIn() {
       return true;
     },
   },
