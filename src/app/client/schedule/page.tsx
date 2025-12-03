@@ -26,6 +26,7 @@ type HomeProps = {
 export default async function Home({ searchParams }: HomeProps) {
   const session = await getServerSession(nextAuthOptions);
 
+  const userId = (session?.user as any)?.id as string | undefined;
   const userName = (session?.user as any)?.name ?? "Cliente";
   const userImage = (session?.user as any)?.image ?? "/default-avatar.png";
 
@@ -143,6 +144,54 @@ export default async function Home({ searchParams }: HomeProps) {
     role: "BARBER" as const,
   }));
 
+  // 🔹 Plano ativo do cliente logado (para o AppointmentForm)
+  let clientPlanForForm: {
+    planId: string;
+    planName: string;
+    status: "ACTIVE" | "EXPIRED" | "CANCELED";
+    usedBookings: number;
+    totalBookings: number;
+    endDate: Date;
+    serviceIds: string[];
+  } | null = null;
+
+  if (userId) {
+    const clientPlans = await prisma.clientPlan.findMany({
+      where: { clientId: userId },
+      orderBy: { startDate: "desc" },
+      include: {
+        plan: {
+          include: {
+            services: true, // cada item tem serviceId
+          },
+        },
+      },
+    });
+
+    const today = new Date();
+
+    // mesma regra que usamos no admin/services: ativo, com créditos e dentro da validade
+    const activePlan = clientPlans.find((cp) => {
+      const hasCredits = cp.usedBookings < cp.plan.totalBookings;
+      const isActive = cp.status === "ACTIVE";
+      const isWithinValidity = cp.endDate >= today;
+
+      return hasCredits && isActive && isWithinValidity;
+    });
+
+    if (activePlan) {
+      clientPlanForForm = {
+        planId: activePlan.id,
+        planName: activePlan.plan.name,
+        status: activePlan.status as "ACTIVE" | "EXPIRED" | "CANCELED",
+        usedBookings: activePlan.usedBookings,
+        totalBookings: activePlan.plan.totalBookings,
+        endDate: activePlan.endDate,
+        serviceIds: activePlan.plan.services.map((s) => s.serviceId),
+      };
+    }
+  }
+
   return (
     <div className="bg-background-primary min-h-screen p-6">
       <div className="max-w-5xl mx-auto">
@@ -203,6 +252,8 @@ export default async function Home({ searchParams }: HomeProps) {
           appointments={appointments}
           barbers={barbersForForm}
           services={services}
+          defaultClientName={userName}
+          clientPlan={clientPlanForForm}
         >
           <Button variant="brand">Novo Agendamento</Button>
         </AppointmentForm>

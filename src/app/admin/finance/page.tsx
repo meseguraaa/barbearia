@@ -231,7 +231,7 @@ export default async function AdminFinancePage({
           </p>
           <p
             className={`text-title ${
-              netIncome >= 0 ? "text-emerald-600" : "text-red-600"
+              netIncome >= 0 ? "text-green-500" : "text-red-600"
             }`}
           >
             {currencyFormatter.format(netIncome)}
