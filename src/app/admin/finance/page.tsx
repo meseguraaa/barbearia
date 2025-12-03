@@ -129,7 +129,7 @@ export default async function AdminFinancePage({
     },
   });
 
-  // Busca appointments concluídos no mês para calcular faturamento
+  // Busca appointments concluídos no mês para cálculos financeiros
   const appointmentsDone = await prisma.appointment.findMany({
     where: {
       status: "DONE",
@@ -143,25 +143,53 @@ export default async function AdminFinancePage({
     },
   });
 
+  // ===== DESPESAS DO MÊS =====
   const totalExpenses = expenses.reduce((acc, expense) => {
     return acc + Number(expense.amount);
   }, 0);
 
-  const totalRevenue = appointmentsDone.reduce((acc, appointment) => {
-    const servicePriceAtTheTime = appointment.servicePriceAtTheTime
-      ? Number(appointment.servicePriceAtTheTime)
-      : undefined;
+  // ===== LUCRO BRUTO / LÍQUIDO DOS AGENDAMENTOS (MESMO CÁLCULO DO DASHBOARD) =====
+  const { totalGrossMonth, totalNetMonth } = appointmentsDone.reduce(
+    (acc, appt) => {
+      const priceSnapshot = appt.servicePriceAtTheTime;
+      const priceService = appt.service?.price ?? 0;
+      const priceNumber = priceSnapshot
+        ? Number(priceSnapshot)
+        : Number(priceService);
 
-    const currentServicePrice = appointment.service?.price
-      ? Number(appointment.service.price)
-      : 0;
+      const percentSnapshot = appt.barberPercentageAtTheTime;
+      const percentService = appt.service?.barberPercentage ?? 0;
+      const percentNumber = percentSnapshot
+        ? Number(percentSnapshot)
+        : Number(percentService);
 
-    const value = servicePriceAtTheTime ?? currentServicePrice;
+      const earningSnapshot = appt.barberEarningValue;
+      const earningNumber = earningSnapshot
+        ? Number(earningSnapshot)
+        : (priceNumber * percentNumber) / 100;
 
-    return acc + value;
-  }, 0);
+      acc.totalGrossMonth += priceNumber;
+      acc.totalNetMonth += priceNumber - earningNumber;
 
-  const netIncome = totalRevenue - totalExpenses;
+      return acc;
+    },
+    {
+      totalGrossMonth: 0,
+      totalNetMonth: 0,
+    },
+  );
+
+  // Lucro líquido de agendamentos (após comissão)
+  const appointmentsNetProfitMonth = totalNetMonth;
+
+  // Lucro líquido de produtos (quando tiver vendas de produtos).
+  // Por enquanto, ainda não existe registro de venda, então fica 0.
+  const productsNetProfitMonth = 0;
+
+  // Lucro líquido final do mês:
+  // lucro líquido agendamentos + lucro líquido produtos - despesas
+  const netIncome =
+    appointmentsNetProfitMonth + productsNetProfitMonth - totalExpenses;
 
   const currencyFormatter = new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -201,18 +229,20 @@ export default async function AdminFinancePage({
 
       {/* RESUMO FINANCEIRO DO MÊS */}
       <section className="grid gap-4 md:grid-cols-3">
+        {/* FATURAMENTO BRUTO DOS AGENDAMENTOS */}
         <div className="space-y-1 rounded-xl border border-border-primary bg-background-tertiary px-4 py-3">
           <p className="text-label-small text-content-secondary">
-            Faturamento bruto (mês)
+            Faturamento bruto (agendamentos)
           </p>
           <p className="text-title text-content-primary">
-            {currencyFormatter.format(totalRevenue)}
+            {currencyFormatter.format(totalGrossMonth)}
           </p>
           <p className="text-paragraph-small text-content-secondary">
-            Soma dos agendamentos concluídos no mês.
+            Soma dos agendamentos concluídos no mês (antes da comissão).
           </p>
         </div>
 
+        {/* DESPESAS */}
         <div className="space-y-1 rounded-xl border border-border-primary bg-background-tertiary px-4 py-3">
           <p className="text-label-small text-content-secondary">
             Despesas (mês)
@@ -225,6 +255,7 @@ export default async function AdminFinancePage({
           </p>
         </div>
 
+        {/* LUCRO LÍQUIDO FINAL */}
         <div className="space-y-1 rounded-xl border border-border-primary bg-background-tertiary px-4 py-3">
           <p className="text-label-small text-content-secondary">
             Lucro líquido (mês)
@@ -237,7 +268,8 @@ export default async function AdminFinancePage({
             {currencyFormatter.format(netIncome)}
           </p>
           <p className="text-paragraph-small text-content-secondary">
-            Faturamento bruto menos despesas do mês.
+            Lucro líquido dos agendamentos + lucro líquido de produtos (quando
+            houver) menos as despesas do mês.
           </p>
         </div>
       </section>
