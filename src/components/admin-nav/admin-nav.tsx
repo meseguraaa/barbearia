@@ -9,6 +9,7 @@ import {
   ListChecks,
   Package,
   Wallet,
+  Users, // ← novo ícone para Clientes
 } from "lucide-react";
 
 type AdminLink = {
@@ -22,7 +23,11 @@ const adminLinks: AdminLink[] = [
   { href: "/admin/barber", label: "Profissionais", icon: Scissors },
   { href: "/admin/services", label: "Serviços", icon: ListChecks },
   { href: "/admin/products", label: "Produtos", icon: Package },
-  { href: "/admin/finance", label: "Financeiro", icon: Wallet }, // ← AQUI
+
+  // 🔥 NOVO MENU CLIENTES
+  { href: "/admin/clients", label: "Clientes", icon: Users },
+
+  { href: "/admin/finance", label: "Financeiro", icon: Wallet },
 ];
 
 export function AdminNav() {
