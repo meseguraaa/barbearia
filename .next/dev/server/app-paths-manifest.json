@@ -1,7 +1,7 @@
 {
-  "/barber/earnings/page": "app/barber/earnings/page.js",
-  "/admin/services/page": "app/admin/services/page.js",
+  "/painel/login/page": "app/painel/login/page.js",
   "/client/schedule/page": "app/client/schedule/page.js",
-  "/barber/dashboard/page": "app/barber/dashboard/page.js",
-  "/admin/clients/page": "app/admin/clients/page.js"
+  "/admin/products/page": "app/admin/products/page.js",
+  "/barber/earnings/page": "app/barber/earnings/page.js",
+  "/admin/finance/page": "app/admin/finance/page.js"
 }
