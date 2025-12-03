@@ -74,6 +74,17 @@ type AppointmentBarber = {
   role: "BARBER";
 };
 
+// 🔹 Resumo do plano do cliente para o formulário
+type ClientPlanSummary = {
+  planId: string;
+  planName: string;
+  status: "ACTIVE" | "EXPIRED" | "CANCELED";
+  usedBookings: number;
+  totalBookings: number;
+  endDate: string | Date;
+  serviceIds: string[]; // serviços cobertos pelo plano
+};
+
 type AppointmentFormProps = {
   appointment?: Appointment;
   /**
@@ -99,6 +110,10 @@ type AppointmentFormProps = {
    * Nome padrão do cliente (se quiser forçar algo externo)
    */
   defaultClientName?: string;
+  /**
+   * 🔹 Plano do cliente logado, se existir
+   */
+  clientPlan?: ClientPlanSummary | null;
 };
 
 export const AppointmentForm = ({
@@ -108,6 +123,7 @@ export const AppointmentForm = ({
   services,
   children, // ainda não usamos, mas mantemos pra compat
   defaultClientName,
+  clientPlan,
 }: AppointmentFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -262,6 +278,20 @@ export const AppointmentForm = ({
   );
 
   const selectedServiceName = selectedServiceData?.name ?? "";
+
+  // 🔹 Regras do plano do cliente (espelho do admin, mas sem data)
+  const hasActivePlan =
+    !!clientPlan &&
+    clientPlan.status === "ACTIVE" &&
+    clientPlan.usedBookings < clientPlan.totalBookings;
+
+  const isServiceCoveredByPlan =
+    hasActivePlan &&
+    !!selectedServiceId &&
+    !!clientPlan?.serviceIds?.includes(selectedServiceId);
+
+  const normalizedEndDate =
+    clientPlan && clientPlan.endDate ? new Date(clientPlan.endDate) : null;
 
   // ===== buscar barbeiros disponíveis para a data =====
   const [availableBarbers, setAvailableBarbers] =
@@ -529,17 +559,44 @@ export const AppointmentForm = ({
                     </Select>
                   </FormControl>
 
-                  {/* Info do serviço selecionado: valor e duração */}
+                  {/* 🔹 Info do serviço OU info do plano */}
                   {selectedServiceData && (
                     <div className="mt-2 text-paragraph-small-size text-content-secondary">
-                      Valor:{" "}
-                      <span className="font-semibold">
-                        R$ {selectedServiceData.price.toFixed(2)}
-                      </span>{" "}
-                      • Duração:{" "}
-                      <span className="font-semibold">
-                        {selectedServiceData.durationMinutes} minutos
-                      </span>
+                      {hasActivePlan && isServiceCoveredByPlan ? (
+                        <>
+                          <span className="font-semibold">
+                            {clientPlan!.planName}
+                          </span>{" "}
+                          — {clientPlan!.usedBookings} /{" "}
+                          {clientPlan!.totalBookings} agendamentos usados
+                          <span className="block text-xs mt-1">
+                            Este atendimento usará 1 crédito do seu plano.
+                          </span>
+                          {normalizedEndDate && (
+                            <span className="block text-xs mt-0.5">
+                              Validade até{" "}
+                              {normalizedEndDate.toLocaleDateString("pt-BR")}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          Valor:{" "}
+                          <span className="font-semibold">
+                            R$ {selectedServiceData.price.toFixed(2)}
+                          </span>{" "}
+                          • Duração:{" "}
+                          <span className="font-semibold">
+                            {selectedServiceData.durationMinutes} minutos
+                          </span>
+                          {hasActivePlan && !isServiceCoveredByPlan && (
+                            <span className="block text-xs mt-1">
+                              Este serviço não está incluído no seu plano e será
+                              cobrado normalmente.
+                            </span>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
                 </FormItem>

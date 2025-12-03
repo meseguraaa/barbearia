@@ -42,6 +42,13 @@ enum ExpenseCategory {
   OTHER // Outros
 }
 
+// Status do plano do cliente
+enum ClientPlanStatus {
+  ACTIVE
+  EXPIRED
+  CANCELED
+}
+
 // ============
 // MODELS
 // ============
@@ -64,6 +71,9 @@ model User {
 
   // Relacionamentos
   appointmentsAsClient Appointment[] @relation("ClientAppointments")
+
+  // 🔗 planos comprados por esse usuário (cliente)
+  clientPlans ClientPlan[]
 
   // relação com Barber (1-1 opcional)
   barber Barber?
@@ -168,10 +178,102 @@ model Service {
   // Relacionamento com Appointment
   appointments Appointment[]
 
+  // 🔗 relação com PlanService (quais planos incluem este serviço)
+  planServices PlanService[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@map("services")
+}
+
+// =======================
+// PLANOS
+// =======================
+
+// Plano "produto" (ex: Plano Mensal - 4 cortes)
+model Plan {
+  id   String @id @default(cuid())
+  name String
+
+  description String?
+
+  /// Preço total do plano
+  price Decimal @db.Decimal(10, 2)
+
+  /// Duração em dias (no seu caso, sempre 30)
+  durationDays Int @default(30)
+
+  /// Quantidade de agendamentos incluídos (no seu caso, sempre 4)
+  totalBookings Int @default(4)
+
+  /// Percentual de comissão total do barbeiro sobre o valor do plano (0–100)
+  /// Ex: 50 = 50% do valor do plano será distribuído nos 4 atendimentos
+  commissionPercent Int
+
+  /// Se o plano está disponível para venda
+  isActive Boolean @default(true)
+
+  /// Serviços que fazem parte desse plano
+  services PlanService[]
+
+  /// Planos comprados pelos clientes
+  clientPlans ClientPlan[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("plans")
+}
+
+// Tabela de junção Plano <-> Serviços
+model PlanService {
+  id String @id @default(cuid())
+
+  planId    String
+  serviceId String
+
+  plan    Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Um mesmo serviço não pode ser cadastrado duas vezes no mesmo plano
+  @@unique([planId, serviceId])
+  @@map("plan_services")
+}
+
+// Instância do plano comprada por um cliente específico
+model ClientPlan {
+  id       String @id @default(cuid())
+  clientId String
+  planId   String
+
+  /// Data de início (compra / ativação)
+  startDate DateTime
+
+  /// Data de fim (startDate + durationDays)
+  endDate DateTime
+
+  /// Quantos agendamentos já foram usados nesse plano
+  usedBookings Int @default(0)
+
+  /// Status do plano
+  status ClientPlanStatus @default(ACTIVE)
+
+  client User @relation(fields: [clientId], references: [id])
+  plan   Plan @relation(fields: [planId], references: [id])
+
+  /// Agendamentos que consumiram crédito desse plano
+  appointments Appointment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@index([planId])
+  @@map("client_plans")
 }
 
 model Appointment {
@@ -216,6 +318,10 @@ model Appointment {
   /// Quem concluiu o atendimento (ADMIN ou BARBER)
   concludedByRole Role?
 
+  /// Se esse agendamento consumiu crédito de um plano
+  clientPlanId String?
+  clientPlan   ClientPlan? @relation(fields: [clientPlanId], references: [id])
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -224,6 +330,7 @@ model Appointment {
   @@index([barberId])
   @@index([scheduleAt])
   @@index([serviceId])
+  @@index([clientPlanId])
   // Mantém o nome da tabela como "appointments"
   @@map("appointments")
 }
