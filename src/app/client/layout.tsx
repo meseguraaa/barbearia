@@ -4,6 +4,8 @@ import { ReactNode, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 
+import { ClientNav } from "@/components/client-nav";
+
 type ClientLayoutProps = {
   children: ReactNode;
 };
@@ -13,10 +15,8 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
   const { data: session, status } = useSession();
 
   useEffect(() => {
-    // Enquanto está carregando, não faz nada
     if (status === "loading") return;
 
-    // Não autenticado → manda para login
     if (status === "unauthenticated" || !session?.user) {
       router.replace("/painel/login");
       return;
@@ -24,31 +24,36 @@ export default function ClientLayout({ children }: ClientLayoutProps) {
 
     const role = (session.user as any).role;
 
-    // Se não for CLIENT, redireciona conforme o papel
     if (role === "ADMIN") {
       router.replace("/admin/dashboard");
     } else if (role === "BARBER") {
       router.replace("/painel");
     } else if (role !== "CLIENT") {
-      // fallback genérico se vier algo estranho
       router.replace("/");
     }
   }, [status, session, router]);
 
-  // Enquanto:
-  // - estiver carregando
-  // - OU estiver redirecionando por não ser CLIENT
-  // não mostra nada (evita flicker)
-  if (status === "loading") {
-    return null;
-  }
+  if (status === "loading") return null;
 
   const role = (session?.user as any)?.role;
 
-  if (!session?.user || role !== "CLIENT") {
-    return null;
-  }
+  if (!session?.user || role !== "CLIENT") return null;
 
-  // Se chegou aqui: está autenticado e é CLIENT ✅
-  return <>{children}</>;
+  return (
+    <div className="min-h-screen bg-background-primary text-content-primary flex flex-col">
+      {/* HEADER */}
+      <header className="">
+        <div className="max-w-5xl mx-auto flex h-16 items-center justify-between">
+          <ClientNav />
+        </div>
+      </header>
+
+      {/* CONTEÚDO */}
+      <main className="flex-1">
+        <div className="max-w-7xl mx-auto">
+          <section className="rounded-2xl shadow-lg px-6">{children}</section>
+        </div>
+      </main>
+    </div>
+  );
 }

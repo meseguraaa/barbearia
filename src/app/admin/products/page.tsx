@@ -104,6 +104,12 @@ export default async function ProductsPage() {
                   {/* CATEGORIA / FINALIDADE */}
                   <td className="px-4 py-3">{product.category || "—"}</td>
 
+                  {/* ESTOQUE */}
+                  <td className="px-4 py-3">
+                    {product.stockQuantity} unidade
+                    {product.stockQuantity === 1 ? "" : "s"}
+                  </td>
+
                   {/* STATUS */}
                   <td className="px-4 py-3">
                     <ServiceStatusBadge isActive={product.isActive} />
@@ -152,7 +158,7 @@ function NewProductDialog() {
         <Button variant="brand">Novo produto</Button>
       </DialogTrigger>
 
-      <DialogContent className="bg-background-secondary border border-border-primary">
+      <DialogContent className="bg-background-secondary border border-border-primary max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-title text-content-primary">
             Novo produto
@@ -165,7 +171,7 @@ function NewProductDialog() {
             await createProduct(formData);
             redirect("/admin/products");
           }}
-          className="space-y-4"
+          className="space-y-4 pb-2"
         >
           {/* NOME */}
           <div className="space-y-1">
@@ -247,6 +253,25 @@ function NewProductDialog() {
             />
           </div>
 
+          {/* ESTOQUE INICIAL */}
+          <div className="space-y-1">
+            <label
+              className="text-label-small text-content-secondary"
+              htmlFor="stockQuantity"
+            >
+              Estoque inicial
+            </label>
+            <Input
+              id="stockQuantity"
+              name="stockQuantity"
+              type="number"
+              min={0}
+              required
+              placeholder="Ex: 10"
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
           {/* CATEGORIA / FINALIDADE */}
           <div className="space-y-1">
             <label
@@ -295,7 +320,7 @@ function EditProductDialog({ product }: { product: Product }) {
         </Button>
       </DialogTrigger>
 
-      <DialogContent className="bg-background-secondary border border-border-primary">
+      <DialogContent className="bg-background-secondary border border-border-primary max-h-[80vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-title text-content-primary">
             Editar produto
@@ -308,7 +333,7 @@ function EditProductDialog({ product }: { product: Product }) {
             await updateProduct(product.id, formData);
             redirect("/admin/products");
           }}
-          className="space-y-4"
+          className="space-y-4 pb-2"
         >
           {/* NOME */}
           <div className="space-y-1">
@@ -372,6 +397,20 @@ function EditProductDialog({ product }: { product: Product }) {
               max={100}
               defaultValue={barberPercentageDefault}
               placeholder="Ex: 20"
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+          </div>
+
+          {/* ESTOQUE */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              Estoque
+            </label>
+            <Input
+              name="stockQuantity"
+              type="number"
+              min={0}
+              defaultValue={product.stockQuantity}
               className="bg-background-tertiary border-border-primary text-content-primary"
             />
           </div>

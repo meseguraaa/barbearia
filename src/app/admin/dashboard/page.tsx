@@ -81,7 +81,6 @@ async function getAppointments(dateParam?: string) {
     include: {
       barber: true,
       service: true,
-      // 🔹 agora traz também o usuário cliente (pra foto)
       client: true,
     },
   });
@@ -161,6 +160,9 @@ export default async function AdminDashboardPage({
     ? (parseDateParam(dateParam) ?? todaySP)
     : todaySP;
 
+  const dayStart = startOfDay(selectedDate);
+  const dayEnd = endOfDay(selectedDate);
+
   const monthStart = startOfMonth(selectedDate);
   const monthEnd = endOfMonth(selectedDate);
 
@@ -170,8 +172,9 @@ export default async function AdminDashboardPage({
     monthAppointmentsPrisma,
     services,
     monthCanceledAppointmentsPrisma,
-    products,
     monthExpensesPrisma,
+    dayProductSalesPrisma,
+    monthProductSalesPrisma,
   ] = await Promise.all([
     getAppointments(dateParam),
     getBarbers(),
@@ -197,17 +200,36 @@ export default async function AdminDashboardPage({
         },
       },
     }),
-    prisma.product.findMany({
-      where: {
-        isActive: true,
-      },
-    }),
     prisma.expense.findMany({
       where: {
         dueDate: {
           gte: monthStart,
           lte: monthEnd,
         },
+      },
+    }),
+    prisma.productSale.findMany({
+      where: {
+        soldAt: {
+          gte: dayStart,
+          lte: dayEnd,
+        },
+      },
+      include: {
+        product: true,
+        barber: true,
+      },
+    }),
+    prisma.productSale.findMany({
+      where: {
+        soldAt: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+      },
+      include: {
+        product: true,
+        barber: true,
       },
     }),
   ]);
@@ -226,50 +248,57 @@ export default async function AdminDashboardPage({
   }));
 
   type AppointmentWithBarberPrisma = (typeof appointmentsPrisma)[number];
+  type DayProductSale = (typeof dayProductSalesPrisma)[number];
 
-  // ====== FINANCEIRO GERAL DO DIA ======
+  // ====== FORMATADOR DE MOEDA ======
   const currencyFormatter = new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
     minimumFractionDigits: 2,
   });
 
+  // ================================
+  // FINANCEIRO DE SERVIÇO (DIA)
+  // ================================
   const doneAppointments = appointmentsPrisma.filter(
     (appt) => appt.status === "DONE",
   );
 
-  const { totalGrossDay, totalCommissionDay, totalNetDay } =
-    doneAppointments.reduce(
-      (acc, appt) => {
-        const priceSnapshot = appt.servicePriceAtTheTime;
-        const priceService = appt.service?.price ?? 0;
-        const priceNumber = priceSnapshot
-          ? Number(priceSnapshot)
-          : Number(priceService);
+  const {
+    totalGrossDay: totalGrossDayServices,
+    totalCommissionDay: totalCommissionDayServices,
+    totalNetDay: totalNetDayServices,
+  } = doneAppointments.reduce(
+    (acc, appt) => {
+      const priceSnapshot = appt.servicePriceAtTheTime;
+      const priceService = appt.service?.price ?? 0;
+      const priceNumber = priceSnapshot
+        ? Number(priceSnapshot)
+        : Number(priceService);
 
-        const percentSnapshot = appt.barberPercentageAtTheTime;
-        const percentService = appt.service?.barberPercentage ?? 0;
-        const percentNumber = percentSnapshot
-          ? Number(percentSnapshot)
-          : Number(percentService);
+      const percentSnapshot = appt.barberPercentageAtTheTime;
+      const percentService = appt.service?.barberPercentage ?? 0;
+      const percentNumber = percentSnapshot
+        ? Number(percentSnapshot)
+        : Number(percentService);
 
-        const earningSnapshot = appt.barberEarningValue;
-        const earningNumber = earningSnapshot
-          ? Number(earningSnapshot)
-          : (priceNumber * percentNumber) / 100;
+      const earningSnapshot = appt.barberEarningValue;
+      const earningNumber = earningSnapshot
+        ? Number(earningSnapshot)
+        : (priceNumber * percentNumber) / 100;
 
-        acc.totalGrossDay += priceNumber;
-        acc.totalCommissionDay += earningNumber;
-        acc.totalNetDay += priceNumber - earningNumber;
+      acc.totalGrossDay += priceNumber;
+      acc.totalCommissionDay += earningNumber;
+      acc.totalNetDay += priceNumber - earningNumber;
 
-        return acc;
-      },
-      {
-        totalGrossDay: 0,
-        totalCommissionDay: 0,
-        totalNetDay: 0,
-      },
-    );
+      return acc;
+    },
+    {
+      totalGrossDay: 0,
+      totalCommissionDay: 0,
+      totalNetDay: 0,
+    },
+  );
 
   const totalAppointmentsDoneDay = doneAppointments.length;
 
@@ -288,39 +317,72 @@ export default async function AdminDashboardPage({
   }, 0);
   const totalCanceledWithFeeDay = canceledWithFeeDay.length;
 
-  // ====== FINANCEIRO GERAL DO MÊS (sem despesas fixas) ======
-  const { totalGrossMonth, totalCommissionMonth, totalNetMonth } =
-    monthAppointmentsPrisma.reduce(
-      (acc, appt) => {
-        const priceSnapshot = appt.servicePriceAtTheTime;
-        const priceService = appt.service?.price ?? 0;
-        const priceNumber = priceSnapshot
-          ? Number(priceSnapshot)
-          : Number(priceService);
+  // ================================
+  // FINANCEIRO DE PRODUTO (DIA)
+  // ================================
+  const totalProductsRevenueDay = dayProductSalesPrisma.reduce(
+    (acc, sale) => acc + Number(sale.totalPrice),
+    0,
+  );
+  const totalProductsCommissionDay = dayProductSalesPrisma.reduce(
+    (acc, sale) => {
+      const percent = sale.product?.barberPercentage ?? 0;
+      return acc + (Number(sale.totalPrice) * percent) / 100;
+    },
+    0,
+  );
+  const totalProductsNetDay =
+    totalProductsRevenueDay - totalProductsCommissionDay;
 
-        const percentSnapshot = appt.barberPercentageAtTheTime;
-        const percentService = appt.service?.barberPercentage ?? 0;
-        const percentNumber = percentSnapshot
-          ? Number(percentSnapshot)
-          : Number(percentService);
+  const totalProductsSoldDay = dayProductSalesPrisma.reduce(
+    (acc, sale) => acc + sale.quantity,
+    0,
+  );
 
-        const earningSnapshot = appt.barberEarningValue;
-        const earningNumber = earningSnapshot
-          ? Number(earningSnapshot)
-          : (priceNumber * percentNumber) / 100;
+  // 🔹 GERAL DO DIA (SERVIÇOS + PRODUTOS)
+  const totalGrossDay = totalGrossDayServices + totalProductsRevenueDay;
+  const totalCommissionDay =
+    totalCommissionDayServices + totalProductsCommissionDay;
+  const totalNetDay = totalNetDayServices + totalProductsNetDay;
 
-        acc.totalGrossMonth += priceNumber;
-        acc.totalCommissionMonth += earningNumber;
-        acc.totalNetMonth += priceNumber - earningNumber;
+  // ================================
+  // FINANCEIRO DE SERVIÇO (MÊS)
+  // ================================
+  const {
+    totalGrossMonth: totalGrossMonthServices,
+    totalCommissionMonth: totalCommissionMonthServices,
+    totalNetMonth: totalNetMonthServices,
+  } = monthAppointmentsPrisma.reduce(
+    (acc, appt) => {
+      const priceSnapshot = appt.servicePriceAtTheTime;
+      const priceService = appt.service?.price ?? 0;
+      const priceNumber = priceSnapshot
+        ? Number(priceSnapshot)
+        : Number(priceService);
 
-        return acc;
-      },
-      {
-        totalGrossMonth: 0,
-        totalCommissionMonth: 0,
-        totalNetMonth: 0,
-      },
-    );
+      const percentSnapshot = appt.barberPercentageAtTheTime;
+      const percentService = appt.service?.barberPercentage ?? 0;
+      const percentNumber = percentSnapshot
+        ? Number(percentSnapshot)
+        : Number(percentService);
+
+      const earningSnapshot = appt.barberEarningValue;
+      const earningNumber = earningSnapshot
+        ? Number(earningSnapshot)
+        : (priceNumber * percentNumber) / 100;
+
+      acc.totalGrossMonth += priceNumber;
+      acc.totalCommissionMonth += earningNumber;
+      acc.totalNetMonth += priceNumber - earningNumber;
+
+      return acc;
+    },
+    {
+      totalGrossMonth: 0,
+      totalCommissionMonth: 0,
+      totalNetMonth: 0,
+    },
+  );
 
   const totalAppointmentsDoneMonth = monthAppointmentsPrisma.length;
   const totalAppointmentsCanceledMonth = monthCanceledAppointmentsPrisma.length;
@@ -335,21 +397,43 @@ export default async function AdminDashboardPage({
   }, 0);
   const totalCanceledWithFeeMonth = canceledWithFeeMonth.length;
 
+  // ================================
+  // FINANCEIRO DE PRODUTO (MÊS)
+  // ================================
+  const totalProductsRevenueMonth = monthProductSalesPrisma.reduce(
+    (acc, sale) => acc + Number(sale.totalPrice),
+    0,
+  );
+  const totalProductsCommissionMonth = monthProductSalesPrisma.reduce(
+    (acc, sale) => {
+      const percent = sale.product?.barberPercentage ?? 0;
+      return acc + (Number(sale.totalPrice) * percent) / 100;
+    },
+    0,
+  );
+  const totalProductsNetMonth =
+    totalProductsRevenueMonth - totalProductsCommissionMonth;
+
+  const totalProductsSoldMonth = monthProductSalesPrisma.reduce(
+    (acc, sale) => acc + sale.quantity,
+    0,
+  );
+
+  // 🔹 GERAL DO MÊS (SERVIÇOS + PRODUTOS)
+  const totalGrossMonth = totalGrossMonthServices + totalProductsRevenueMonth;
+  const totalCommissionMonth =
+    totalCommissionMonthServices + totalProductsCommissionMonth;
+  const totalNetMonth = totalNetMonthServices + totalProductsNetMonth;
+
   // ====== DESPESAS DO MÊS (Financeiro) ======
   const totalExpensesMonth = monthExpensesPrisma.reduce((acc, expense) => {
     return acc + Number(expense.amount);
   }, 0);
 
-  // 🔹 Lucro real: líquido do mês (após comissão) - despesas do mês
+  // 🔹 Lucro real: líquido do mês (serviços + produtos) - despesas
   const realNetMonth = totalNetMonth - totalExpensesMonth;
 
-  // ====== PRODUTOS ATIVOS (quantidade + soma dos preços) ======
-  const totalActiveProducts = products.length;
-  const totalActiveProductsValue = products.reduce((acc, product) => {
-    return acc + Number(product.price);
-  }, 0);
-
-  // ====== AGRUPADO POR BARBEIRO ======
+  // ====== AGRUPADO POR BARBEIRO (SERVIÇO) ======
   const groupedByBarber = appointmentsPrisma.reduce<
     Record<
       string,
@@ -414,6 +498,77 @@ export default async function AdminDashboardPage({
     return acc;
   }, {});
 
+  // ====== AGRUPADO POR BARBEIRO (PRODUTOS - DIA) ======
+  const groupedProductsByBarber = dayProductSalesPrisma.reduce<
+    Record<
+      string,
+      {
+        barberId: string | null;
+        barberName: string;
+        totalGross: number;
+        totalCommission: number;
+        totalNet: number;
+      }
+    >
+  >((acc, sale) => {
+    const barberId = sale.barberId ?? "no-barber";
+    const barberName = sale.barber?.name ?? "Sem barbeiro";
+
+    if (!acc[barberId]) {
+      acc[barberId] = {
+        barberId: sale.barberId ?? null,
+        barberName,
+        totalGross: 0,
+        totalCommission: 0,
+        totalNet: 0,
+      };
+    }
+
+    const total = Number(sale.totalPrice);
+    const percent = sale.product?.barberPercentage ?? 0;
+    const commission = (total * percent) / 100;
+    const net = total - commission;
+
+    acc[barberId].totalGross += total;
+    acc[barberId].totalCommission += commission;
+    acc[barberId].totalNet += net;
+
+    return acc;
+  }, {});
+
+  // 🔗 Mapa de vendas por barbeiro para exibir na tabela
+  const productSalesByBarber = dayProductSalesPrisma.reduce<
+    Record<string, DayProductSale[]>
+  >((acc, sale) => {
+    const barberId = sale.barberId ?? "no-barber";
+    if (!acc[barberId]) {
+      acc[barberId] = [];
+    }
+    acc[barberId].push(sale);
+    return acc;
+  }, {});
+
+  // 🔹 SOMA FINANCEIRO DE PRODUTOS NO AGRUPAMENTO POR BARBEIRO
+  for (const [barberId, productData] of Object.entries(
+    groupedProductsByBarber,
+  )) {
+    if (!groupedByBarber[barberId]) {
+      groupedByBarber[barberId] = {
+        barberId: productData.barberId,
+        barberName: productData.barberName,
+        appointments: [],
+        totalGross: 0,
+        totalCommission: 0,
+        totalNet: 0,
+        totalCancelFees: 0,
+      };
+    }
+
+    groupedByBarber[barberId].totalGross += productData.totalGross;
+    groupedByBarber[barberId].totalCommission += productData.totalCommission;
+    groupedByBarber[barberId].totalNet += productData.totalNet;
+  }
+
   const barberGroups = Object.values(groupedByBarber);
 
   return (
@@ -423,14 +578,14 @@ export default async function AdminDashboardPage({
         <div>
           <h1 className="text-title text-content-primary">Dashboard</h1>
           <p className="text-paragraph-medium-size text-content-secondary">
-            Visão geral de todos os agendamentos.
+            Visão geral de todos os agendamentos, serviços e vendas de produtos.
           </p>
         </div>
 
         <DatePicker />
       </div>
 
-      {/* RESUMO FINANCEIRO DO DIA */}
+      {/* RESUMO FINANCEIRO DO DIA (SERVIÇOS + PRODUTOS) */}
       <section className="grid gap-4 md:grid-cols-4">
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
@@ -439,14 +594,22 @@ export default async function AdminDashboardPage({
           <p className="text-title text-content-primary">
             {currencyFormatter.format(totalGrossDay)}
           </p>
+          <p className="text-label-small text-content-secondary">
+            Serviços: {currencyFormatter.format(totalGrossDayServices)} •
+            Produtos: {currencyFormatter.format(totalProductsRevenueDay)}
+          </p>
         </div>
 
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
-            Valor em comissão (dia)
+            Comissão (dia)
           </p>
           <p className="text-title text-content-primary">
             {currencyFormatter.format(totalCommissionDay)}
+          </p>
+          <p className="text-label-small text-content-secondary">
+            Serviços: {currencyFormatter.format(totalCommissionDayServices)} •
+            Produtos: {currencyFormatter.format(totalProductsCommissionDay)}
           </p>
         </div>
 
@@ -456,6 +619,10 @@ export default async function AdminDashboardPage({
           </p>
           <p className="text-title text-content-primary">
             {currencyFormatter.format(totalNetDay)}
+          </p>
+          <p className="text-label-small text-content-secondary">
+            Serviços: {currencyFormatter.format(totalNetDayServices)} •
+            Produtos: {currencyFormatter.format(totalProductsNetDay)}
           </p>
         </div>
 
@@ -482,6 +649,10 @@ export default async function AdminDashboardPage({
           <p className="text-title text-content-primary">
             {currencyFormatter.format(totalGrossMonth)}
           </p>
+          <p className="text-label-small text-content-secondary">
+            Serviços: {currencyFormatter.format(totalGrossMonthServices)} •
+            Produtos: {currencyFormatter.format(totalProductsRevenueMonth)}
+          </p>
         </div>
 
         {/* 2. Líquido mês (após comissão, SEM despesas fixas) */}
@@ -493,7 +664,8 @@ export default async function AdminDashboardPage({
             {currencyFormatter.format(totalNetMonth)}
           </p>
           <p className="text-paragraph-small text-content-secondary">
-            Receita após pagar comissão dos barbeiros.
+            Serviços: {currencyFormatter.format(totalNetMonthServices)} •
+            Produtos: {currencyFormatter.format(totalProductsNetMonth)}
           </p>
         </div>
 
@@ -523,7 +695,7 @@ export default async function AdminDashboardPage({
             {currencyFormatter.format(realNetMonth)}
           </p>
           <p className="text-paragraph-small text-content-secondary">
-            Valor líquido do mês menos as despesas fixas.
+            Valor líquido (serviços + produtos) menos as despesas.
           </p>
         </div>
 
@@ -533,7 +705,8 @@ export default async function AdminDashboardPage({
             Atendimentos
           </p>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {/* Concluídos */}
             <div className="space-y-1">
               <p className="text-paragraph-small text-content-secondary">
                 Concluídos
@@ -552,6 +725,7 @@ export default async function AdminDashboardPage({
               </p>
             </div>
 
+            {/* Cancelados */}
             <div className="space-y-1">
               <p className="text-paragraph-small text-content-secondary">
                 Cancelados
@@ -569,275 +743,234 @@ export default async function AdminDashboardPage({
                 </span>
               </p>
             </div>
-          </div>
-        </div>
 
-        {/* 6. Cancelamentos com taxa */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3">
-          <p className="text-label-small text-content-secondary">
-            Cancelamentos com taxa
-          </p>
-          <div className="space-y-1">
-            <p className="text-paragraph-medium text-content-primary">
-              Dia:{" "}
-              <span className="font-semibold">{totalCanceledWithFeeDay}</span>
-            </p>
-            <p className="text-paragraph-medium text-content-primary">
-              Mês:{" "}
-              <span className="font-semibold">{totalCanceledWithFeeMonth}</span>
-            </p>
+            {/* Cancelados com taxa */}
+            <div className="space-y-1">
+              <p className="text-paragraph-small text-content-secondary">
+                Com taxa
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Dia:{" "}
+                <span className="font-semibold">{totalCanceledWithFeeDay}</span>
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Mês:{" "}
+                <span className="font-semibold">
+                  {totalCanceledWithFeeMonth}
+                </span>
+              </p>
+            </div>
           </div>
-        </div>
-
-        {/* 7. Produtos ativos */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-2">
-          <p className="text-label-small text-content-secondary">
-            Produtos ativos
-          </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Quantidade:{" "}
-            <span className="font-semibold">{totalActiveProducts}</span>
-          </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Soma dos preços:{" "}
-            <span className="font-semibold">
-              {currencyFormatter.format(totalActiveProductsValue)}
-            </span>
-          </p>
         </div>
       </section>
 
-      {appointmentsPrisma.length === 0 ? (
+      {appointmentsPrisma.length === 0 && dayProductSalesPrisma.length === 0 ? (
         <section className="border border-border-primary rounded-xl overflow-hidden bg-background-tertiary">
           <div className="border-b border-border-primary px-4 py-3 bg-muted/40 flex justify-between items-center">
-            <p className="font-medium">Agendamentos</p>
+            <p className="font-medium">Agendamentos e vendas de produto</p>
           </div>
           <div className="p-6 text-paragraph-small text-content-secondary">
-            Nenhum agendamento encontrado.
+            Nenhum agendamento ou venda de produto encontrada para esta data.
           </div>
         </section>
       ) : (
         <section className="space-y-4">
-          {barberGroups.map((group) => (
-            <div
-              key={group.barberId ?? "no-barber"}
-              className="border border-border-primary rounded-xl overflow-hidden bg-background-tertiary"
-            >
-              <div className="border-b border-border-primary px-4 py-3 bg-muted/40 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                <div>
-                  <h2 className="text-label-large text-content-primary">
-                    {group.barberName}
-                  </h2>
-                  <p className="text-paragraph-small text-content-secondary">
-                    Agendamento(s): {group.appointments.length}
-                  </p>
-                </div>
+          {barberGroups.map((group) => {
+            const barberKey = group.barberId ?? "no-barber";
+            const salesForBarber = productSalesByBarber[barberKey] ?? [];
 
-                <div className="flex flex-wrap gap-4 text-right">
-                  <div className="space-y-0.5">
-                    <p className="text-label-small text-content-secondary">
-                      Bruto (dia)
-                    </p>
-                    <p className="text-paragraph-medium text-content-primary">
-                      {currencyFormatter.format(group.totalGross)}
-                    </p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-label-small text-content-secondary">
-                      Comissão (dia)
-                    </p>
-                    <p className="text-paragraph-medium text-content-primary">
-                      {currencyFormatter.format(group.totalCommission)}
-                    </p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-label-small text-content-secondary">
-                      Líquido (dia)
-                    </p>
-                    <p className="text-paragraph-medium text-content-primary">
-                      {currencyFormatter.format(group.totalNet)}
-                    </p>
-                  </div>
-                  <div className="space-y-0.5">
-                    <p className="text-label-small text-content-secondary">
-                      Taxas de cancelamento (dia)
-                    </p>
-                    <p className="text-paragraph-medium text-content-primary">
-                      {currencyFormatter.format(group.totalCancelFees)}
+            return (
+              <div
+                key={group.barberId ?? "no-barber"}
+                className="border border-border-primary rounded-xl overflow-hidden bg-background-tertiary"
+              >
+                <div className="border-b border-border-primary px-4 py-3 bg-muted/40 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h2 className="text-label-large text-content-primary">
+                      {group.barberName}
+                    </h2>
+                    <p className="text-paragraph-small text-content-secondary">
+                      Agendamento(s): {group.appointments.length} • Vendas de
+                      produto: {salesForBarber.length}
                     </p>
                   </div>
                 </div>
-              </div>
 
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <tbody>
-                    {group.appointments.map((appt) => {
-                      const date = new Date(appt.scheduleAt);
-                      const dateStr = format(date, "dd/MM/yyyy", {
-                        locale: ptBR,
-                      });
-                      const timeStr = format(date, "HH:mm", {
-                        locale: ptBR,
-                      });
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <tbody>
+                      {/* LINHAS DE AGENDAMENTO */}
+                      {group.appointments.map((appt) => {
+                        const date = new Date(appt.scheduleAt);
+                        const dateStr = format(date, "dd/MM/yyyy", {
+                          locale: ptBR,
+                        });
+                        const timeStr = format(date, "HH:mm", {
+                          locale: ptBR,
+                        });
 
-                      const apptForForm = appointmentsForForm.find(
-                        (a) => a.id === appt.id,
-                      );
+                        const apptForForm = appointmentsForForm.find(
+                          (a) => a.id === appt.id,
+                        );
 
-                      const normalizedStatus =
-                        (appt.status as AppointmentType["status"]) ?? "PENDING";
-                      const isPending = normalizedStatus === "PENDING";
+                        const normalizedStatus =
+                          (appt.status as AppointmentType["status"]) ??
+                          "PENDING";
+                        const isPending = normalizedStatus === "PENDING";
 
-                      const safeApptForForm = apptForForm ?? {
-                        id: appt.id,
-                        clientName: appt.clientName,
-                        phone: appt.phone,
-                        description: appt.description,
-                        scheduleAt: appt.scheduleAt,
-                        status: normalizedStatus,
-                        barberId: appt.barberId ?? "",
-                        barber: appt.barber
-                          ? {
-                              id: appt.barber.id,
-                              name: appt.barber.name,
-                              email: appt.barber.email,
-                              phone: appt.barber.phone,
-                              isActive: appt.barber.isActive,
-                              role: "BARBER" as const,
-                            }
-                          : undefined,
-                        serviceId: appt.serviceId ?? undefined,
-                      };
+                        const safeApptForForm = apptForForm ?? {
+                          id: appt.id,
+                          clientName: appt.clientName,
+                          phone: appt.phone,
+                          description: appt.description,
+                          scheduleAt: appt.scheduleAt,
+                          status: normalizedStatus,
+                          barberId: appt.barberId ?? "",
+                          barber: appt.barber
+                            ? {
+                                id: appt.barber.id,
+                                name: appt.barber.name,
+                                email: appt.barber.email,
+                                phone: appt.barber.phone,
+                                isActive: appt.barber.isActive,
+                                role: "BARBER" as const,
+                              }
+                            : undefined,
+                          serviceId: appt.serviceId ?? undefined,
+                        };
 
-                      // 🔹 avatar do cliente (sem borda branca, sem path fake)
-                      const clientImage = appt.client?.image ?? null;
-                      const clientInitial =
-                        appt.clientName?.[0]?.toUpperCase() ?? "?";
+                        const clientImage = appt.client?.image ?? null;
+                        const clientInitial =
+                          appt.clientName?.[0]?.toUpperCase() ?? "?";
 
-                      // mini log de ações (conclusão/cancelamento)
-                      let actionLog = "—";
+                        let actionLog = "—";
 
-                      if (appt.status === "DONE") {
-                        if (appt.concludedByRole === "ADMIN") {
-                          actionLog = "Concluído pelo ADMIN";
-                        } else if (appt.concludedByRole === "BARBER") {
-                          actionLog = "Concluído pelo Barbeiro";
-                        } else {
-                          actionLog = "Concluído";
+                        if (appt.status === "DONE") {
+                          if (appt.concludedByRole === "ADMIN") {
+                            actionLog = "Concluído pelo ADMIN";
+                          } else if (appt.concludedByRole === "BARBER") {
+                            actionLog = "Concluído pelo Barbeiro";
+                          } else {
+                            actionLog = "Concluído";
+                          }
+                        } else if (appt.status === "CANCELED") {
+                          const hasFee = appt.cancelFeeApplied;
+                          const who =
+                            appt.cancelledByRole === "ADMIN"
+                              ? "ADMIN"
+                              : appt.cancelledByRole === "BARBER"
+                                ? "Barbeiro"
+                                : null;
+
+                          if (who === "ADMIN") {
+                            actionLog = hasFee
+                              ? "Cancelado pelo ADMIN - com taxa"
+                              : "Cancelado pelo ADMIN - sem taxa";
+                          } else if (who === "Barbeiro") {
+                            actionLog = hasFee
+                              ? "Cancelado pelo Barbeiro - com taxa"
+                              : "Cancelado pelo Barbeiro - sem taxa";
+                          } else {
+                            actionLog = hasFee
+                              ? "Cancelado - com taxa"
+                              : "Cancelado - sem taxa";
+                          }
                         }
-                      } else if (appt.status === "CANCELED") {
-                        const hasFee = appt.cancelFeeApplied;
-                        const who =
-                          appt.cancelledByRole === "ADMIN"
-                            ? "ADMIN"
-                            : appt.cancelledByRole === "BARBER"
-                              ? "Barbeiro"
-                              : null;
 
-                        if (who === "ADMIN") {
-                          actionLog = hasFee
-                            ? "Cancelado pelo ADMIN - com taxa"
-                            : "Cancelado pelo ADMIN - sem taxa";
-                        } else if (who === "Barbeiro") {
-                          actionLog = hasFee
-                            ? "Cancelado pelo Barbeiro - com taxa"
-                            : "Cancelado pelo Barbeiro - sem taxa";
-                        } else {
-                          actionLog = hasFee
-                            ? "Cancelado - com taxa"
-                            : "Cancelado - sem taxa";
-                        }
-                      }
+                        return (
+                          <tr
+                            key={appt.id}
+                            className="border-b border-border-primary hover:bg-muted/30"
+                          >
+                            {/* foto cliente */}
+                            <td className="px-4 py-2">
+                              <div className="flex items-center justify-center">
+                                {clientImage ? (
+                                  <img
+                                    src={clientImage}
+                                    alt={appt.clientName}
+                                    className="h-8 w-8 rounded-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="h-8 w-8 rounded-full bg-background-secondary flex items-center justify-center text-xs font-medium text-content-secondary">
+                                    {clientInitial}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
 
-                      return (
-                        <tr
-                          key={appt.id}
-                          className="border-b border-border-primary hover:bg-muted/30"
-                        >
-                          {/* NOVO: coluna de foto */}
-                          <td className="px-4 py-2">
-                            <div className="flex items-center justify-center">
-                              {clientImage ? (
-                                <img
-                                  src={clientImage}
-                                  alt={appt.clientName}
-                                  className="h-8 w-8 rounded-full object-cover"
-                                />
-                              ) : (
-                                <div className="h-8 w-8 rounded-full bg-background-secondary flex items-center justify-center text-xs font-medium text-content-secondary">
-                                  {clientInitial}
+                            <td className="px-4 py-2 font-medium">
+                              {appt.clientName}
+                            </td>
+                            <td className="px-4 py-2">{appt.phone}</td>
+                            <td className="px-4 py-2">{appt.description}</td>
+                            <td className="px-4 py-2">{dateStr}</td>
+                            <td className="px-4 py-2">{timeStr}</td>
+                            <td className="px-4 py-2">
+                              <AppointmentStatusBadge
+                                status={normalizedStatus}
+                              />
+                            </td>
+
+                            {/* mini log de ações */}
+                            <td className="px-4 py-2">
+                              <span className="text-paragraph-small text-content-secondary">
+                                {actionLog}
+                              </span>
+                            </td>
+
+                            {/* ações (somente se PENDENTE) */}
+                            <td className="px-4 py-3">
+                              {isPending && (
+                                <div className="flex justify-end gap-2">
+                                  <AppointmentForm
+                                    appointment={safeApptForForm}
+                                    appointments={appointmentsForForm}
+                                    barbers={barbersForForm}
+                                    services={services}
+                                  />
+
+                                  <AppointmentActions
+                                    appointmentId={appt.id}
+                                    status={normalizedStatus}
+                                    clientName={appt.clientName}
+                                    phone={appt.phone}
+                                    description={appt.description}
+                                    scheduleAt={appt.scheduleAt}
+                                    barberName={appt.barber?.name}
+                                    servicePrice={
+                                      appt.servicePriceAtTheTime
+                                        ? Number(appt.servicePriceAtTheTime)
+                                        : appt.service?.price
+                                          ? Number(appt.service.price)
+                                          : undefined
+                                    }
+                                    cancelFeePercentage={
+                                      appt.service?.cancelFeePercentage
+                                        ? Number(
+                                            appt.service.cancelFeePercentage,
+                                          )
+                                        : undefined
+                                    }
+                                    cancelLimitHours={
+                                      appt.service?.cancelLimitHours ??
+                                      undefined
+                                    }
+                                    cancelledByRole="ADMIN"
+                                    concludedByRole="ADMIN"
+                                  />
                                 </div>
                               )}
-                            </div>
-                          </td>
-
-                          <td className="px-4 py-2 font-medium">
-                            {appt.clientName}
-                          </td>
-                          <td className="px-4 py-2">{appt.phone}</td>
-                          <td className="px-4 py-2">{appt.description}</td>
-                          <td className="px-4 py-2">{dateStr}</td>
-                          <td className="px-4 py-2">{timeStr}</td>
-                          <td className="px-4 py-2">
-                            <AppointmentStatusBadge status={normalizedStatus} />
-                          </td>
-
-                          {/* COLUNA: mini log de ações */}
-                          <td className="px-4 py-2">
-                            <span className="text-paragraph-small text-content-secondary">
-                              {actionLog}
-                            </span>
-                          </td>
-
-                          {/* COLUNA: ações (somente se PENDENTE) */}
-                          <td className="px-4 py-3">
-                            {isPending && (
-                              <div className="flex justify-end gap-2">
-                                <AppointmentForm
-                                  appointment={safeApptForForm}
-                                  appointments={appointmentsForForm}
-                                  barbers={barbersForForm}
-                                  services={services}
-                                />
-
-                                <AppointmentActions
-                                  appointmentId={appt.id}
-                                  status={normalizedStatus}
-                                  clientName={appt.clientName}
-                                  phone={appt.phone}
-                                  description={appt.description}
-                                  scheduleAt={appt.scheduleAt}
-                                  barberName={appt.barber?.name}
-                                  servicePrice={
-                                    appt.servicePriceAtTheTime
-                                      ? Number(appt.servicePriceAtTheTime)
-                                      : appt.service?.price
-                                        ? Number(appt.service.price)
-                                        : undefined
-                                  }
-                                  cancelFeePercentage={
-                                    appt.service?.cancelFeePercentage
-                                      ? Number(appt.service.cancelFeePercentage)
-                                      : undefined
-                                  }
-                                  cancelLimitHours={
-                                    appt.service?.cancelLimitHours ?? undefined
-                                  }
-                                  cancelledByRole="ADMIN"
-                                  concludedByRole="ADMIN"
-                                />
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </section>
       )}
     </div>

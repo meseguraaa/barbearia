@@ -36,7 +36,7 @@ async function getCurrentBarber() {
   let payload: PainelSessionPayload | null = null;
 
   try {
-    const { payload: raw } = await jwtVerify(token, getJwtSecretKey());
+    const { payload: raw } = await jwtVerify(token!, getJwtSecretKey());
     payload = raw as PainelSessionPayload;
   } catch {
     redirect("/painel/login");
@@ -123,77 +123,97 @@ export default async function BarberEarningsPage({
   const monthStart = startOfMonth(baseDate);
   const monthEnd = endOfMonth(baseDate);
 
-  // Atendimentos concluídos do DIA
-  const dayAppointments = await prisma.appointment.findMany({
-    where: {
-      barberId: barber.id,
-      status: "DONE",
-      scheduleAt: {
-        gte: dayStart,
-        lte: dayEnd,
+  const [
+    dayAppointments,
+    dayCanceledAppointments,
+    monthAppointments,
+    monthCanceledAppointments,
+    dayProductSales,
+    monthProductSales,
+  ] = await Promise.all([
+    // Atendimentos concluídos do DIA
+    prisma.appointment.findMany({
+      where: {
+        barberId: barber.id,
+        status: "DONE",
+        scheduleAt: {
+          gte: dayStart,
+          lte: dayEnd,
+        },
       },
-    },
-    include: {
-      service: true,
-    },
-    orderBy: {
-      scheduleAt: "asc",
-    },
-  });
-
-  // Atendimentos CANCELADOS do DIA (para contagem + taxa)
-  const dayCanceledAppointments = await prisma.appointment.findMany({
-    where: {
-      barberId: barber.id,
-      status: "CANCELED",
-      scheduleAt: {
-        gte: dayStart,
-        lte: dayEnd,
+      include: {
+        service: true,
       },
-    },
-  });
-
-  // Atendimentos concluídos do MÊS
-  const monthAppointments = await prisma.appointment.findMany({
-    where: {
-      barberId: barber.id,
-      status: "DONE",
-      scheduleAt: {
-        gte: monthStart,
-        lte: monthEnd,
+      orderBy: {
+        scheduleAt: "asc",
       },
-    },
-    include: {
-      service: true,
-    },
-    orderBy: {
-      scheduleAt: "asc",
-    },
-  });
-
-  // Atendimentos CANCELADOS do MÊS (para contagem + taxa)
-  const monthCanceledAppointments = await prisma.appointment.findMany({
-    where: {
-      barberId: barber.id,
-      status: "CANCELED",
-      scheduleAt: {
-        gte: monthStart,
-        lte: monthEnd,
+    }),
+    // Atendimentos CANCELADOS do DIA
+    prisma.appointment.findMany({
+      where: {
+        barberId: barber.id,
+        status: "CANCELED",
+        scheduleAt: {
+          gte: dayStart,
+          lte: dayEnd,
+        },
       },
-    },
-  });
-
-  // PRODUTOS ATIVOS (compartilhado para todos os barbeiros)
-  const activeProducts = await prisma.product.findMany({
-    where: {
-      isActive: true,
-    },
-  });
-
-  const totalActiveProducts = activeProducts.length;
-  const totalActiveProductsValue = activeProducts.reduce((sum, product) => {
-    return sum + Number(product.price);
-  }, 0);
+    }),
+    // Atendimentos concluídos do MÊS
+    prisma.appointment.findMany({
+      where: {
+        barberId: barber.id,
+        status: "DONE",
+        scheduleAt: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+      },
+      include: {
+        service: true,
+      },
+      orderBy: {
+        scheduleAt: "asc",
+      },
+    }),
+    // Atendimentos CANCELADOS do MÊS
+    prisma.appointment.findMany({
+      where: {
+        barberId: barber.id,
+        status: "CANCELED",
+        scheduleAt: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+      },
+    }),
+    // VENDAS DE PRODUTOS DO DIA (deste barbeiro)
+    prisma.productSale.findMany({
+      where: {
+        barberId: barber.id,
+        soldAt: {
+          gte: dayStart,
+          lte: dayEnd,
+        },
+      },
+      include: {
+        product: true,
+      },
+    }),
+    // VENDAS DE PRODUTOS DO MÊS (deste barbeiro)
+    prisma.productSale.findMany({
+      where: {
+        barberId: barber.id,
+        soldAt: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+      },
+      include: {
+        product: true,
+      },
+    }),
+  ]);
 
   const currencyFormatter = new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -201,8 +221,8 @@ export default async function BarberEarningsPage({
     minimumFractionDigits: 2,
   });
 
-  // ===== GANHOS NO DIA (soma do que o barbeiro ganha em serviços) =====
-  const totalEarningsDay = dayAppointments.reduce((sum, appt) => {
+  // ===== GANHOS NO DIA (SERVIÇOS) =====
+  const totalServiceEarningsDay = dayAppointments.reduce((sum, appt) => {
     const earningSnapshot = appt.barberEarningValue;
     const priceSnapshot = appt.servicePriceAtTheTime;
     const priceService = appt.service?.price ?? 0;
@@ -226,8 +246,8 @@ export default async function BarberEarningsPage({
     return sum + earningNumber;
   }, 0);
 
-  // ===== GANHOS DO MÊS (somente serviços concluídos – base) =====
-  const totalEarningsMonthBase = monthAppointments.reduce((sum, appt) => {
+  // ===== GANHOS DO MÊS (SERVIÇOS) =====
+  const totalServiceEarningsMonth = monthAppointments.reduce((sum, appt) => {
     const earningSnapshot = appt.barberEarningValue;
     const priceSnapshot = appt.servicePriceAtTheTime;
     const priceService = appt.service?.price ?? 0;
@@ -249,6 +269,38 @@ export default async function BarberEarningsPage({
     }
 
     return sum + earningNumber;
+  }, 0);
+
+  // ===== PRODUTOS (RECEITA + GANHO DO BARBEIRO) =====
+  const totalProductsSoldDay = dayProductSales.reduce(
+    (sum, sale) => sum + sale.quantity,
+    0,
+  );
+  const totalProductsSoldMonth = monthProductSales.reduce(
+    (sum, sale) => sum + sale.quantity,
+    0,
+  );
+
+  const totalProductsRevenueDay = dayProductSales.reduce((sum, sale) => {
+    return sum + Number(sale.totalPrice);
+  }, 0);
+
+  const totalProductsRevenueMonth = monthProductSales.reduce((sum, sale) => {
+    return sum + Number(sale.totalPrice);
+  }, 0);
+
+  const totalProductEarningsDay = dayProductSales.reduce((sum, sale) => {
+    const percent = sale.product?.barberPercentage ?? 0;
+    const total = Number(sale.totalPrice);
+    const commission = (total * percent) / 100;
+    return sum + commission;
+  }, 0);
+
+  const totalProductEarningsMonth = monthProductSales.reduce((sum, sale) => {
+    const percent = sale.product?.barberPercentage ?? 0;
+    const total = Number(sale.totalPrice);
+    const commission = (total * percent) / 100;
+    return sum + commission;
   }, 0);
 
   // ✅ Concluídos
@@ -278,8 +330,13 @@ export default async function BarberEarningsPage({
     return sum + fee;
   }, 0);
 
-  // 🔗 Faturamento do mês = ganhos em serviços + taxas de cancelamento do mês
-  const totalEarningsMonth = totalEarningsMonthBase + totalCancelFeeMonth;
+  // 🔗 Ganhos totais
+  // Dia: serviços + comissão de produtos
+  const totalEarningsDay = totalServiceEarningsDay + totalProductEarningsDay;
+
+  // Mês: serviços + comissão de produtos + taxas de cancelamento
+  const totalEarningsMonth =
+    totalServiceEarningsMonth + totalProductEarningsMonth + totalCancelFeeMonth;
 
   return (
     <div className="space-y-6">
@@ -296,7 +353,7 @@ export default async function BarberEarningsPage({
 
       {/* RESUMO */}
       <section className="grid gap-4 md:grid-cols-4">
-        {/* Ganhos no dia (serviços) */}
+        {/* Ganhos no dia (serviços + produtos) */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
             Ganhos no dia
@@ -304,9 +361,13 @@ export default async function BarberEarningsPage({
           <p className="text-title text-content-primary">
             {currencyFormatter.format(totalEarningsDay)}
           </p>
+          <p className="text-paragraph-small text-content-secondary">
+            Serviços: {currencyFormatter.format(totalServiceEarningsDay)} •
+            Produtos: {currencyFormatter.format(totalProductEarningsDay)}
+          </p>
         </div>
 
-        {/* Taxas de cancelamento (agora usadas também no faturamento do mês) */}
+        {/* Taxas de cancelamento */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
             Taxas de cancelamento
@@ -368,7 +429,7 @@ export default async function BarberEarningsPage({
           </div>
         </div>
 
-        {/* Faturamento do mês (serviços + taxas de cancelamento) */}
+        {/* Faturamento do mês (serviços + produtos + taxas) */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
           <p className="text-label-small text-content-secondary">
             Faturamento do mês
@@ -376,23 +437,42 @@ export default async function BarberEarningsPage({
           <p className="text-title text-content-primary">
             {currencyFormatter.format(totalEarningsMonth)}
           </p>
+          <p className="text-paragraph-small text-content-secondary">
+            Serviços: {currencyFormatter.format(totalServiceEarningsMonth)} •
+            Produtos: {currencyFormatter.format(totalProductEarningsMonth)} •
+            Taxas: {currencyFormatter.format(totalCancelFeeMonth)}
+          </p>
         </div>
 
-        {/* Produtos disponíveis */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-2">
+        {/* Vendas de produtos (do barbeiro) */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3">
           <p className="text-label-small text-content-secondary">
-            Produtos disponíveis
+            Vendas de produtos
           </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Quantidade:{" "}
-            <span className="font-semibold">{totalActiveProducts}</span>
-          </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Soma dos preços:{" "}
-            <span className="font-semibold">
-              {currencyFormatter.format(totalActiveProductsValue)}
-            </span>
-          </p>
+
+          <div className="space-y-3">
+            {/* Hoje */}
+            <div className="space-y-1">
+              <p className="text-label-small text-content-secondary">
+                Ganho hoje com produtos
+              </p>
+              <p className="text-title text-content-primary">
+                {totalProductsSoldDay} -{" "}
+                {currencyFormatter.format(totalProductEarningsDay)}
+              </p>
+            </div>
+
+            {/* Mês */}
+            <div className="space-y-1">
+              <p className="text-label-small text-content_secondary">
+                Ganho no mês com produtos
+              </p>
+              <p className="text-title text-content-primary">
+                {totalProductsSoldMonth} -{" "}
+                {currencyFormatter.format(totalProductEarningsMonth)}
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 

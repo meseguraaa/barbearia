@@ -66,8 +66,6 @@ async function seedRecurringExpensesForMonth(monthStart: Date, monthEnd: Date) {
   for (const expense of lastMonthRecurringExpenses) {
     const day = expense.dueDate.getDate();
 
-    // Procura se já existe alguma despesa recorrente da mesma "série"
-    // (mesma descrição) neste mês com o MESMO dia de vencimento.
     const sameSeriesThisMonth = await prisma.expense.findMany({
       where: {
         isRecurring: true,
@@ -116,39 +114,52 @@ export default async function AdminFinancePage({
   // Garante recorrência por série (mês a mês)
   await seedRecurringExpensesForMonth(monthStart, monthEnd);
 
-  // Busca despesas do mês
-  const expenses = await prisma.expense.findMany({
-    where: {
-      dueDate: {
-        gte: monthStart,
-        lte: monthEnd,
+  const [expenses, appointmentsDone, productSales] = await Promise.all([
+    // Despesas do mês
+    prisma.expense.findMany({
+      where: {
+        dueDate: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
       },
-    },
-    orderBy: {
-      dueDate: "asc",
-    },
-  });
-
-  // Busca appointments concluídos no mês para cálculos financeiros
-  const appointmentsDone = await prisma.appointment.findMany({
-    where: {
-      status: "DONE",
-      scheduleAt: {
-        gte: monthStart,
-        lte: monthEnd,
+      orderBy: {
+        dueDate: "asc",
       },
-    },
-    include: {
-      service: true,
-    },
-  });
+    }),
+    // Appointments concluídos no mês para cálculos financeiros
+    prisma.appointment.findMany({
+      where: {
+        status: "DONE",
+        scheduleAt: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+      },
+      include: {
+        service: true,
+      },
+    }),
+    // Vendas de produtos do mês (todas, de todos os barbeiros)
+    prisma.productSale.findMany({
+      where: {
+        soldAt: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+      },
+      include: {
+        product: true,
+      },
+    }),
+  ]);
 
   // ===== DESPESAS DO MÊS =====
   const totalExpenses = expenses.reduce((acc, expense) => {
     return acc + Number(expense.amount);
   }, 0);
 
-  // ===== LUCRO BRUTO / LÍQUIDO DOS AGENDAMENTOS (MESMO CÁLCULO DO DASHBOARD) =====
+  // ===== LUCRO BRUTO / LÍQUIDO DOS AGENDAMENTOS =====
   const { totalGrossMonth, totalNetMonth } = appointmentsDone.reduce(
     (acc, appt) => {
       const priceSnapshot = appt.servicePriceAtTheTime;
@@ -182,9 +193,18 @@ export default async function AdminFinancePage({
   // Lucro líquido de agendamentos (após comissão)
   const appointmentsNetProfitMonth = totalNetMonth;
 
-  // Lucro líquido de produtos (quando tiver vendas de produtos).
-  // Por enquanto, ainda não existe registro de venda, então fica 0.
-  const productsNetProfitMonth = 0;
+  // ===== LUCRO LÍQUIDO DE PRODUTOS =====
+  // Para cada venda:
+  // - total da venda = sale.totalPrice
+  // - comissão barbeiro = total * (product.barberPercentage / 100)
+  // - lucro líquido da barbearia = total - comissão
+  const productsNetProfitMonth = productSales.reduce((acc, sale) => {
+    const total = Number(sale.totalPrice);
+    const percent = sale.product?.barberPercentage ?? 0;
+    const commission = (total * percent) / 100;
+    const net = total - commission;
+    return acc + net;
+  }, 0);
 
   // Lucro líquido final do mês:
   // lucro líquido agendamentos + lucro líquido produtos - despesas
@@ -229,16 +249,25 @@ export default async function AdminFinancePage({
 
       {/* RESUMO FINANCEIRO DO MÊS */}
       <section className="grid gap-4 md:grid-cols-3">
-        {/* FATURAMENTO BRUTO DOS AGENDAMENTOS */}
+        {/* FATURAMENTO LÍQUIDO (SERVIÇOS + PRODUTOS) */}
         <div className="space-y-1 rounded-xl border border-border-primary bg-background-tertiary px-4 py-3">
           <p className="text-label-small text-content-secondary">
-            Faturamento bruto (agendamentos)
+            Faturamento líquido (serviços + produtos)
           </p>
           <p className="text-title text-content-primary">
-            {currencyFormatter.format(totalGrossMonth)}
+            {currencyFormatter.format(
+              appointmentsNetProfitMonth + productsNetProfitMonth,
+            )}
           </p>
           <p className="text-paragraph-small text-content-secondary">
-            Soma dos agendamentos concluídos no mês (antes da comissão).
+            Serviços:{" "}
+            <span className="font-medium">
+              {currencyFormatter.format(appointmentsNetProfitMonth)}
+            </span>{" "}
+            • Produtos:{" "}
+            <span className="font-medium">
+              {currencyFormatter.format(productsNetProfitMonth)}
+            </span>
           </p>
         </div>
 
@@ -268,8 +297,7 @@ export default async function AdminFinancePage({
             {currencyFormatter.format(netIncome)}
           </p>
           <p className="text-paragraph-small text-content-secondary">
-            Lucro líquido dos agendamentos + lucro líquido de produtos (quando
-            houver) menos as despesas do mês.
+            Faturamento líquido (serviços + produtos) menos as despesas do mês.
           </p>
         </div>
       </section>
