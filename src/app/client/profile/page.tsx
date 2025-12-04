@@ -5,8 +5,8 @@ import { redirect } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
-// Server Action para atualizar o telefone
-async function updatePhone(formData: FormData) {
+// Server Action para atualizar telefone + aniversário
+async function updateProfile(formData: FormData) {
   "use server";
 
   const session = await getServerSession(nextAuthOptions);
@@ -16,10 +16,20 @@ async function updatePhone(formData: FormData) {
   }
 
   const phone = String(formData.get("phone") ?? "").trim();
+  const birthdayRaw = String(formData.get("birthday") ?? "").trim();
+
+  const userId = (session.user as any).id;
+
+  // Se vier preenchido, converte para Date; se vier vazio, seta null
+  const birthday =
+    birthdayRaw.length > 0 ? new Date(`${birthdayRaw}T00:00:00`) : null;
 
   await prisma.user.update({
-    where: { id: (session.user as any).id },
-    data: { phone },
+    where: { id: userId },
+    data: {
+      phone,
+      birthday,
+    },
   });
 
   redirect("/client/profile");
@@ -42,6 +52,11 @@ export default async function ClientProfilePage() {
   const email = user.email ?? "";
   const image = user.image ?? "/default-avatar.png";
   const phone = user.phone ?? "";
+
+  // Transformar Date -> "YYYY-MM-DD" pro input[type=date]
+  const birthdayDefaultValue = user.birthday
+    ? new Date(user.birthday).toISOString().split("T")[0]
+    : "";
 
   return (
     <div className="max-w-xl mx-auto py-10 px-6 space-y-8">
@@ -71,7 +86,7 @@ export default async function ClientProfilePage() {
           Dados de contato
         </h2>
 
-        <form action={updatePhone} className="space-y-4">
+        <form action={updateProfile} className="space-y-4">
           <div className="space-y-2">
             <label
               htmlFor="phone"
@@ -85,6 +100,22 @@ export default async function ClientProfilePage() {
               type="tel"
               placeholder="(99) 99999-9999"
               defaultValue={phone}
+              className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label
+              htmlFor="birthday"
+              className="text-label-small-size text-content-secondary"
+            >
+              Data de aniversário
+            </label>
+            <Input
+              id="birthday"
+              name="birthday"
+              type="date"
+              defaultValue={birthdayDefaultValue}
               className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
             />
           </div>
