@@ -59,6 +59,9 @@ model User {
   phone         String?
   passwordHash  String?
 
+  // 🎂 Data de aniversário do cliente (opcional)
+  birthday DateTime?
+
   role Role @default(CLIENT)
 
   appointmentsAsClient Appointment[] @relation("ClientAppointments")

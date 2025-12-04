@@ -16,11 +16,31 @@ import {
   updateClientPhoneAction,
 } from "@/app/client/profile/actions";
 import { toast } from "sonner";
+import { Calendar as CalendarIcon, ChevronDown } from "lucide-react";
 
 type ClientProfileDialogProps = {
   userName: string;
   userImage: string;
 };
+
+function formatIsoToDisplay(iso: string | undefined | null): string {
+  if (!iso) return "";
+  const [year, month, day] = iso.split("-");
+  if (!year || !month || !day) return "";
+  return `${day}/${month}/${year}`;
+}
+
+function formatDisplayToIso(display: string): string {
+  const cleaned = display.replace(/\s/g, "");
+  const [day, month, year] = cleaned.split("/");
+  if (!day || !month || !year) return "";
+  if (year.length !== 4) return "";
+  return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+}
+
+function isValidBirthdayDisplay(display: string): boolean {
+  return /^\d{2}\/\d{2}\/\d{4}$/.test(display);
+}
 
 export function ClientProfileDialog({
   userName,
@@ -34,6 +54,7 @@ export function ClientProfileDialog({
   const [email, setEmail] = useState("");
   const [image, setImage] = useState(userImage);
   const [phone, setPhone] = useState("");
+  const [birthdayInput, setBirthdayInput] = useState(""); // "DD/MM/AAAA"
 
   // Carrega os dados completos do perfil quando o modal abre pela primeira vez
   useEffect(() => {
@@ -53,6 +74,8 @@ export function ClientProfileDialog({
         setEmail(data.email);
         setImage(data.image);
         setPhone(data.phone);
+        // data.birthday vem em "YYYY-MM-DD"
+        setBirthdayInput(formatIsoToDisplay(data.birthday));
       } catch (error) {
         console.error("Erro ao carregar perfil do cliente", error);
         if (!cancelled) {
@@ -70,17 +93,56 @@ export function ClientProfileDialog({
     };
   }, [open, email]);
 
+  function handleBirthdayChange(e: React.ChangeEvent<HTMLInputElement>) {
+    let value = e.target.value;
+
+    // Mantém só números
+    value = value.replace(/\D/g, "");
+
+    // Limita a 8 dígitos (ddmmyyyy)
+    if (value.length > 8) value = value.slice(0, 8);
+
+    // Aplica máscara DD/MM/AAAA
+    if (value.length >= 5) {
+      value = value.replace(
+        /(\d{2})(\d{2})(\d{0,4})/,
+        (_, d, m, y) => `${d}/${m}/${y}`,
+      );
+    } else if (value.length >= 3) {
+      value = value.replace(/(\d{2})(\d{0,2})/, (_, d, m) =>
+        m ? `${d}/${m}` : d,
+      );
+    }
+
+    setBirthdayInput(value);
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
 
     try {
       setSaving(true);
-      await updateClientPhoneAction(phone);
-      toast.success("Telefone atualizado com sucesso!");
+
+      if (birthdayInput && !isValidBirthdayDisplay(birthdayInput)) {
+        toast.error("Preencha a data de aniversário no formato DD/MM/AAAA.");
+        setSaving(false);
+        return;
+      }
+
+      const isoBirthday = birthdayInput
+        ? formatDisplayToIso(birthdayInput)
+        : "";
+
+      await updateClientPhoneAction({
+        phone,
+        birthday: isoBirthday || null,
+      });
+
+      toast.success("Dados atualizados com sucesso!");
       setOpen(false);
     } catch (error) {
-      console.error("Erro ao atualizar telefone", error);
-      toast.error("Erro ao salvar telefone. Tente novamente.");
+      console.error("Erro ao atualizar perfil", error);
+      toast.error("Erro ao salvar. Tente novamente.");
     } finally {
       setSaving(false);
     }
@@ -136,7 +198,7 @@ export function ClientProfileDialog({
             </div>
           </div>
 
-          {/* Form de telefone */}
+          {/* Form de telefone + aniversário */}
           <form onSubmit={handleSave} className="space-y-4">
             <div className="space-y-2">
               <label
@@ -155,6 +217,36 @@ export function ClientProfileDialog({
                 disabled={loadingProfile || saving}
                 className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
               />
+            </div>
+
+            {/* 🎂 Data de aniversário com estilização semelhante ao date-picker */}
+            <div className="space-y-2">
+              <label
+                htmlFor="birthday"
+                className="text-label-small-size text-content-secondary"
+              >
+                Data de aniversário
+              </label>
+
+              <div className="flex items-center gap-2 rounded-lg border border-border-primary bg-background-tertiary px-3 py-2 focus-within:ring-2 focus-within:ring-brand-primary">
+                <CalendarIcon className="w-4 h-4 text-brand-primary" />
+                <input
+                  id="birthday"
+                  name="birthday"
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="DD/MM/AAAA"
+                  value={birthdayInput}
+                  onChange={handleBirthdayChange}
+                  disabled={loadingProfile || saving}
+                  className="flex-1 bg-transparent outline-none border-0 text-paragraph-small-size text-content-primary placeholder:text-content-tertiary"
+                />
+                <ChevronDown className="w-4 h-4 text-content-tertiary" />
+              </div>
+
+              <p className="text-[11px] text-content-tertiary">
+                Digite no formato DD/MM/AAAA.
+              </p>
             </div>
 
             <div className="flex justify-end">
