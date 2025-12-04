@@ -35,6 +35,15 @@ const baseProductSchema = z.object({
       message: "Comissão deve ser entre 0 e 100",
     }),
   category: z.string().min(1, "Categoria obrigatória"),
+
+  // ⭐ NOVO: ESTOQUE
+  stockQuantity: z
+    .string()
+    .min(1, "Estoque obrigatório")
+    .transform((val) => Number(val))
+    .refine((val) => Number.isInteger(val) && val >= 0, {
+      message: "Estoque deve ser um número inteiro maior ou igual a 0",
+    }),
 });
 
 const createProductSchema = baseProductSchema;
@@ -72,6 +81,7 @@ export async function createProduct(formData: FormData) {
     price: formData.get("price"),
     barberPercentage: formData.get("barberPercentage"),
     category: formData.get("category"),
+    stockQuantity: formData.get("stockQuantity"),
   });
 
   if (!parsed.success) {
@@ -81,8 +91,15 @@ export async function createProduct(formData: FormData) {
     );
   }
 
-  const { name, imageUrl, description, price, barberPercentage, category } =
-    parsed.data;
+  const {
+    name,
+    imageUrl,
+    description,
+    price,
+    barberPercentage,
+    category,
+    stockQuantity,
+  } = parsed.data;
 
   const normalizedPrice = normalizePriceToDecimalString(price);
 
@@ -94,6 +111,7 @@ export async function createProduct(formData: FormData) {
       price: new Prisma.Decimal(normalizedPrice),
       barberPercentage,
       category,
+      stockQuantity,
     },
   });
 
@@ -108,6 +126,7 @@ export async function updateProduct(productId: string, formData: FormData) {
     price: formData.get("price"),
     barberPercentage: formData.get("barberPercentage"),
     category: formData.get("category"),
+    stockQuantity: formData.get("stockQuantity"),
   });
 
   if (!parsed.success) {
@@ -117,8 +136,15 @@ export async function updateProduct(productId: string, formData: FormData) {
     );
   }
 
-  const { name, imageUrl, description, price, barberPercentage, category } =
-    parsed.data;
+  const {
+    name,
+    imageUrl,
+    description,
+    price,
+    barberPercentage,
+    category,
+    stockQuantity,
+  } = parsed.data;
 
   const normalizedPrice = normalizePriceToDecimalString(price);
 
@@ -131,6 +157,7 @@ export async function updateProduct(productId: string, formData: FormData) {
       price: new Prisma.Decimal(normalizedPrice),
       barberPercentage,
       category,
+      stockQuantity,
     },
   });
 

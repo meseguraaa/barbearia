@@ -26,23 +26,19 @@ enum AppointmentStatus {
   CANCELED
 }
 
-// Tipo de disponibilidade diária do barbeiro
-// DAY_OFF  = folga nesse dia específico
-// CUSTOM   = horários customizados só para esse dia (override do padrão semanal)
 enum BarberDailyAvailabilityType {
   DAY_OFF
   CUSTOM
 }
 
 enum ExpenseCategory {
-  RENT // Aluguel
-  UTILITIES // Luz, água, internet, etc
-  TAXES // Impostos
-  SUPPLIES // Suprimentos / compras
-  OTHER // Outros
+  RENT
+  UTILITIES
+  TAXES
+  SUPPLIES
+  OTHER
 }
 
-// Status do plano do cliente
 enum ClientPlanStatus {
   ACTIVE
   EXPIRED
@@ -60,25 +56,17 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   image         String?
-
-  // 🔹 Novo campo: telefone do usuário (cliente/admin/barber)
-  phone String?
-
-  // Para barbeiro/admin: hash da senha (nunca em texto puro!)
-  passwordHash String?
+  phone         String?
+  passwordHash  String?
 
   role Role @default(CLIENT)
 
-  // Relacionamentos
   appointmentsAsClient Appointment[] @relation("ClientAppointments")
 
-  // 🔗 planos comprados por esse usuário (cliente)
   clientPlans ClientPlan[]
 
-  // relação com Barber (1-1 opcional)
   barber Barber?
 
-  // relações com NextAuth
   accounts Account[]
   sessions Session[]
 
@@ -87,7 +75,7 @@ model User {
 }
 
 // =======================
-// NEXTAUTH MODELS
+// NEXTAUTH
 // =======================
 
 model Account {
@@ -130,7 +118,7 @@ model VerificationToken {
 }
 
 // =======================
-// DOMÍNIO DO SISTEMA
+// DOMÍNIO
 // =======================
 
 model Barber {
@@ -142,43 +130,35 @@ model Barber {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // 🔗 relação com User (opcional, para login de barbeiro)
   userId String? @unique
   user   User?   @relation(fields: [userId], references: [id])
 
-  // 🔗 relação com Appointment
   appointments Appointment[]
 
-  // 🔗 disponibilidade padrão semanal
   weeklyAvailabilities BarberWeeklyAvailability[]
+  dailyAvailabilities  BarberDailyAvailability[]
 
-  // 🔗 exceções de disponibilidade por dia
-  dailyAvailabilities BarberDailyAvailability[]
+  // ⭐ VENDAS DE PRODUTO
+  productSales ProductSale[]
 
   @@map("barbers")
 }
 
+// =======================
+// SERVICES / APPOINTMENTS
+// =======================
+
 model Service {
-  id              String  @id @default(cuid())
-  name            String
-  price           Decimal @db.Decimal(10, 2)
-  durationMinutes Int
-  isActive        Boolean @default(true)
-
-  /// Porcentagem de ganho do barbeiro nesse serviço (%)
-  barberPercentage Decimal @default(50.0) @db.Decimal(5, 2)
-
-  /// Limite (em horas) antes do horário para cobrar taxa de cancelamento
-  /// Ex: 2 = se cancelar com menos de 2h, pode aplicar taxa
-  cancelLimitHours Int?
-
-  /// Porcentagem da taxa de cancelamento sobre o valor do serviço (%)
+  id                  String   @id @default(cuid())
+  name                String
+  price               Decimal  @db.Decimal(10, 2)
+  durationMinutes     Int
+  isActive            Boolean  @default(true)
+  barberPercentage    Decimal  @default(50.0) @db.Decimal(5, 2)
+  cancelLimitHours    Int?
   cancelFeePercentage Decimal? @db.Decimal(5, 2)
 
-  // Relacionamento com Appointment
   appointments Appointment[]
-
-  // 🔗 relação com PlanService (quais planos incluem este serviço)
   planServices PlanService[]
 
   createdAt DateTime @default(now())
@@ -191,33 +171,18 @@ model Service {
 // PLANOS
 // =======================
 
-// Plano "produto" (ex: Plano Mensal - 4 cortes)
 model Plan {
   id   String @id @default(cuid())
   name String
 
-  description String?
-
-  /// Preço total do plano
-  price Decimal @db.Decimal(10, 2)
-
-  /// Duração em dias (no seu caso, sempre 30)
-  durationDays Int @default(30)
-
-  /// Quantidade de agendamentos incluídos (no seu caso, sempre 4)
-  totalBookings Int @default(4)
-
-  /// Percentual de comissão total do barbeiro sobre o valor do plano (0–100)
-  /// Ex: 50 = 50% do valor do plano será distribuído nos 4 atendimentos
+  description       String?
+  price             Decimal @db.Decimal(10, 2)
+  durationDays      Int     @default(30)
+  totalBookings     Int     @default(4)
   commissionPercent Int
+  isActive          Boolean @default(true)
 
-  /// Se o plano está disponível para venda
-  isActive Boolean @default(true)
-
-  /// Serviços que fazem parte desse plano
-  services PlanService[]
-
-  /// Planos comprados pelos clientes
+  services    PlanService[]
   clientPlans ClientPlan[]
 
   createdAt DateTime @default(now())
@@ -226,7 +191,6 @@ model Plan {
   @@map("plans")
 }
 
-// Tabela de junção Plano <-> Serviços
 model PlanService {
   id String @id @default(cuid())
 
@@ -239,33 +203,23 @@ model PlanService {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Um mesmo serviço não pode ser cadastrado duas vezes no mesmo plano
   @@unique([planId, serviceId])
   @@map("plan_services")
 }
 
-// Instância do plano comprada por um cliente específico
 model ClientPlan {
   id       String @id @default(cuid())
   clientId String
   planId   String
 
-  /// Data de início (compra / ativação)
-  startDate DateTime
-
-  /// Data de fim (startDate + durationDays)
-  endDate DateTime
-
-  /// Quantos agendamentos já foram usados nesse plano
-  usedBookings Int @default(0)
-
-  /// Status do plano
-  status ClientPlanStatus @default(ACTIVE)
+  startDate    DateTime
+  endDate      DateTime
+  usedBookings Int              @default(0)
+  status       ClientPlanStatus @default(ACTIVE)
 
   client User @relation(fields: [clientId], references: [id])
   plan   Plan @relation(fields: [planId], references: [id])
 
-  /// Agendamentos que consumiram crédito desse plano
   appointments Appointment[]
 
   createdAt DateTime @default(now())
@@ -285,78 +239,100 @@ model Appointment {
 
   status AppointmentStatus @default(PENDING)
 
-  // Cliente que fez o agendamento (usuário logado)
   clientId String
   client   User   @relation("ClientAppointments", fields: [clientId], references: [id])
 
-  // Barbeiro que vai atender (pode ser nulo para dados antigos / “Sem barbeiro”)
   barberId String?
   barber   Barber? @relation(fields: [barberId], references: [id])
 
-  // Serviço escolhido (pode ser nulo para agendamentos antigos)
   serviceId String?
   service   Service? @relation(fields: [serviceId], references: [id])
 
-  /// Snapshot do valor do serviço na época do agendamento
-  servicePriceAtTheTime Decimal? @db.Decimal(10, 2)
-
-  /// Snapshot da porcentagem do barbeiro na época do agendamento (%)
+  servicePriceAtTheTime     Decimal? @db.Decimal(10, 2)
   barberPercentageAtTheTime Decimal? @db.Decimal(5, 2)
+  barberEarningValue        Decimal? @db.Decimal(10, 2)
 
-  /// Valor em dinheiro que o barbeiro ganha neste agendamento
-  barberEarningValue Decimal? @db.Decimal(10, 2)
+  cancelFeeApplied Boolean  @default(false)
+  cancelFeeValue   Decimal? @db.Decimal(10, 2)
+  cancelledByRole  Role?
+  concludedByRole  Role?
 
-  /// Se uma taxa de cancelamento foi aplicada neste agendamento
-  cancelFeeApplied Boolean @default(false)
-
-  /// Valor em dinheiro da taxa de cancelamento aplicada
-  cancelFeeValue Decimal? @db.Decimal(10, 2)
-
-  /// Quem decidiu aplicar a taxa (ADMIN ou BARBER)
-  cancelledByRole Role?
-
-  /// Quem concluiu o atendimento (ADMIN ou BARBER)
-  concludedByRole Role?
-
-  /// Se esse agendamento consumiu crédito de um plano
   clientPlanId String?
   clientPlan   ClientPlan? @relation(fields: [clientPlanId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Índices úteis
   @@index([clientId])
   @@index([barberId])
   @@index([scheduleAt])
   @@index([serviceId])
   @@index([clientPlanId])
-  // Mantém o nome da tabela como "appointments"
   @@map("appointments")
 }
+
+// =======================
+// ⭐ PRODUCTS + STOCK
+// =======================
 
 model Product {
   id               String  @id @default(cuid())
   name             String
-  imageUrl         String // foto obrigatória (URL)
+  imageUrl         String
   description      String
-  price            Decimal // valor do produto (sem @db.Numeric)
-  barberPercentage Int // porcentagem de comissão do barbeiro (0-100)
-  category         String // finalidade: "Barba", "Cabelo", etc
+  price            Decimal @db.Decimal(10, 2)
+  barberPercentage Int
+  category         String
   isActive         Boolean @default(true)
+
+  // ⭐ ESTOQUE
+  stockQuantity Int @default(0)
+
+  // ⭐ RELAÇÃO COM VENDAS
+  sales ProductSale[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
+
+// =======================
+// ⭐ REGISTRO DE VENDA DE PRODUTO
+// =======================
+
+model ProductSale {
+  id String @id @default(cuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  barberId String
+  barber   Barber @relation(fields: [barberId], references: [id])
+
+  quantity   Int
+  unitPrice  Decimal @db.Decimal(10, 2)
+  totalPrice Decimal @db.Decimal(10, 2)
+
+  soldAt    DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@index([barberId])
+  @@index([soldAt])
+}
+
+// =======================
+// EXPENSES
+// =======================
 
 model Expense {
   id          String          @id @default(cuid())
   description String
   category    ExpenseCategory
   amount      Decimal         @db.Decimal(10, 2)
-  dueDate     DateTime // data de vencimento (usada para saber o mês)
-  isRecurring Boolean         @default(false) // se é uma conta fixa mês a mês
-  isPaid      Boolean         @default(false) // se já foi paga ou não
+  dueDate     DateTime
+  isRecurring Boolean         @default(false)
+  isPaid      Boolean         @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -366,44 +342,30 @@ model Expense {
 }
 
 // =======================
-// DISPONIBILIDADE DO BARBEIRO
+// DISPONIBILIDADE
 // =======================
 
-// Padrão semanal de disponibilidade do barbeiro
-// Ex.: segunda, terça, etc, com intervalos de horário
 model BarberWeeklyAvailability {
-  id String @id @default(cuid())
-
-  barberId String
-  barber   Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
-
-  /// 0 = domingo ... 6 = sábado
-  weekday Int
-
-  /// Se o barbeiro trabalha nesse dia da semana
-  isActive Boolean @default(true)
-
-  /// Intervalos de horário padrão nesse dia (ex.: 09:00–12:00, 13:00–18:00)
+  id        String                     @id @default(cuid())
+  barberId  String
+  barber    Barber                     @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  weekday   Int
+  isActive  Boolean                    @default(true)
   intervals BarberWeeklyTimeInterval[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Um registro por barbeiro + dia da semana
   @@unique([barberId, weekday])
   @@map("barber_weekly_availabilities")
 }
 
-// Intervalos de horário para o padrão semanal
-// Armazena "hora:minuto" como string (ex.: "09:00")
 model BarberWeeklyTimeInterval {
-  id String @id @default(cuid())
-
+  id                   String                   @id @default(cuid())
   weeklyAvailabilityId String
   weeklyAvailability   BarberWeeklyAvailability @relation(fields: [weeklyAvailabilityId], references: [id], onDelete: Cascade)
-
-  startTime String // "HH:mm"
-  endTime   String // "HH:mm"
+  startTime            String
+  endTime              String
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -411,39 +373,27 @@ model BarberWeeklyTimeInterval {
   @@map("barber_weekly_time_intervals")
 }
 
-// Disponibilidade diária específica (exceções)
-// - DAY_OFF: folga nesse dia
-// - CUSTOM: horários customizados só para este dia
 model BarberDailyAvailability {
-  id String @id @default(cuid())
-
-  barberId String
-  barber   Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
-
-  /// Dia específico (data inteira; você trata como "yyyy-MM-dd" na aplicação)
-  date DateTime
-
-  type BarberDailyAvailabilityType
-
+  id        String                      @id @default(cuid())
+  barberId  String
+  barber    Barber                      @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  date      DateTime
+  type      BarberDailyAvailabilityType
   intervals BarberDailyTimeInterval[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Um registro por barbeiro + dia específico
   @@unique([barberId, date])
   @@map("barber_daily_availabilities")
 }
 
-// Intervalos de horário específicos para um dia (quando type = CUSTOM)
 model BarberDailyTimeInterval {
-  id String @id @default(cuid())
-
+  id                  String                  @id @default(cuid())
   dailyAvailabilityId String
   dailyAvailability   BarberDailyAvailability @relation(fields: [dailyAvailabilityId], references: [id], onDelete: Cascade)
-
-  startTime String // "HH:mm"
-  endTime   String // "HH:mm"
+  startTime           String
+  endTime             String
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

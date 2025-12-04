@@ -68,37 +68,25 @@ export default async function ClientsPage() {
     .map((u) => (u as any).phone as string | null | undefined)
     .filter((p): p is string => !!p);
 
-  // 🔹 Serviços (pra saber preço por serviceId)
+  // 🔹 Serviços
   const services = await prisma.service.findMany();
   const servicePriceById = new Map<string, number>(
     services.map((s) => [s.id, Number(s.price)]),
   );
 
-  // 🔹 Todos os agendamentos relacionados a esses clientes (via telefone)
+  // 🔹 Agendamentos dos clientes (via telefone)
   const appointments = await prisma.appointment.findMany({
     where: {
-      phone: {
-        in: clientPhones,
-      },
+      phone: { in: clientPhones },
     },
-    orderBy: {
-      scheduleAt: "asc",
-    },
+    orderBy: { scheduleAt: "asc" },
   });
 
-  // 🔹 Todos os planos dos clientes
+  // 🔹 Planos dos clientes
   const clientPlans = await prisma.clientPlan.findMany({
-    where: {
-      clientId: {
-        in: clientIds,
-      },
-    },
-    include: {
-      plan: true,
-    },
-    orderBy: {
-      startDate: "asc",
-    },
+    where: { clientId: { in: clientIds } },
+    include: { plan: true },
+    orderBy: { startDate: "asc" },
   });
 
   const today = new Date();
@@ -111,6 +99,7 @@ export default async function ClientsPage() {
       : [];
 
     const totalAppointments = userAppointments.length;
+
     const doneAppointments = userAppointments.filter(
       (apt) => apt.status === "DONE",
     );
@@ -118,11 +107,21 @@ export default async function ClientsPage() {
       (apt) => apt.status === "CANCELED",
     );
 
-    const userClientPlans = clientPlans.filter((cp) => cp.clientId === user.id);
+    // 🔹 Cancelamentos com taxa
+    const canceledWithFee = canceledAppointments.filter(
+      (apt) => apt.cancelFeeApplied,
+    );
+    const canceledWithFeeCount = canceledWithFee.length;
+    const totalCancelFee = canceledWithFee.reduce((sum, apt) => {
+      const fee = apt.cancelFeeValue ? Number(apt.cancelFeeValue) : 0;
+      return sum + fee;
+    }, 0);
 
+    // 🔹 Total de planos
+    const userClientPlans = clientPlans.filter((cp) => cp.clientId === user.id);
     const totalPlans = userClientPlans.length;
 
-    // plano ativo: status ACTIVE + dentro da validade + com créditos
+    // 🔹 Plano ativo (não remove essa parte!)
     const activePlan = userClientPlans.find((cp) => {
       const hasCredits = cp.usedBookings < cp.plan.totalBookings;
       const isActive = cp.status === "ACTIVE";
@@ -130,15 +129,7 @@ export default async function ClientsPage() {
       return isActive && isWithinValidity && hasCredits;
     });
 
-    // último plano (por startDate)
-    const lastPlan =
-      userClientPlans.length > 0
-        ? [...userClientPlans].sort(
-            (a, b) => a.startDate.getTime() - b.startDate.getTime(),
-          )[userClientPlans.length - 1]
-        : null;
-
-    // frequência & último DONE
+    // 🔹 Frequência e último atendimento
     const doneDates = doneAppointments.map((apt) => apt.scheduleAt);
     const frequencyLabel = buildFrequencyLabel(doneDates);
 
@@ -147,9 +138,7 @@ export default async function ClientsPage() {
         ? new Date(Math.max(...doneDates.map((d) => d.getTime())))
         : null;
 
-    // total gasto:
-    // - somatório de serviços dos agendamentos DONE
-    // - + valor dos planos (todos os planos que o cliente já teve)
+    // 🔹 Total gasto (sem taxa de cancelamento — aparece separado)
     const totalFromAppointments = doneAppointments.reduce((sum, apt) => {
       const price =
         apt.serviceId && servicePriceById.get(apt.serviceId as string);
@@ -185,9 +174,10 @@ export default async function ClientsPage() {
       totalAppointments,
       doneCount: doneAppointments.length,
       canceledCount: canceledAppointments.length,
+      canceledWithFeeCount,
+      totalCancelFee,
       totalPlans,
       hasActivePlan: !!activePlan,
-      lastPlanName: lastPlan?.plan.name ?? null,
       frequencyLabel,
       lastDoneDate,
       totalSpent,
@@ -230,13 +220,16 @@ export default async function ClientsPage() {
                   Cancelados
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-content-secondary">
+                  Canc. c/ taxa
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-content-secondary">
+                  Taxas cobradas
+                </th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-content-secondary">
                   Planos
                 </th>
                 <th className="px-4 py-3 text-center text-xs font-medium text-content-secondary">
                   Plano ativo
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
-                  Último plano
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
                   Frequência
@@ -252,11 +245,12 @@ export default async function ClientsPage() {
                 </th>
               </tr>
             </thead>
+
             <tbody>
               {rows.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={13}
                     className="px-4 py-6 text-center text-paragraph-small text-content-secondary"
                   >
                     Nenhum cliente encontrado.
@@ -285,8 +279,8 @@ export default async function ClientsPage() {
                       {row.createdAt.toLocaleDateString("pt-BR")}
                     </td>
 
-                    {/* Agendamentos */}
-                    <td className="px-4 py-3 align-middle text-center text-xs text-content-primary">
+                    {/* Agend. */}
+                    <td className="px-4 py-3 align-middle text-center text-xs">
                       {row.totalAppointments}
                     </td>
 
@@ -300,8 +294,18 @@ export default async function ClientsPage() {
                       {row.canceledCount}
                     </td>
 
+                    {/* Cancelamentos com taxa */}
+                    <td className="px-4 py-3 align-middle text-center text-xs text-amber-500">
+                      {row.canceledWithFeeCount}
+                    </td>
+
+                    {/* Total taxas cobradas */}
+                    <td className="px-4 py-3 align-middle text-right text-xs font-medium text-content-primary">
+                      {formatCurrency(row.totalCancelFee)}
+                    </td>
+
                     {/* Planos */}
-                    <td className="px-4 py-3 align-middle text-center text-xs text-content-primary">
+                    <td className="px-4 py-3 align-middle text-center text-xs">
                       {row.totalPlans}
                     </td>
 
@@ -316,11 +320,6 @@ export default async function ClientsPage() {
                       >
                         {row.hasActivePlan ? "Ativo" : "Sem plano"}
                       </span>
-                    </td>
-
-                    {/* Último plano */}
-                    <td className="px-4 py-3 align-middle text-xs text-content-secondary">
-                      {row.lastPlanName ?? "—"}
                     </td>
 
                     {/* Frequência */}
@@ -354,7 +353,6 @@ export default async function ClientsPage() {
                             </Button>
                           </Link>
                         )}
-                        {/* espaço pra futuros "Ver detalhes" */}
                       </div>
                     </td>
                   </tr>
