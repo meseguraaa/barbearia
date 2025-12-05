@@ -16,7 +16,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
-import { deleteDailyException } from "./actions";
+import { deleteDailyException } from "../../app/barber/availability/actions";
 
 type DailyExceptionDeleteButtonProps = {
   barberId: string;

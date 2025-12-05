@@ -9,10 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ServiceStatusBadge } from "@/components/service-status-badge";
 import {
-  AssignPlanToClientDialog,
-  RevalidateClientPlanDialog, // usado em client-plan-row (import lá, não aqui)
-} from "@/components/client-plan-row"; // apenas se você quiser reusar, mas aqui não usamos
-import {
   togglePlanStatus,
   updatePlan,
   createClientPlanForClient,

@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { deleteDailyException } from "./actions";
+import { deleteDailyException } from "../../app/barber/availability/actions";
 
 type DeleteExceptionButtonProps = {
   barberId: string;

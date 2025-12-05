@@ -31,7 +31,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-import { createDailyException } from "./actions";
+import { createDailyException } from "../../app/barber/availability/actions";
 
 // mesmos limites da barbearia (09:00 - 21:00), de 30 em 30
 const TIME_OPTIONS = (() => {

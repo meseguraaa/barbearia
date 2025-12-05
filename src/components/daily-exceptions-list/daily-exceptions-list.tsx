@@ -2,7 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale/pt-BR";
-import { DailyExceptionDeleteButton } from "./daily-exception-delete-button";
+import { DailyExceptionDeleteButton } from "@/components/daily-exception-delete-button";
 
 type DailyExceptionsListProps = {
   barberId: string;
@@ -85,10 +85,6 @@ export async function DailyExceptionsList({
                           </li>
                         ))}
                       </ul>
-                      <p className="text-[11px] text-content-secondary/80">
-                        Apenas esses horários poderão receber agendamentos. O
-                        restante do dia ficará indisponível.
-                      </p>
                     </div>
                   )}
                 </div>

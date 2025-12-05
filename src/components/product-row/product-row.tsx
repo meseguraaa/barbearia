@@ -1,17 +1,26 @@
 // components/product-row/product-row.tsx
 "use client";
 
-import type { ProductForRow } from "@/app/admin/products/page"; // ou copia o tipo pra cá
+import type { ProductForRow } from "@/app/admin/products/page";
 import { Button } from "@/components/ui/button";
 import { ServiceStatusBadge } from "@/components/service-status-badge";
 import { ProductEditDialog } from "@/components/product-edit-dialog";
 import { toggleProductStatusAction } from "@/app/admin/products/actions";
+import type { ProductForRow as ProductForEditDialog } from "@/components/product-edit-dialog/product-edit-dialog";
 
 type ProductRowProps = {
   product: ProductForRow;
 };
 
 export function ProductRow({ product }: ProductRowProps) {
+  // Garante que o objeto enviado para o dialog tenha os campos numéricos esperados
+  const productForDialog: ProductForEditDialog = {
+    ...product,
+    priceAsNumber: Number(product.price),
+    barberPercentageAsNumber:
+      product.barberPercentage !== null ? Number(product.barberPercentage) : 0,
+  };
+
   return (
     <tr className="border-t border-border-primary">
       {/* NOME + FOTO */}
@@ -69,7 +78,7 @@ export function ProductRow({ product }: ProductRowProps) {
       {/* AÇÕES */}
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-2">
-          <ProductEditDialog product={product} />
+          <ProductEditDialog product={productForDialog} />
 
           <form action={toggleProductStatusAction.bind(null, product.id)}>
             <Button

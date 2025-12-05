@@ -5,12 +5,16 @@ import { redirect } from "next/navigation";
 import { jwtVerify } from "jose";
 import { Metadata } from "next";
 import { startOfDay, endOfDay, startOfMonth, endOfMonth } from "date-fns";
-import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
-import { DatePicker } from "@/components/date-picker";
-import { AppointmentActions } from "@/components/appointment-actions";
-import { AppointmentForm } from "@/components/appointment-form";
+
 import type { Appointment as AppointmentType } from "@/types/appointment";
 import type { Service } from "@/types/service";
+
+import { DatePicker } from "@/components/date-picker";
+import { BarberDashboardSummary } from "@/components/barber-dashboard-summary";
+import {
+  BarberAppointmentCard,
+  type BarberDashboardAppointment,
+} from "@/components/barber-appointment-card";
 
 const SESSION_COOKIE_NAME = "painel_session";
 
@@ -189,7 +193,6 @@ export default async function BarberDashboardPage({
       include: {
         service: true,
         barber: true,
-        // 🔹 traz também o cliente pra foto
         client: true,
       },
     }),
@@ -226,6 +229,7 @@ export default async function BarberDashboardPage({
     },
   ];
 
+  // ------- MÉTRICAS -------
   const totalDoneDay = appointments.filter(
     (appt) => appt.status === "DONE",
   ).length;
@@ -242,7 +246,6 @@ export default async function BarberDashboardPage({
     (appt) => appt.status === "CANCELED",
   ).length;
 
-  // cancelamentos com taxa (dia / mês)
   const canceledWithFeeDay = appointments.filter(
     (appt) => appt.status === "CANCELED" && appt.cancelFeeApplied,
   );
@@ -252,6 +255,49 @@ export default async function BarberDashboardPage({
     (appt) => appt.status === "CANCELED" && appt.cancelFeeApplied,
   );
   const totalCanceledWithFeeMonth = canceledWithFeeMonth.length;
+
+  // ------- MAPEIA PARA O TIPO DO CARD -------
+  const barberDashboardAppointments: BarberDashboardAppointment[] =
+    appointments.map((appt) => ({
+      id: appt.id,
+      clientName: appt.clientName,
+      phone: appt.phone,
+      description: appt.description,
+      scheduleAt: appt.scheduleAt,
+      status: appt.status,
+      barberId: appt.barberId,
+      barber: appt.barber
+        ? {
+            id: appt.barber.id,
+            name: appt.barber.name,
+            email: appt.barber.email,
+            phone: appt.barber.phone,
+            isActive: appt.barber.isActive,
+          }
+        : null,
+      serviceId: appt.serviceId,
+      service: appt.service
+        ? {
+            price: Number(appt.service.price),
+            cancelFeePercentage:
+              appt.service.cancelFeePercentage != null
+                ? Number(appt.service.cancelFeePercentage)
+                : null,
+            cancelLimitHours: appt.service.cancelLimitHours,
+          }
+        : null,
+      client: appt.client
+        ? {
+            image: appt.client.image,
+          }
+        : null,
+      cancelFeeApplied: appt.cancelFeeApplied,
+      cancelledByRole: appt.cancelledByRole,
+      concludedByRole: appt.concludedByRole,
+      servicePriceAtTheTime: appt.servicePriceAtTheTime
+        ? Number(appt.servicePriceAtTheTime)
+        : null,
+    }));
 
   return (
     <div className="space-y-6">
@@ -270,229 +316,37 @@ export default async function BarberDashboardPage({
       </header>
 
       {/* RESUMO DIÁRIO / MENSAL */}
-      <section className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-2">
-          <p className="text-label-small text-content-secondary">
-            Atendimentos concluídos
-          </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Dia: <span className="font-semibold">{totalDoneDay}</span>
-          </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Mês: <span className="font-semibold">{totalDoneMonth}</span>
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-2">
-          <p className="text-label-small text-content-secondary">
-            Cancelamentos
-          </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Dia: <span className="font-semibold">{totalCanceledDay}</span>
-          </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Mês: <span className="font-semibold">{totalCanceledMonth}</span>
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-2">
-          <p className="text-label-small text-content-secondary">
-            Cancelamentos com taxa
-          </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Dia:{" "}
-            <span className="font-semibold">{totalCanceledWithFeeDay}</span>
-          </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Mês:{" "}
-            <span className="font-semibold">{totalCanceledWithFeeMonth}</span>
-          </p>
-        </div>
-      </section>
+      <BarberDashboardSummary
+        totalDoneDay={totalDoneDay}
+        totalDoneMonth={totalDoneMonth}
+        totalCanceledDay={totalCanceledDay}
+        totalCanceledMonth={totalCanceledMonth}
+        totalCanceledWithFeeDay={totalCanceledWithFeeDay}
+        totalCanceledWithFeeMonth={totalCanceledWithFeeMonth}
+      />
 
       {/* LISTA DE AGENDAMENTOS */}
-      {appointments.length === 0 ? (
+      {barberDashboardAppointments.length === 0 ? (
         <p className="text-paragraph-small text-content-secondary">
           Você não tem agendamentos para esta data.
         </p>
       ) : (
         <section className="space-y-3">
-          {appointments.map((appt) => {
-            const timeStr = appt.scheduleAt.toLocaleTimeString("pt-BR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            });
-
-            const priceSnapshot = appt.servicePriceAtTheTime;
-            const servicePrice = appt.service?.price ?? 0;
-
-            const servicePriceNumber = priceSnapshot
-              ? Number(priceSnapshot)
-              : Number(servicePrice);
-
-            const normalizedStatus =
-              (appt.status as AppointmentType["status"]) ?? "PENDING";
-            const isPending = normalizedStatus === "PENDING";
-
+          {barberDashboardAppointments.map((appt) => {
             const apptForForm = appointmentsForForm.find(
               (a) => a.id === appt.id,
             );
 
-            const safeApptForForm = apptForForm ?? {
-              id: appt.id,
-              clientName: appt.clientName,
-              phone: appt.phone,
-              description: appt.description,
-              scheduleAt: appt.scheduleAt,
-              status: normalizedStatus,
-              barberId: appt.barberId ?? "",
-              barber: appt.barber
-                ? {
-                    id: appt.barber.id,
-                    name: appt.barber.name,
-                    email: appt.barber.email,
-                    phone: appt.barber.phone,
-                    isActive: appt.barber.isActive,
-                    role: "BARBER" as const,
-                  }
-                : undefined,
-              serviceId: appt.serviceId ?? undefined,
-            };
-
-            // 🔹 avatar do cliente
-            const clientImage = appt.client?.image ?? null;
-            const clientInitial = appt.clientName?.[0]?.toUpperCase() ?? "?";
-
-            // MINI LOG (mesma regra do admin)
-            let actionLog = "—";
-
-            if (appt.status === "DONE") {
-              if (appt.concludedByRole === "ADMIN") {
-                actionLog = "Concluído pelo ADMIN";
-              } else if (appt.concludedByRole === "BARBER") {
-                actionLog = "Concluído pelo Barbeiro";
-              } else {
-                actionLog = "Concluído";
-              }
-            } else if (appt.status === "CANCELED") {
-              const who =
-                appt.cancelledByRole === "ADMIN"
-                  ? "ADMIN"
-                  : appt.cancelledByRole === "BARBER"
-                    ? "Barbeiro"
-                    : null;
-
-              if (appt.cancelFeeApplied) {
-                // com taxa
-                if (who) {
-                  actionLog = `Cancelado pelo ${who} - com taxa`;
-                } else {
-                  actionLog = "Cancelado - com taxa";
-                }
-              } else {
-                // sem taxa
-                if (who) {
-                  actionLog = `Cancelado pelo ${who} - sem taxa`;
-                } else {
-                  actionLog = "Cancelado - sem taxa";
-                }
-              }
-            }
-
             return (
-              <div
+              <BarberAppointmentCard
                 key={appt.id}
-                className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3"
-              >
-                {/* Layout: infos em grid + ações separadas, tudo em uma linha no desktop */}
-                <div className="flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  {/* Infos do agendamento */}
-                  <div className="grid flex-1 grid-cols-1 gap-2 md:grid-cols-6 md:items-center">
-                    {/* Nome + avatar */}
-                    <div>
-                      <div className="flex items-center gap-3">
-                        {clientImage ? (
-                          <img
-                            src={clientImage}
-                            alt={appt.clientName}
-                            className="h-8 w-8 rounded-full object-cover"
-                          />
-                        ) : (
-                          <div className="h-8 w-8 rounded-full bg-background-secondary flex items-center justify-center text-xs font-medium text-content-secondary">
-                            {clientInitial}
-                          </div>
-                        )}
-
-                        <span className="text-paragraph-medium text-content-primary font-medium">
-                          {appt.clientName}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Telefone */}
-                    <div className="text-paragraph-medium text-content-primary">
-                      {appt.phone}
-                    </div>
-
-                    {/* Descrição */}
-                    <div className="text-paragraph-medium text-content-primary">
-                      {appt.description}
-                    </div>
-
-                    {/* Status */}
-                    <div className="flex md:justify-center">
-                      <AppointmentStatusBadge status={normalizedStatus} />
-                    </div>
-
-                    {/* Log */}
-                    <div className="text-paragraph-small text-content-secondary md:text-center">
-                      {actionLog}
-                    </div>
-
-                    {/* Horário */}
-                    <div className="text-paragraph-medium text-content-primary md:text-center">
-                      {timeStr}
-                    </div>
-                  </div>
-
-                  {/* Ações */}
-                  <div className="flex flex-wrap justify-end gap-2 md:flex-nowrap md:min-w-[260px]">
-                    {isPending && (
-                      <>
-                        {/* EDITAR – só aparece enquanto PENDENTE */}
-                        <AppointmentForm
-                          appointment={safeApptForForm}
-                          appointments={appointmentsForForm}
-                          barbers={barbersForForm}
-                          services={services}
-                        />
-
-                        {/* CONCLUIR / CANCELAR – só se PENDENTE */}
-                        <AppointmentActions
-                          appointmentId={appt.id}
-                          status={normalizedStatus}
-                          clientName={appt.clientName}
-                          phone={appt.phone}
-                          description={appt.description}
-                          scheduleAt={appt.scheduleAt}
-                          barberName={barber.name ?? "Barbeiro"}
-                          servicePrice={servicePriceNumber}
-                          cancelFeePercentage={
-                            appt.service?.cancelFeePercentage
-                              ? Number(appt.service.cancelFeePercentage)
-                              : undefined
-                          }
-                          cancelLimitHours={
-                            appt.service?.cancelLimitHours ?? undefined
-                          }
-                          cancelledByRole="BARBER"
-                          concludedByRole="BARBER"
-                        />
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
+                appointment={appt}
+                appointmentForForm={apptForForm}
+                appointmentsForForm={appointmentsForForm}
+                barbersForForm={barbersForForm}
+                services={services}
+                barberName={barber.name ?? "Barbeiro"}
+              />
             );
           })}
         </section>
