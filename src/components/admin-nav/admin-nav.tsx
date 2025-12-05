@@ -9,7 +9,8 @@ import {
   ListChecks,
   Package,
   Wallet,
-  Users, // ← novo ícone para Clientes
+  Users,
+  CalendarCheck, // ← ícone para Agendamentos
 } from "lucide-react";
 
 type AdminLink = {
@@ -20,13 +21,14 @@ type AdminLink = {
 
 const adminLinks: AdminLink[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
+
+  // 🔥 NOVA PÁGINA DE AGENDAMENTOS
+  { href: "/admin/appointments", label: "Agendamentos", icon: CalendarCheck },
+
   { href: "/admin/barber", label: "Profissionais", icon: Scissors },
   { href: "/admin/services", label: "Serviços", icon: ListChecks },
   { href: "/admin/products", label: "Produtos", icon: Package },
-
-  // 🔥 NOVO MENU CLIENTES
   { href: "/admin/clients", label: "Clientes", icon: Users },
-
   { href: "/admin/finance", label: "Financeiro", icon: Wallet },
 ];
 
@@ -34,7 +36,7 @@ export function AdminNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex items-center">
+    <nav className="flex items-center gap-2">
       {adminLinks.map((link) => {
         const isActive = pathname?.startsWith(link.href);
         const Icon = link.icon;
@@ -45,8 +47,9 @@ export function AdminNav() {
             href={link.href}
             className={cn(
               "flex items-center justify-center gap-2 px-4 py-2 text-label-small transition-colors",
-              "text-content-secondary hover:bg-background-tertiary/50",
-              isActive && "text-content-brand font-medium",
+              "text-content-secondary hover:bg-background-tertiary/50 rounded-lg",
+              isActive &&
+                "text-content-brand font-medium bg-background-tertiary/50",
             )}
           >
             <Icon
