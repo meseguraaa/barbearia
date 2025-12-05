@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 
@@ -36,7 +37,7 @@ const baseProductSchema = z.object({
     }),
   category: z.string().min(1, "Categoria obrigatória"),
 
-  // ⭐ NOVO: ESTOQUE
+  // ⭐ ESTOQUE
   stockQuantity: z
     .string()
     .min(1, "Estoque obrigatório")
@@ -71,7 +72,7 @@ function normalizePriceToDecimalString(raw: string): string {
   return onlyDigitsAndSeparators;
 }
 
-// ===== Actions =====
+// ===== Funções base (trabalham com prisma + revalidate) =====
 
 export async function createProduct(formData: FormData) {
   const parsed = createProductSchema.safeParse({
@@ -182,4 +183,30 @@ export async function toggleProductStatus(productId: string) {
   });
 
   revalidatePath("/admin/products");
+}
+
+// ===== Actions usadas diretamente nos <form> ou nos componentes client =====
+
+export async function createProductAction(formData: FormData) {
+  "use server";
+  await createProduct(formData);
+  redirect("/admin/products");
+}
+
+export async function updateProductAction(
+  productId: string,
+  formData: FormData,
+) {
+  "use server";
+  await updateProduct(productId, formData);
+  redirect("/admin/products");
+}
+
+export async function toggleProductStatusAction(
+  productId: string,
+  _formData: FormData,
+) {
+  "use server";
+  await toggleProductStatus(productId);
+  // só revalida; sem redirect
 }

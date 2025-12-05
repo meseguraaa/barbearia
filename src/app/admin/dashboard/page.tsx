@@ -2,7 +2,10 @@
 import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay, startOfMonth, endOfMonth } from "date-fns";
 import type { Metadata } from "next";
+
 import { DatePicker } from "@/components/date-picker";
+import { DashboardDailySummary } from "@/components/dashboard-daily-summary";
+import { DashboardMonthlySummary } from "@/components/dashboard-monthly-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -354,183 +357,48 @@ export default async function AdminDashboardPage({
       </div>
 
       {/* RESUMO FINANCEIRO DO DIA (SERVIÇOS + PRODUTOS) */}
-      <section className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
-          <p className="text-label-small text-content-secondary">
-            Valor bruto (dia)
-          </p>
-          <p className="text-title text-content-primary">
-            {currencyFormatter.format(totalGrossDay)}
-          </p>
-          <p className="text-label-small text-content-secondary">
-            Serviços: {currencyFormatter.format(totalGrossDayServices)} •
-            Produtos: {currencyFormatter.format(totalProductsRevenueDay)}
-          </p>
-        </div>
+      <DashboardDailySummary
+        totalGrossDay={currencyFormatter.format(totalGrossDay)}
+        totalGrossDayServices={currencyFormatter.format(totalGrossDayServices)}
+        totalGrossDayProducts={currencyFormatter.format(
+          totalProductsRevenueDay,
+        )}
+        totalCommissionDay={currencyFormatter.format(totalCommissionDay)}
+        totalCommissionDayServices={currencyFormatter.format(
+          totalCommissionDayServices,
+        )}
+        totalCommissionDayProducts={currencyFormatter.format(
+          totalProductsCommissionDay,
+        )}
+        totalNetDay={currencyFormatter.format(totalNetDay)}
+        totalNetDayServices={currencyFormatter.format(totalNetDayServices)}
+        totalNetDayProducts={currencyFormatter.format(totalProductsNetDay)}
+        totalCancelFeeDay={currencyFormatter.format(totalCancelFeeDay)}
+        totalCanceledWithFeeDay={totalCanceledWithFeeDay}
+      />
 
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
-          <p className="text-label-small text-content-secondary">
-            Comissão (dia)
-          </p>
-          <p className="text-title text-content-primary">
-            {currencyFormatter.format(totalCommissionDay)}
-          </p>
-          <p className="text-label-small text-content-secondary">
-            Serviços: {currencyFormatter.format(totalCommissionDayServices)} •
-            Produtos: {currencyFormatter.format(totalProductsCommissionDay)}
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
-          <p className="text-label-small text-content-secondary">
-            Valor líquido (dia)
-          </p>
-          <p className="text-title text-content-primary">
-            {currencyFormatter.format(totalNetDay)}
-          </p>
-          <p className="text-label-small text-content-secondary">
-            Serviços: {currencyFormatter.format(totalNetDayServices)} •
-            Produtos: {currencyFormatter.format(totalProductsNetDay)}
-          </p>
-        </div>
-
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
-          <p className="text-label-small text-content_secondary">
-            Taxas de cancelamento (dia)
-          </p>
-          <p className="text-title text-content-primary">
-            {currencyFormatter.format(totalCancelFeeDay)}
-          </p>
-          <p className="text-label-small text-content-secondary">
-            {totalCanceledWithFeeDay} cancelamento(s) com taxa
-          </p>
-        </div>
-      </section>
-
-      {/* RESUMO FINANCEIRO DO MÊS + ATENDIMENTOS + PRODUTOS */}
-      <section className="grid gap-4 md:grid-cols-4">
-        {/* 1. Bruto mês */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
-          <p className="text-label-small text-content-secondary">
-            Valor bruto (mês)
-          </p>
-          <p className="text-title text-content-primary">
-            {currencyFormatter.format(totalGrossMonth)}
-          </p>
-          <p className="text-label-small text-content-secondary">
-            Serviços: {currencyFormatter.format(totalGrossMonthServices)} •
-            Produtos: {currencyFormatter.format(totalProductsRevenueMonth)}
-          </p>
-        </div>
-
-        {/* 2. Líquido mês (após comissão, SEM despesas fixas) */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
-          <p className="text-label-small text-content-secondary">
-            Valor líquido (mês - sem despesas)
-          </p>
-          <p className="text-title text-content-primary">
-            {currencyFormatter.format(totalNetMonth)}
-          </p>
-          <p className="text-paragraph-small text-content-secondary">
-            Serviços: {currencyFormatter.format(totalNetMonthServices)} •
-            Produtos: {currencyFormatter.format(totalProductsNetMonth)}
-          </p>
-        </div>
-
-        {/* 3. Despesas do mês (Financeiro) */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
-          <p className="text-label-small text-content-secondary">
-            Despesas (mês)
-          </p>
-          <p className="text-title text-content-primary">
-            {currencyFormatter.format(totalExpensesMonth)}
-          </p>
-          <p className="text-paragraph-small text-content-secondary">
-            Soma das despesas cadastradas no módulo Financeiro.
-          </p>
-        </div>
-
-        {/* 4. Lucro real do mês */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
-          <p className="text-label-small text-content-secondary">
-            Lucro real (mês)
-          </p>
-          <p
-            className={`text-title ${
-              realNetMonth >= 0 ? "text-green-500" : "text-red-600"
-            }`}
-          >
-            {currencyFormatter.format(realNetMonth)}
-          </p>
-          <p className="text-paragraph-small text-content-secondary">
-            Valor líquido (serviços + produtos) menos as despesas.
-          </p>
-        </div>
-
-        {/* 5. Atendimentos */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3">
-          <p className="text-label-small text-content-secondary">
-            Atendimentos
-          </p>
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {/* Concluídos */}
-            <div className="space-y-1">
-              <p className="text-paragraph-small text-content-secondary">
-                Concluídos
-              </p>
-              <p className="text-paragraph-medium text-content-primary">
-                Dia:{" "}
-                <span className="font-semibold">
-                  {totalAppointmentsDoneDay}
-                </span>
-              </p>
-              <p className="text-paragraph-medium text-content-primary">
-                Mês:{" "}
-                <span className="font-semibold">
-                  {totalAppointmentsDoneMonth}
-                </span>
-              </p>
-            </div>
-
-            {/* Cancelados */}
-            <div className="space-y-1">
-              <p className="text-paragraph-small text-content-secondary">
-                Cancelados
-              </p>
-              <p className="text-paragraph-medium text-content-primary">
-                Dia:{" "}
-                <span className="font-semibold">
-                  {totalAppointmentsCanceledDay}
-                </span>
-              </p>
-              <p className="text-paragraph-medium text-content-primary">
-                Mês:{" "}
-                <span className="font-semibold">
-                  {totalAppointmentsCanceledMonth}
-                </span>
-              </p>
-            </div>
-
-            {/* Cancelados com taxa */}
-            <div className="space-y-1">
-              <p className="text-paragraph-small text-content-secondary">
-                Com taxa
-              </p>
-              <p className="text-paragraph-medium text-content-primary">
-                Dia:{" "}
-                <span className="font-semibold">{totalCanceledWithFeeDay}</span>
-              </p>
-              <p className="text-paragraph-medium text-content-primary">
-                Mês:{" "}
-                <span className="font-semibold">
-                  {totalCanceledWithFeeMonth}
-                </span>
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* RESUMO FINANCEIRO DO MÊS + ATENDIMENTOS */}
+      <DashboardMonthlySummary
+        totalGrossMonth={currencyFormatter.format(totalGrossMonth)}
+        totalGrossMonthServices={currencyFormatter.format(
+          totalGrossMonthServices,
+        )}
+        totalGrossMonthProducts={currencyFormatter.format(
+          totalProductsRevenueMonth,
+        )}
+        totalNetMonth={currencyFormatter.format(totalNetMonth)}
+        totalNetMonthServices={currencyFormatter.format(totalNetMonthServices)}
+        totalNetMonthProducts={currencyFormatter.format(totalProductsNetMonth)}
+        totalExpensesMonth={currencyFormatter.format(totalExpensesMonth)}
+        realNetMonth={currencyFormatter.format(realNetMonth)}
+        realNetMonthIsPositive={realNetMonth >= 0}
+        totalAppointmentsDoneDay={totalAppointmentsDoneDay}
+        totalAppointmentsDoneMonth={totalAppointmentsDoneMonth}
+        totalAppointmentsCanceledDay={totalAppointmentsCanceledDay}
+        totalAppointmentsCanceledMonth={totalAppointmentsCanceledMonth}
+        totalCanceledWithFeeDay={totalCanceledWithFeeDay}
+        totalCanceledWithFeeMonth={totalCanceledWithFeeMonth}
+      />
     </div>
   );
 }

@@ -25,7 +25,7 @@ const adminLinks: AdminLink[] = [
   // 🔥 NOVA PÁGINA DE AGENDAMENTOS
   { href: "/admin/appointments", label: "Agendamentos", icon: CalendarCheck },
 
-  { href: "/admin/barber", label: "Profissionais", icon: Scissors },
+  { href: "/admin/professional", label: "Profissionais", icon: Scissors },
   { href: "/admin/services", label: "Serviços", icon: ListChecks },
   { href: "/admin/products", label: "Produtos", icon: Package },
   { href: "/admin/clients", label: "Clientes", icon: Users },
