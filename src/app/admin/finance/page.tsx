@@ -1,4 +1,3 @@
-// app/admin/finance/page.tsx
 import { prisma } from "@/lib/prisma";
 import type { Metadata } from "next";
 import { MonthPicker } from "@/components/month-picker";
@@ -13,18 +12,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import {
-  createExpense,
-  updateExpense,
-  toggleExpensePaid,
-  deleteExpense,
-} from "./actions";
-import {
-  ExpenseStatusBadge,
-  type ExpenseStatus,
-} from "@/components/expense-status-badge";
-import { RecurringBadge } from "@/components/recurring-badge";
+import { createExpense } from "./actions";
 import { ExpenseDueDatePicker } from "@/components/expense-due-date-picker";
+import { AdminExpenseRow } from "@/components/admin-expense-row";
 
 export const dynamic = "force-dynamic";
 
@@ -194,10 +184,6 @@ export default async function AdminFinancePage({
   const appointmentsNetProfitMonth = totalNetMonth;
 
   // ===== LUCRO LÍQUIDO DE PRODUTOS =====
-  // Para cada venda:
-  // - total da venda = sale.totalPrice
-  // - comissão barbeiro = total * (product.barberPercentage / 100)
-  // - lucro líquido da barbearia = total - comissão
   const productsNetProfitMonth = productSales.reduce((acc, sale) => {
     const total = Number(sale.totalPrice);
     const percent = sale.product?.barberPercentage ?? 0;
@@ -224,8 +210,6 @@ export default async function AdminFinancePage({
     rawMonthLabel.charAt(0).toUpperCase() + rawMonthLabel.slice(1);
 
   const monthForForm = format(referenceDate, "yyyy-MM");
-
-  type ExpenseForEdit = (typeof expenses)[number];
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -261,11 +245,11 @@ export default async function AdminFinancePage({
           </p>
           <p className="text-paragraph-small text-content-secondary">
             Serviços:{" "}
-            <span className="font-medium">
+            <span className="font-semibold">
               {currencyFormatter.format(appointmentsNetProfitMonth)}
             </span>{" "}
             • Produtos:{" "}
-            <span className="font-medium">
+            <span className="font-semibold">
               {currencyFormatter.format(productsNetProfitMonth)}
             </span>
           </p>
@@ -327,83 +311,9 @@ export default async function AdminFinancePage({
                 </td>
               </tr>
             ) : (
-              expenses.map((expense) => {
-                const isPaid = expense.isPaid;
-                const isOverdue = !isPaid && expense.dueDate < new Date();
-
-                const status: ExpenseStatus = isPaid
-                  ? "PAID"
-                  : isOverdue
-                    ? "LATE"
-                    : "PENDING";
-
-                return (
-                  <tr
-                    key={expense.id}
-                    className="border-t border-border-primary"
-                  >
-                    <td className="px-4 py-3 text-paragraph-medium text-content-primary">
-                      {expense.description}
-                    </td>
-                    <td className="px-4 py-3 text-paragraph-small text-content-secondary">
-                      {format(expense.dueDate, "dd/MM/yyyy")}
-                    </td>
-                    <td className="px-4 py-3 text-right text-paragraph-medium text-content-primary">
-                      {currencyFormatter.format(Number(expense.amount))}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <RecurringBadge isRecurring={expense.isRecurring} />
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <ExpenseStatusBadge status={status} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        {/* EDITAR em modal inline */}
-                        <EditExpenseDialog
-                          expense={expense as ExpenseForEdit}
-                        />
-
-                        {/* MARCAR / DESMARCAR COMO PAGA */}
-                        <form action={toggleExpensePaid}>
-                          <input
-                            type="hidden"
-                            name="expenseId"
-                            value={expense.id}
-                          />
-                          <Button
-                            variant={expense.isPaid ? "outline" : "active"}
-                            size="sm"
-                            type="submit"
-                            className="border-border-primary hover:bg-muted/40"
-                          >
-                            {expense.isPaid
-                              ? "Desmarcar paga"
-                              : "Marcar como paga"}
-                          </Button>
-                        </form>
-
-                        {/* EXCLUIR */}
-                        <form action={deleteExpense}>
-                          <input
-                            type="hidden"
-                            name="expenseId"
-                            value={expense.id}
-                          />
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            type="submit"
-                            className="border-border-primary hover:bg-muted/40"
-                          >
-                            Excluir
-                          </Button>
-                        </form>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })
+              expenses.map((expense) => (
+                <AdminExpenseRow key={expense.id} expense={expense} />
+              ))
             )}
           </tbody>
         </table>
@@ -540,142 +450,6 @@ function NewExpenseDialog({ month }: { month: string }) {
           <div className="flex justify-end gap-2 pt-2">
             <Button type="submit" variant="brand">
               Salvar
-            </Button>
-          </div>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/* ========= EDITAR DESPESA (MODAL INLINE) ========= */
-
-type ExpenseForEdit = Awaited<
-  ReturnType<typeof prisma.expense.findMany>
->[number];
-
-function EditExpenseDialog({ expense }: { expense: ExpenseForEdit }) {
-  const dueDateForInput = format(expense.dueDate, "yyyy-MM-dd");
-  const recurringDayDefault = expense.dueDate.getDate().toString();
-
-  return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button
-          variant="edit2"
-          size="sm"
-          className="border-border-primary hover:bg-muted/40"
-        >
-          Editar
-        </Button>
-      </DialogTrigger>
-
-      <DialogContent className="bg-background-secondary border border-border-primary">
-        <DialogHeader>
-          <DialogTitle className="text-title text-content-primary">
-            Editar despesa
-          </DialogTitle>
-        </DialogHeader>
-
-        <form
-          action={async (formData) => {
-            "use server";
-            formData.set("id", expense.id);
-            await updateExpense(formData);
-          }}
-          className="space-y-4"
-        >
-          <input type="hidden" name="id" value={expense.id} />
-
-          <div className="space-y-1">
-            <label className="text-label-small text-content-secondary">
-              Descrição
-            </label>
-            <Input
-              name="description"
-              required
-              defaultValue={expense.description}
-              className="bg-background-tertiary border-border-primary text-content-primary"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-label-small text-content-secondary">
-              Valor (R$)
-            </label>
-            <Input
-              name="amount"
-              type="number"
-              step="0.01"
-              min="0"
-              required
-              defaultValue={Number(expense.amount)}
-              className="bg-background-tertiary border-border-primary text-content-primary"
-            />
-          </div>
-
-          {/* RECORRENTE + CAMPOS DE VENCIMENTO */}
-          <div className="space-y-3">
-            {/* checkbox real (peer) */}
-            <input
-              id={`isRecurring-${expense.id}`}
-              name="isRecurring"
-              type="checkbox"
-              defaultChecked={expense.isRecurring}
-              className="peer sr-only"
-            />
-
-            {/* UI do checkbox */}
-            <label
-              htmlFor={`isRecurring-${expense.id}`}
-              className="inline-flex items-center gap-2 cursor-pointer"
-            >
-              <span className="flex h-4 w-4 items-center justify-center rounded border border-border-primary bg-background-tertiary peer-checked:border-border-brand peer-checked:bg-border-brand">
-                <span className="h-2 w-2 rounded-sm bg-transparent peer-checked:bg-background-primary" />
-              </span>
-              <span className="text-label-small text-content-primary">
-                Despesa recorrente
-              </span>
-            </label>
-
-            {/* Dia de vencimento para recorrentes */}
-            <div className="space-y-1 hidden peer-checked:block">
-              <label className="text-label-small text-content-secondary">
-                Dia de vencimento (se recorrente)
-              </label>
-              <Input
-                name="recurringDay"
-                type="number"
-                min={1}
-                max={31}
-                defaultValue={recurringDayDefault}
-                className="bg-background-tertiary border-border-primary text-content-primary"
-              />
-              <p className="text-paragraph-small text-content-secondary">
-                Para despesas recorrentes, informe apenas o dia do mês.
-              </p>
-            </div>
-
-            {/* Data completa para não recorrentes */}
-            <div className="space-y-1 peer-checked:hidden">
-              <label className="text-label-small text-content-secondary">
-                Data de vencimento (se NÃO recorrente)
-              </label>
-
-              <ExpenseDueDatePicker
-                name="dueDate"
-                defaultValue={dueDateForInput}
-              />
-
-              <p className="text-paragraph-small text-content-secondary">
-                Use este campo para despesas que acontecem em uma data única.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <Button type="submit" variant="brand">
-              Salvar alterações
             </Button>
           </div>
         </form>

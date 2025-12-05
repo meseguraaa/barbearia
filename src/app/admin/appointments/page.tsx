@@ -1,15 +1,12 @@
 // app/admin/appointments/page.tsx
 import { prisma } from "@/lib/prisma";
-import { format, startOfDay, endOfDay } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { startOfDay, endOfDay } from "date-fns";
 import type { Metadata } from "next";
 
-import { AppointmentActions } from "@/components/appointment-actions";
 import { DatePicker } from "@/components/date-picker";
-import { AppointmentForm } from "@/components/appointment-form";
 import type { Appointment as AppointmentType } from "@/types/appointment";
 import type { Service } from "@/types/service";
-import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
+import { AdminAppointmentsByBarber } from "@/components/admin-appointments-by-barber";
 
 export const dynamic = "force-dynamic";
 
@@ -122,8 +119,8 @@ function mapToAppointmentType(prismaAppt: any): AppointmentType {
     barber: prismaAppt.barber
       ? {
           id: prismaAppt.barber.id,
-          name: prismaAppt.barber.name,
-          email: prismaAppt.barber.email,
+          name: prismaAppt.barber.name ?? "",
+          email: prismaAppt.barber.email ?? "",
           phone: prismaAppt.barber.phone,
           isActive: prismaAppt.barber.isActive,
           role: "BARBER",
@@ -165,8 +162,8 @@ export default async function AdminAppointmentsPage({
 
   const barbersForForm = barbersPrisma.map((barber) => ({
     id: barber.id,
-    name: barber.name,
-    email: barber.email,
+    name: barber.name ?? "",
+    email: barber.email ?? "",
     phone: barber.phone ?? "",
     isActive: barber.isActive,
     role: "BARBER" as const,
@@ -245,195 +242,14 @@ export default async function AdminAppointmentsPage({
             const salesForBarber = productSalesByBarber[barberKey] ?? [];
 
             return (
-              <div
+              <AdminAppointmentsByBarber
                 key={group.barberId ?? "no-barber"}
-                className="border border-border-primary rounded-xl overflow-hidden bg-background-tertiary"
-              >
-                <div className="border-b border-border-primary px-4 py-3 bg-muted/40 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <h2 className="text-label-large text-content-primary">
-                      {group.barberName}
-                    </h2>
-                    <p className="text-paragraph-small text-content-secondary">
-                      Agendamento(s): {group.appointments.length} • Vendas de
-                      produto: {salesForBarber.length}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="min-w-full text-sm">
-                    <tbody>
-                      {group.appointments.map((appt) => {
-                        const date = new Date(appt.scheduleAt);
-                        const dateStr = format(date, "dd/MM/yyyy", {
-                          locale: ptBR,
-                        });
-                        const timeStr = format(date, "HH:mm", {
-                          locale: ptBR,
-                        });
-
-                        const apptForForm = appointmentsForForm.find(
-                          (a) => a.id === appt.id,
-                        );
-
-                        const normalizedStatus =
-                          (appt.status as AppointmentType["status"]) ??
-                          "PENDING";
-                        const isPending = normalizedStatus === "PENDING";
-
-                        const safeApptForForm = apptForForm ?? {
-                          id: appt.id,
-                          clientName: appt.clientName,
-                          phone: appt.phone,
-                          description: appt.description,
-                          scheduleAt: appt.scheduleAt,
-                          status: normalizedStatus,
-                          barberId: appt.barberId ?? "",
-                          barber: appt.barber
-                            ? {
-                                id: appt.barber.id,
-                                name: appt.barber.name,
-                                email: appt.barber.email,
-                                phone: appt.barber.phone,
-                                isActive: appt.barber.isActive,
-                                role: "BARBER" as const,
-                              }
-                            : undefined,
-                          serviceId: appt.serviceId ?? undefined,
-                        };
-
-                        // mesmo comportamento do dashboard
-                        const clientImage = appt.client?.image ?? null;
-                        const clientInitial =
-                          appt.clientName?.[0]?.toUpperCase() ?? "?";
-
-                        let actionLog = "—";
-
-                        if (appt.status === "DONE") {
-                          if (appt.concludedByRole === "ADMIN") {
-                            actionLog = "Concluído pelo ADMIN";
-                          } else if (appt.concludedByRole === "BARBER") {
-                            actionLog = "Concluído pelo Barbeiro";
-                          } else {
-                            actionLog = "Concluído";
-                          }
-                        } else if (appt.status === "CANCELED") {
-                          const hasFee = appt.cancelFeeApplied;
-                          const who =
-                            appt.cancelledByRole === "ADMIN"
-                              ? "ADMIN"
-                              : appt.cancelledByRole === "BARBER"
-                                ? "Barbeiro"
-                                : null;
-
-                          if (who === "ADMIN") {
-                            actionLog = hasFee
-                              ? "Cancelado pelo ADMIN - com taxa"
-                              : "Cancelado pelo ADMIN - sem taxa";
-                          } else if (who === "Barbeiro") {
-                            actionLog = hasFee
-                              ? "Cancelado pelo Barbeiro - com taxa"
-                              : "Cancelado pelo Barbeiro - sem taxa";
-                          } else {
-                            actionLog = hasFee
-                              ? "Cancelado - com taxa"
-                              : "Cancelado - sem taxa";
-                          }
-                        }
-
-                        return (
-                          <tr
-                            key={appt.id}
-                            className="border-b border-border-primary hover:bg-muted/30"
-                          >
-                            {/* avatar do cliente */}
-                            <td className="px-4 py-2">
-                              <div className="flex items-center justify-center">
-                                {clientImage ? (
-                                  <img
-                                    src={clientImage}
-                                    alt={appt.clientName ?? "Cliente"}
-                                    className="h-8 w-8 rounded-full object-cover"
-                                    referrerPolicy="no-referrer"
-                                  />
-                                ) : (
-                                  <div className="h-8 w-8 rounded-full bg-background-secondary flex items-center justify-center text-xs font-medium text-content-secondary">
-                                    {clientInitial}
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-
-                            <td className="px-4 py-2 font-medium">
-                              {appt.clientName}
-                            </td>
-                            <td className="px-4 py-2">{appt.phone}</td>
-                            <td className="px-4 py-2">{appt.description}</td>
-                            <td className="px-4 py-2">{dateStr}</td>
-                            <td className="px-4 py-2">{timeStr}</td>
-
-                            <td className="px-4 py-2">
-                              <AppointmentStatusBadge
-                                status={normalizedStatus}
-                              />
-                            </td>
-
-                            <td className="px-4 py-2">
-                              <span className="text-paragraph-small text-content-secondary">
-                                {actionLog}
-                              </span>
-                            </td>
-
-                            <td className="px-4 py-3">
-                              {isPending && (
-                                <div className="flex justify-end gap-2">
-                                  <AppointmentForm
-                                    appointment={safeApptForForm}
-                                    appointments={appointmentsForForm}
-                                    barbers={barbersForForm}
-                                    services={services}
-                                  />
-
-                                  <AppointmentActions
-                                    appointmentId={appt.id}
-                                    status={normalizedStatus}
-                                    clientName={appt.clientName}
-                                    phone={appt.phone}
-                                    description={appt.description}
-                                    scheduleAt={appt.scheduleAt}
-                                    barberName={appt.barber?.name}
-                                    servicePrice={
-                                      appt.servicePriceAtTheTime
-                                        ? Number(appt.servicePriceAtTheTime)
-                                        : appt.service?.price
-                                          ? Number(appt.service.price)
-                                          : undefined
-                                    }
-                                    cancelFeePercentage={
-                                      appt.service?.cancelFeePercentage
-                                        ? Number(
-                                            appt.service.cancelFeePercentage,
-                                          )
-                                        : undefined
-                                    }
-                                    cancelLimitHours={
-                                      appt.service?.cancelLimitHours ??
-                                      undefined
-                                    }
-                                    cancelledByRole="ADMIN"
-                                    concludedByRole="ADMIN"
-                                  />
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+                group={group}
+                salesCount={salesForBarber.length}
+                appointmentsForForm={appointmentsForForm}
+                barbersForForm={barbersForForm}
+                services={services}
+              />
             );
           })}
         </section>
