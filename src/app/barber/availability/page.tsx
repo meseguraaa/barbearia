@@ -6,8 +6,8 @@ import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 import { WeeklyAvailabilityForm } from "@/components/weekly-availability-form/weekly-availability-form";
 import type { WeeklyAvailabilityState } from "@/components/weekly-availability-form/weekly-availability-form";
-import { DailyExceptionModal } from "./daily-exception-modal";
-import { DailyExceptionsList } from "./daily-exceptions-list";
+import { DailyExceptionModal } from "../../../components/daily-exception-modal/daily-exception-modal";
+import { DailyExceptionsList } from "../../../components/daily-exceptions-list/daily-exceptions-list";
 
 const SESSION_COOKIE_NAME = "painel_session";
 

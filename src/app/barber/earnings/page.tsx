@@ -5,7 +5,10 @@ import { redirect } from "next/navigation";
 import { jwtVerify } from "jose";
 import { Metadata } from "next";
 import { startOfDay, endOfDay, startOfMonth, endOfMonth } from "date-fns";
+
 import { DatePicker } from "@/components/date-picker";
+import { BarberEarningsSummary } from "@/components/barber-earnings-summary";
+import { BarberEarningsDayList } from "@/components/barber-earnings-day-list";
 
 const SESSION_COOKIE_NAME = "painel_session";
 const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
@@ -331,12 +334,70 @@ export default async function BarberEarningsPage({
   }, 0);
 
   // 🔗 Ganhos totais
-  // Dia: serviços + comissão de produtos
   const totalEarningsDay = totalServiceEarningsDay + totalProductEarningsDay;
-
-  // Mês: serviços + comissão de produtos + taxas de cancelamento
   const totalEarningsMonth =
     totalServiceEarningsMonth + totalProductEarningsMonth + totalCancelFeeMonth;
+
+  // ===== FORMATAÇÕES PARA A UI =====
+  const summaryProps = {
+    totalEarningsDay: currencyFormatter.format(totalEarningsDay),
+    serviceEarningsDay: currencyFormatter.format(totalServiceEarningsDay),
+    productEarningsDay: currencyFormatter.format(totalProductEarningsDay),
+
+    cancelFeeDay: currencyFormatter.format(totalCancelFeeDay),
+    cancelFeeMonth: currencyFormatter.format(totalCancelFeeMonth),
+
+    totalAppointmentsDay,
+    totalAppointmentsMonth,
+    totalAppointmentsCanceledDay,
+    totalAppointmentsCanceledMonth,
+
+    totalEarningsMonth: currencyFormatter.format(totalEarningsMonth),
+    serviceEarningsMonth: currencyFormatter.format(totalServiceEarningsMonth),
+    productEarningsMonth: currencyFormatter.format(totalProductEarningsMonth),
+
+    totalProductsSoldDay,
+    totalProductsSoldMonth,
+    productEarningsDayLabel: currencyFormatter.format(totalProductEarningsDay),
+    productEarningsMonthLabel: currencyFormatter.format(
+      totalProductEarningsMonth,
+    ),
+  };
+
+  // ===== LINHAS DE ATENDIMENTOS DO DIA =====
+  const dayAppointmentsRows = dayAppointments.map((appt) => {
+    const timeStr = appt.scheduleAt.toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const priceSnapshot = appt.servicePriceAtTheTime;
+    const priceService = appt.service?.price ?? 0;
+    const priceNumber = priceSnapshot
+      ? Number(priceSnapshot)
+      : Number(priceService);
+
+    const percentSnapshot = appt.barberPercentageAtTheTime;
+    const percentService = appt.service?.barberPercentage ?? 0;
+    const percentNumber = percentSnapshot
+      ? Number(percentSnapshot)
+      : Number(percentService);
+
+    const earningSnapshot = appt.barberEarningValue;
+    const earningNumber = earningSnapshot
+      ? Number(earningSnapshot)
+      : (priceNumber * percentNumber) / 100;
+
+    return {
+      id: appt.id,
+      clientName: appt.clientName ?? "",
+      description: appt.description ?? "",
+      time: timeStr,
+      priceFormatted: currencyFormatter.format(priceNumber),
+      percentageFormatted: `${percentNumber.toFixed(2)}%`,
+      earningFormatted: currencyFormatter.format(earningNumber),
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -352,203 +413,10 @@ export default async function BarberEarningsPage({
       </header>
 
       {/* RESUMO */}
-      <section className="grid gap-4 md:grid-cols-4">
-        {/* Ganhos no dia (serviços + produtos) */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
-          <p className="text-label-small text-content-secondary">
-            Ganhos no dia
-          </p>
-          <p className="text-title text-content-primary">
-            {currencyFormatter.format(totalEarningsDay)}
-          </p>
-          <p className="text-paragraph-small text-content-secondary">
-            Serviços: {currencyFormatter.format(totalServiceEarningsDay)} •
-            Produtos: {currencyFormatter.format(totalProductEarningsDay)}
-          </p>
-        </div>
-
-        {/* Taxas de cancelamento */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
-          <p className="text-label-small text-content-secondary">
-            Taxas de cancelamento
-          </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Dia:{" "}
-            <span className="font-semibold">
-              {currencyFormatter.format(totalCancelFeeDay)}
-            </span>
-          </p>
-          <p className="text-paragraph-medium text-content-primary">
-            Mês:{" "}
-            <span className="font-semibold">
-              {currencyFormatter.format(totalCancelFeeMonth)}
-            </span>
-          </p>
-        </div>
-
-        {/* Atendimentos concluídos e cancelados */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3">
-          <p className="text-label-small text-content-secondary">
-            Atendimentos
-          </p>
-
-          <div className="grid grid-cols-2 gap-4">
-            {/* Concluídos */}
-            <div className="space-y-1">
-              <p className="text-paragraph-small text-content-secondary">
-                Concluídos
-              </p>
-              <p className="text-paragraph-medium text-content-primary">
-                Dia:{" "}
-                <span className="font-semibold">{totalAppointmentsDay}</span>
-              </p>
-              <p className="text-paragraph-medium text-content-primary">
-                Mês:{" "}
-                <span className="font-semibold">{totalAppointmentsMonth}</span>
-              </p>
-            </div>
-
-            {/* Cancelados */}
-            <div className="space-y-1">
-              <p className="text-paragraph-small text-content-secondary">
-                Cancelados
-              </p>
-              <p className="text-paragraph-medium text-content-primary">
-                Dia:{" "}
-                <span className="font-semibold">
-                  {totalAppointmentsCanceledDay}
-                </span>
-              </p>
-              <p className="text-paragraph-medium text-content-primary">
-                Mês:{" "}
-                <span className="font-semibold">
-                  {totalAppointmentsCanceledMonth}
-                </span>
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Faturamento do mês (serviços + produtos + taxas) */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
-          <p className="text-label-small text-content-secondary">
-            Faturamento do mês
-          </p>
-          <p className="text-title text-content-primary">
-            {currencyFormatter.format(totalEarningsMonth)}
-          </p>
-          <p className="text-paragraph-small text-content-secondary">
-            Serviços: {currencyFormatter.format(totalServiceEarningsMonth)} •
-            Produtos: {currencyFormatter.format(totalProductEarningsMonth)} •
-            Taxas: {currencyFormatter.format(totalCancelFeeMonth)}
-          </p>
-        </div>
-
-        {/* Vendas de produtos (do barbeiro) */}
-        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3">
-          <p className="text-label-small text-content-secondary">
-            Vendas de produtos
-          </p>
-
-          <div className="space-y-3">
-            {/* Hoje */}
-            <div className="space-y-1">
-              <p className="text-label-small text-content-secondary">
-                Ganho hoje com produtos
-              </p>
-              <p className="text-title text-content-primary">
-                {totalProductsSoldDay} -{" "}
-                {currencyFormatter.format(totalProductEarningsDay)}
-              </p>
-            </div>
-
-            {/* Mês */}
-            <div className="space-y-1">
-              <p className="text-label-small text-content_secondary">
-                Ganho no mês com produtos
-              </p>
-              <p className="text-title text-content-primary">
-                {totalProductsSoldMonth} -{" "}
-                {currencyFormatter.format(totalProductEarningsMonth)}
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
+      <BarberEarningsSummary {...summaryProps} />
 
       {/* LISTA DE ATENDIMENTOS DO DIA */}
-      {dayAppointments.length === 0 ? (
-        <p className="text-paragraph-small text-content-secondary">
-          Você não possui atendimentos concluídos para esta data.
-        </p>
-      ) : (
-        <section className="space-y-3">
-          {dayAppointments.map((appt) => {
-            const timeStr = appt.scheduleAt.toLocaleTimeString("pt-BR", {
-              hour: "2-digit",
-              minute: "2-digit",
-            });
-
-            const priceSnapshot = appt.servicePriceAtTheTime;
-            const priceService = appt.service?.price ?? 0;
-            const priceNumber = priceSnapshot
-              ? Number(priceSnapshot)
-              : Number(priceService);
-
-            const percentSnapshot = appt.barberPercentageAtTheTime;
-            const percentService = appt.service?.barberPercentage ?? 0;
-            const percentNumber = percentSnapshot
-              ? Number(percentSnapshot)
-              : Number(percentService);
-
-            const earningSnapshot = appt.barberEarningValue;
-            const earningNumber = earningSnapshot
-              ? Number(earningSnapshot)
-              : (priceNumber * percentNumber) / 100;
-
-            return (
-              <div
-                key={appt.id}
-                className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3"
-              >
-                <div className="grid w-full grid-cols-1 gap-2 md:grid-cols-6 md:items-center">
-                  {/* Cliente*/}
-                  <div>
-                    <span className="text-paragraph-medium text-content-primary font-medium">
-                      {appt.clientName}
-                    </span>
-                  </div>
-
-                  {/* Serviço */}
-                  <div className="text-paragraph-medium text-content-primary md:text-center">
-                    {appt.description}
-                  </div>
-
-                  {/* Horário */}
-                  <div className="text-paragraph-medium text-content-primary md:text-center">
-                    {timeStr}
-                  </div>
-
-                  {/* Valor do serviço */}
-                  <div className="text-paragraph-medium text-content-primary md:text-center">
-                    {currencyFormatter.format(priceNumber)}
-                  </div>
-
-                  {/* % do barbeiro */}
-                  <div className="text-paragraph-medium text-content-primary md:text-center">
-                    {percentNumber.toFixed(2)}%
-                  </div>
-
-                  {/* Ganho do barbeiro */}
-                  <div className="text-paragraph-medium text-content-primary md:text-right">
-                    {currencyFormatter.format(earningNumber)}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </section>
-      )}
+      <BarberEarningsDayList appointments={dayAppointmentsRows} />
     </div>
   );
 }

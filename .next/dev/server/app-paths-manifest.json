@@ -1,8 +1,8 @@
 {
+  "/_not-found/page": "app/_not-found/page.js",
   "/painel/login/page": "app/painel/login/page.js",
-  "/barber/availability/page": "app/barber/availability/page.js",
+  "/admin/professional/page": "app/admin/professional/page.js",
+  "/admin/services/page": "app/admin/services/page.js",
   "/barber/dashboard/page": "app/barber/dashboard/page.js",
-  "/barber/earnings/page": "app/barber/earnings/page.js",
-  "/admin/clients/page": "app/admin/clients/page.js",
-  "/admin/finance/page": "app/admin/finance/page.js"
+  "/barber/availability/page": "app/barber/availability/page.js"
 }

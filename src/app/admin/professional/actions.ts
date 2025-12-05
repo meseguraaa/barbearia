@@ -79,8 +79,8 @@ export async function createBarber(formData: FormData) {
     return { error: "Erro ao criar barbeiro." };
   }
 
-  revalidatePath("/admin/barber");
-  redirect("/admin/barber");
+  revalidatePath("/admin/professional");
+  redirect("/admin/professional");
 }
 
 export async function updateBarber(formData: FormData) {
@@ -176,8 +176,8 @@ export async function updateBarber(formData: FormData) {
     return { error: "Erro ao atualizar barbeiro." };
   }
 
-  revalidatePath("/admin/barber");
-  redirect("/admin/barber");
+  revalidatePath("/admin/professional");
+  redirect("/admin/professional");
 }
 
 export async function toggleBarberStatus(formData: FormData) {
@@ -196,5 +196,5 @@ export async function toggleBarberStatus(formData: FormData) {
     },
   });
 
-  revalidatePath("/admin/barber");
+  revalidatePath("/admin/professional");
 }
