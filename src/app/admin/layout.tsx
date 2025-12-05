@@ -12,7 +12,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
       <main className="flex-1 py-6">
         <div className="max-w-7xl mx-auto">
-          <section className="rounded-2xl shadow-lg px-6">{children}</section>
+          <section className="px-6">{children}</section>
         </div>
       </main>
     </div>
