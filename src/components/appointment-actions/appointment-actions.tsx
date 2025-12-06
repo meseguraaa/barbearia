@@ -43,6 +43,14 @@ type AppointmentActionsProps = {
   // quem está agindo (para log)
   cancelledByRole?: RoleForAction;
   concludedByRole?: RoleForAction;
+
+  // 🔹 infos de plano (opcionais)
+  // se for um atendimento usando crédito de plano
+  isPlanCredit?: boolean;
+  // índice do crédito deste atendimento (1 = primeiro, 2 = segundo, etc.)
+  planCreditIndex?: number | null;
+  // total de créditos do plano (ex.: 4)
+  planTotalCredits?: number | null;
 };
 
 export function AppointmentActions({
@@ -58,6 +66,9 @@ export function AppointmentActions({
   cancelLimitHours,
   cancelledByRole,
   concludedByRole,
+  isPlanCredit,
+  planCreditIndex,
+  planTotalCredits,
 }: AppointmentActionsProps) {
   const [isReviewOpen, setIsReviewOpen] = useState(false);
   const [isCancelDialogOpen, setIsCancelDialogOpen] = useState(false);
@@ -79,6 +90,40 @@ export function AppointmentActions({
     currency: "BRL",
     minimumFractionDigits: 2,
   });
+
+  // 🔹 Derivados de plano (para saber se mostra valor e contagem de créditos)
+  const {
+    isPlanCreditEffective,
+    isFirstPlanCredit,
+    shouldShowServicePriceInReview,
+    planCreditsLabel,
+  } = useMemo(() => {
+    const hasPlanInfo =
+      !!planTotalCredits && !!planCreditIndex && planCreditIndex > 0;
+
+    const isPlanCreditEffective = !!isPlanCredit && hasPlanInfo;
+    const isFirstPlanCredit =
+      isPlanCreditEffective && planCreditIndex === 1 && !!servicePrice;
+
+    // Regra:
+    // - se NÃO é atendimento de plano → mostra valor se existir (comportamento antigo)
+    // - se É atendimento de plano → mostra valor apenas no 1º crédito
+    const shouldShowServicePriceInReview = !isPlanCreditEffective
+      ? servicePrice != null
+      : isFirstPlanCredit;
+
+    const planCreditsLabel =
+      isPlanCreditEffective && planTotalCredits && planCreditIndex
+        ? `${planCreditIndex} de ${planTotalCredits}`
+        : null;
+
+    return {
+      isPlanCreditEffective,
+      isFirstPlanCredit,
+      shouldShowServicePriceInReview,
+      planCreditsLabel,
+    };
+  }, [isPlanCredit, planCreditIndex, planTotalCredits, servicePrice]);
 
   // cálculo se ESTÁ dentro da janela onde pode cobrar taxa
   const { isInsideFeeWindow, estimatedFeeValue } = useMemo(() => {
@@ -201,12 +246,13 @@ export function AppointmentActions({
               </p>
             </div>
 
+            {/* VALOR DO SERVIÇO / PLANO  */}
             <div>
               <p className="text-label-small text-content-secondary">
                 Valor do serviço
               </p>
               <p className="text-paragraph-medium text-content-primary">
-                {servicePrice != null
+                {shouldShowServicePriceInReview && servicePrice != null
                   ? currencyFormatter.format(servicePrice)
                   : "—"}
               </p>
@@ -225,6 +271,18 @@ export function AppointmentActions({
                 {timeStr}
               </p>
             </div>
+
+            {/* 🔹 Créditos do plano (se for atendimento de plano) */}
+            {planCreditsLabel && (
+              <div className="md:col-span-2">
+                <p className="text-label-small text-content-secondary">
+                  Créditos do plano
+                </p>
+                <p className="text-paragraph-medium text-content-primary">
+                  {planCreditsLabel}
+                </p>
+              </div>
+            )}
           </div>
 
           <p className="text-paragraph-small text-content-secondary mt-3">

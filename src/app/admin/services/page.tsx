@@ -32,12 +32,14 @@ type ClientPlanWithRelations = ClientPlan & {
 };
 
 export default async function ServicesPage() {
+  // 🔹 Serviços em ordem alfabética pelo nome
   const services = await prisma.service.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: { name: "asc" },
   });
 
+  // 🔹 Planos em ordem alfabética pelo nome
   const plans = (await prisma.plan.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: { name: "asc" },
     include: {
       services: {
         include: {

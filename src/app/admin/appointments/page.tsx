@@ -74,6 +74,12 @@ async function getAppointments(dateParam?: string) {
       barber: true,
       service: true,
       client: true,
+      // 🔹 trazemos também o plano do cliente para conseguir calcular créditos
+      clientPlan: {
+        include: {
+          plan: true,
+        },
+      },
     },
   });
 
@@ -172,6 +178,74 @@ export default async function AdminAppointmentsPage({
   type AppointmentWithBarberPrisma = (typeof appointmentsPrisma)[number];
   type DayProductSale = (typeof dayProductSalesPrisma)[number];
 
+  /* ------------------------------------------------------------------
+   * CÁLCULO DE CRÉDITOS DE PLANO POR AGENDAMENTO
+   *
+   * Para cada clientPlan:
+   *  - agrupamos os agendamentos ligados a ele (excluindo cancelados)
+   *  - ordenamos por horário
+   *  - definimos:
+   *      - isPlanCredit: se está dentro do total de créditos
+   *      - planCreditIndex: posição (1, 2, 3...) dentro do plano
+   *      - planTotalCredits: total de créditos do plano
+   * ------------------------------------------------------------------*/
+  const planCreditInfoByAppointmentId: Record<
+    string,
+    {
+      isPlanCredit: boolean;
+      planCreditIndex: number | null;
+      planTotalCredits: number | null;
+    }
+  > = {};
+
+  // agrupa por clientPlanId (apenas quem tem clientPlan + plan)
+  const appointmentsByClientPlan = appointmentsPrisma.reduce<
+    Record<string, AppointmentWithBarberPrisma[]>
+  >((acc, appt) => {
+    if (!appt.clientPlanId || !appt.clientPlan || !appt.clientPlan.plan) {
+      return acc;
+    }
+
+    const key = appt.clientPlanId;
+    if (!acc[key]) {
+      acc[key] = [];
+    }
+    acc[key].push(appt);
+    return acc;
+  }, {});
+
+  // para cada plano, calcula o índice de crédito
+  Object.values(appointmentsByClientPlan).forEach((apptsForPlan) => {
+    if (apptsForPlan.length === 0) return;
+
+    // desconsidera cancelados
+    const validAppts = apptsForPlan.filter(
+      (appt) => appt.status !== "CANCELED",
+    );
+
+    if (validAppts.length === 0) return;
+
+    // todos compartilham o mesmo plano
+    const first = validAppts[0];
+    const totalCredits = first.clientPlan!.plan.totalBookings;
+
+    // ordena por horário
+    validAppts.sort((a, b) => a.scheduleAt.getTime() - b.scheduleAt.getTime());
+
+    validAppts.forEach((appt, index) => {
+      const creditIndex = index + 1;
+      const withinCredits = creditIndex <= totalCredits;
+
+      planCreditInfoByAppointmentId[appt.id] = {
+        isPlanCredit: withinCredits,
+        planCreditIndex: withinCredits ? creditIndex : null,
+        planTotalCredits: totalCredits,
+      };
+    });
+  });
+
+  /* ------------------------------------------------------------------ */
+
   const groupedByBarber = appointmentsPrisma.reduce<
     Record<
       string,
@@ -249,6 +323,8 @@ export default async function AdminAppointmentsPage({
                 appointmentsForForm={appointmentsForForm}
                 barbersForForm={barbersForForm}
                 services={services}
+                // 🔹 novo: infos de plano por agendamento
+                planCreditInfoByAppointmentId={planCreditInfoByAppointmentId}
               />
             );
           })}
