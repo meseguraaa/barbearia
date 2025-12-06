@@ -404,7 +404,7 @@ async function ensureOrderForAppointment(appointmentId: string) {
       clientId: appt.clientId,
       appointmentId: appt.id,
       barberId: appt.barberId ?? null,
-      status: "PAID",
+      status: "COMPLETED",
       totalAmount: priceDecimal,
       items: {
         create: [
