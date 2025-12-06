@@ -60,7 +60,7 @@ export default async function ClientsPage() {
     .map((u) => (u as any).phone as string | null | undefined)
     .filter((p): p is string => !!p);
 
-  // 🔹 Serviços
+  // 🔹 Serviços (para fallback de preço quando não houver snapshot)
   const services = await prisma.service.findMany();
   const servicePriceById = new Map<string, number>(
     services.map((s) => [s.id, Number(s.price)]),
@@ -130,8 +130,27 @@ export default async function ClientsPage() {
         ? new Date(Math.max(...doneDates.map((d) => d.getTime())))
         : null;
 
-    // 🔹 Total gasto (sem taxa de cancelamento — aparece separado)
+    // 🔹 Total gasto:
+    //     - Planos: soma dos preços dos planos
+    //     - Atendimentos avulsos: DONE que NÃO usam plano (clientPlanId null)
     const totalFromAppointments = doneAppointments.reduce((sum, apt) => {
+      // se o atendimento estiver vinculado a um plano, o valor já foi cobrado no plano
+      // → não somamos aqui para evitar cobrar 360 em cada DONE
+      if ((apt as any).clientPlanId) {
+        return sum;
+      }
+
+      // preferimos o snapshot, se existir
+      const snapshot = (apt as any).servicePriceAtTheTime as
+        | number
+        | bigint
+        | null
+        | undefined;
+
+      if (snapshot != null) {
+        return sum + Number(snapshot);
+      }
+
       const price =
         apt.serviceId && servicePriceById.get(apt.serviceId as string);
       return sum + (Number(price) || 0);
@@ -163,6 +182,8 @@ export default async function ClientsPage() {
       email: user.email ?? "",
       phone: rawPhone || "—",
       createdAt: user.createdAt,
+      // 🔹 foto do cliente (login Google/Facebook)
+      image: user.image ?? null,
       totalAppointments,
       doneCount: doneAppointments.length,
       canceledCount: canceledAppointments.length,

@@ -1,3 +1,4 @@
+// app/admin/finance/page.tsx
 import { prisma } from "@/lib/prisma";
 import type { Metadata } from "next";
 import { MonthPicker } from "@/components/month-picker";
@@ -26,6 +27,16 @@ type AdminFinancePageProps = {
   searchParams: Promise<{
     month?: string; // formato "yyyy-MM"
   }>;
+};
+
+// ====== TIPO AUXILIAR: FATURAMENTO POR BARBEIRO ======
+type BarberMonthlyEarnings = {
+  barberId: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  servicesEarnings: number;
+  productsEarnings: number;
 };
 
 // ============ LÓGICA DE RECORRÊNCIA ============
@@ -104,45 +115,53 @@ export default async function AdminFinancePage({
   // Garante recorrência por série (mês a mês)
   await seedRecurringExpensesForMonth(monthStart, monthEnd);
 
-  const [expenses, appointmentsDone, productSales] = await Promise.all([
-    // Despesas do mês
-    prisma.expense.findMany({
-      where: {
-        dueDate: {
-          gte: monthStart,
-          lte: monthEnd,
+  const [expenses, appointmentsDone, productSales, barbers] = await Promise.all(
+    [
+      // Despesas do mês
+      prisma.expense.findMany({
+        where: {
+          dueDate: {
+            gte: monthStart,
+            lte: monthEnd,
+          },
         },
-      },
-      orderBy: {
-        dueDate: "asc",
-      },
-    }),
-    // Appointments concluídos no mês para cálculos financeiros
-    prisma.appointment.findMany({
-      where: {
-        status: "DONE",
-        scheduleAt: {
-          gte: monthStart,
-          lte: monthEnd,
+        orderBy: {
+          dueDate: "asc",
         },
-      },
-      include: {
-        service: true,
-      },
-    }),
-    // Vendas de produtos do mês (todas, de todos os barbeiros)
-    prisma.productSale.findMany({
-      where: {
-        soldAt: {
-          gte: monthStart,
-          lte: monthEnd,
+      }),
+      // Appointments concluídos no mês para cálculos financeiros
+      prisma.appointment.findMany({
+        where: {
+          status: "DONE",
+          scheduleAt: {
+            gte: monthStart,
+            lte: monthEnd,
+          },
         },
-      },
-      include: {
-        product: true,
-      },
-    }),
-  ]);
+        include: {
+          service: true,
+        },
+      }),
+      // Vendas de produtos do mês (todas, de todos os barbeiros)
+      prisma.productSale.findMany({
+        where: {
+          soldAt: {
+            gte: monthStart,
+            lte: monthEnd,
+          },
+        },
+        include: {
+          product: true,
+          barber: true,
+        },
+      }),
+      // Barbeiros ATIVOS (pra listar todos na seção)
+      prisma.barber.findMany({
+        where: { isActive: true },
+        orderBy: { name: "asc" },
+      }),
+    ],
+  );
 
   // ===== DESPESAS DO MÊS =====
   const totalExpenses = expenses.reduce((acc, expense) => {
@@ -210,6 +229,65 @@ export default async function AdminFinancePage({
     rawMonthLabel.charAt(0).toUpperCase() + rawMonthLabel.slice(1);
 
   const monthForForm = format(referenceDate, "yyyy-MM");
+
+  // ===== FATURAMENTO POR BARBEIRO (SERVIÇOS + PRODUTOS) =====
+  const barberEarningsMap = new Map<string, BarberMonthlyEarnings>();
+
+  // Inicializa mapa com todos os barbeiros ATIVOS
+  barbers.forEach((barber) => {
+    barberEarningsMap.set(barber.id, {
+      barberId: barber.id,
+      name: barber.name ?? "Barbeiro",
+      email: barber.email ?? null,
+      phone: barber.phone ?? null,
+      servicesEarnings: 0,
+      productsEarnings: 0,
+    });
+  });
+
+  // Serviços (appointments) – soma da comissão do barbeiro (snapshot)
+  appointmentsDone.forEach((appt) => {
+    if (!appt.barberId) return;
+    const entry = barberEarningsMap.get(appt.barberId);
+    if (!entry) return;
+
+    const priceSnapshot = appt.servicePriceAtTheTime;
+    const priceService = appt.service?.price ?? 0;
+    const priceNumber = priceSnapshot
+      ? Number(priceSnapshot)
+      : Number(priceService);
+
+    const percentSnapshot = appt.barberPercentageAtTheTime;
+    const percentService = appt.service?.barberPercentage ?? 0;
+    const percentNumber = percentSnapshot
+      ? Number(percentSnapshot)
+      : Number(percentService);
+
+    const earningSnapshot = appt.barberEarningValue;
+    const earningNumber = earningSnapshot
+      ? Number(earningSnapshot)
+      : (priceNumber * percentNumber) / 100;
+
+    entry.servicesEarnings += earningNumber;
+  });
+
+  // Produtos – comissão do barbeiro em cima das vendas
+  productSales.forEach((sale) => {
+    if (!sale.barberId) return;
+    const entry = barberEarningsMap.get(sale.barberId);
+    if (!entry) return;
+
+    const total = Number(sale.totalPrice);
+    const percent = sale.product?.barberPercentage ?? 0;
+    const commission = (total * percent) / 100;
+
+    entry.productsEarnings += commission;
+  });
+
+  // agora: TODOS barbeiros ativos aparecem, mesmo com 0 de faturamento
+  const barberEarningsList: BarberMonthlyEarnings[] = Array.from(
+    barberEarningsMap.values(),
+  ).sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -286,7 +364,22 @@ export default async function AdminFinancePage({
         </div>
       </section>
 
+      {/* FATURAMENTO POR BARBEIRO NO MÊS */}
+      <BarberMonthlyEarningsSection
+        barbersEarnings={barberEarningsList}
+        currencyFormatter={currencyFormatter}
+      />
+
       {/* DESPESAS DO MÊS */}
+      <div>
+        <h2 className="text-subtitle text-content-primary">
+          Cadastro de despesas (mês)
+        </h2>
+        <p className="text-paragraph-small text-content-secondary">
+          Contas cadastradas para este mês, incluindo despesas recorrentes e
+          avulsas.
+        </p>
+      </div>
       <section className="overflow-x-auto rounded-xl border border-border-primary bg-background-tertiary">
         <table className="min-w-full text-sm">
           <thead>
@@ -319,6 +412,71 @@ export default async function AdminFinancePage({
         </table>
       </section>
     </div>
+  );
+}
+
+/* ========= SEÇÃO: FATURAMENTO POR BARBEIRO ========= */
+
+function BarberMonthlyEarningsSection({
+  barbersEarnings,
+  currencyFormatter,
+}: {
+  barbersEarnings: BarberMonthlyEarnings[];
+  currencyFormatter: Intl.NumberFormat;
+}) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-subtitle text-content-primary">
+          Faturamento por barbeiro (mês)
+        </h2>
+        <p className="text-paragraph-small text-content-secondary">
+          Valores recebidos pelos barbeiros em serviços e comissões de produtos
+          neste mês.
+        </p>
+      </div>
+
+      {barbersEarnings.length === 0 ? (
+        <p className="text-paragraph-small text-content-secondary">
+          Nenhum barbeiro ativo cadastrado.
+        </p>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-3">
+          {barbersEarnings.map((barber) => {
+            const total = barber.servicesEarnings + barber.productsEarnings;
+
+            return (
+              <div
+                key={barber.barberId}
+                className="space-y-2 rounded-xl border border-border-primary bg-background-tertiary px-4 py-3"
+              >
+                <p className="text-label-large text-content-primary">
+                  {barber.name}
+                </p>
+                <p className="text-paragraph-small text-content-secondary">
+                  Serviços:{" "}
+                  <span className="font-semibold">
+                    {currencyFormatter.format(barber.servicesEarnings)}
+                  </span>
+                </p>
+                <p className="text-paragraph-small text-content-secondary">
+                  Produtos:{" "}
+                  <span className="font-semibold">
+                    {currencyFormatter.format(barber.productsEarnings)}
+                  </span>
+                </p>
+                <p className="text-paragraph-small text-content-secondary">
+                  Total recebido:{" "}
+                  <span className="font-semibold">
+                    {currencyFormatter.format(total)}
+                  </span>
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -395,13 +553,24 @@ function NewExpenseDialog({ month }: { month: string }) {
               className="peer sr-only"
             />
 
-            {/* UI do checkbox */}
+            {/* UI do checkbox customizado (roxo com check branco) */}
             <label
               htmlFor="isRecurring"
-              className="inline-flex items-center gap-2 cursor-pointer"
+              className="
+                inline-flex items-center gap-2 cursor-pointer
+                peer-checked:[&_.box]:bg-border-brand
+                peer-checked:[&_.box]:border-border-brand
+                peer-checked:[&_.check]:bg-background-primary
+              "
             >
-              <span className="flex h-4 w-4 items-center justify-center rounded border border-border-primary bg-background-tertiary peer-checked:border-border-brand peer-checked:bg-border-brand">
-                <span className="h-2 w-2 rounded-sm bg-transparent peer-checked:bg-background-primary" />
+              <span
+                className="
+                  box flex h-4 w-4 items-center justify-center
+                  rounded border border-border-primary bg-background-tertiary
+                  transition-colors
+                "
+              >
+                <span className="check h-2 w-2 rounded-sm bg-transparent transition-colors" />
               </span>
               <span className="text-label-small text-content-primary">
                 Despesa recorrente
@@ -426,7 +595,7 @@ function NewExpenseDialog({ month }: { month: string }) {
                 className="bg-background-tertiary border-border-primary text-content-primary"
               />
               <p className="text-paragraph-small text-content-secondary">
-                Para despesas recorrentes, informe apenas o dia do mês.
+                Para despesas recorrentes, informe apenas o dia de vencimento.
               </p>
             </div>
 

@@ -194,6 +194,12 @@ export default async function BarberDashboardPage({
         service: true,
         barber: true,
         client: true,
+        // 🔹 traz o plano do cliente pra calcular créditos
+        clientPlan: {
+          include: {
+            plan: true,
+          },
+        },
       },
     }),
     prisma.appointment.findMany({
@@ -258,46 +264,81 @@ export default async function BarberDashboardPage({
 
   // ------- MAPEIA PARA O TIPO DO CARD -------
   const barberDashboardAppointments: BarberDashboardAppointment[] =
-    appointments.map((appt) => ({
-      id: appt.id,
-      clientName: appt.clientName,
-      phone: appt.phone,
-      description: appt.description,
-      scheduleAt: appt.scheduleAt,
-      status: appt.status,
-      barberId: appt.barberId,
-      barber: appt.barber
-        ? {
-            id: appt.barber.id,
-            name: appt.barber.name,
-            email: appt.barber.email,
-            phone: appt.barber.phone,
-            isActive: appt.barber.isActive,
+    appointments.map((appt) => {
+      // 🔹 Cálculo de créditos do plano para este agendamento
+      let isPlanCredit = false;
+      let planCreditIndex: number | null = null;
+      let planTotalCredits: number | null = null;
+
+      if (appt.clientPlan && appt.clientPlan.plan) {
+        const totalCredits = appt.clientPlan.plan.totalBookings;
+        const usedBookings = appt.clientPlan.usedBookings;
+
+        planTotalCredits = totalCredits;
+
+        if (appt.status === "DONE") {
+          // plano já teve este crédito consumido
+          if (usedBookings > 0) {
+            const idx = Math.min(usedBookings, totalCredits);
+            if (idx <= totalCredits) {
+              isPlanCredit = true;
+              planCreditIndex = idx;
+            }
           }
-        : null,
-      serviceId: appt.serviceId,
-      service: appt.service
-        ? {
-            price: Number(appt.service.price),
-            cancelFeePercentage:
-              appt.service.cancelFeePercentage != null
-                ? Number(appt.service.cancelFeePercentage)
-                : null,
-            cancelLimitHours: appt.service.cancelLimitHours,
+        } else {
+          // PENDING (ou outro status não-DONE): se ainda há crédito, este é o próximo
+          if (usedBookings < totalCredits) {
+            isPlanCredit = true;
+            planCreditIndex = usedBookings + 1;
           }
-        : null,
-      client: appt.client
-        ? {
-            image: appt.client.image,
-          }
-        : null,
-      cancelFeeApplied: appt.cancelFeeApplied,
-      cancelledByRole: appt.cancelledByRole,
-      concludedByRole: appt.concludedByRole,
-      servicePriceAtTheTime: appt.servicePriceAtTheTime
-        ? Number(appt.servicePriceAtTheTime)
-        : null,
-    }));
+        }
+      }
+
+      return {
+        id: appt.id,
+        clientName: appt.clientName,
+        phone: appt.phone,
+        description: appt.description,
+        scheduleAt: appt.scheduleAt,
+        status: appt.status,
+        barberId: appt.barberId,
+        barber: appt.barber
+          ? {
+              id: appt.barber.id,
+              name: appt.barber.name,
+              email: appt.barber.email,
+              phone: appt.barber.phone,
+              isActive: appt.barber.isActive,
+            }
+          : null,
+        serviceId: appt.serviceId,
+        service: appt.service
+          ? {
+              price: Number(appt.service.price),
+              cancelFeePercentage:
+                appt.service.cancelFeePercentage != null
+                  ? Number(appt.service.cancelFeePercentage)
+                  : null,
+              cancelLimitHours: appt.service.cancelLimitHours,
+            }
+          : null,
+        client: appt.client
+          ? {
+              image: appt.client.image,
+            }
+          : null,
+        cancelFeeApplied: appt.cancelFeeApplied,
+        cancelledByRole: appt.cancelledByRole,
+        concludedByRole: appt.concludedByRole,
+        servicePriceAtTheTime: appt.servicePriceAtTheTime
+          ? Number(appt.servicePriceAtTheTime)
+          : null,
+        // 🔹 infos de plano para o card
+        isPlanCredit,
+        planCreditIndex,
+        planTotalCredits,
+      };
+    });
 
   return (
     <div className="space-y-6">

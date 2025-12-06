@@ -21,6 +21,11 @@ type AdminAppointmentRowProps = {
   appointmentsForForm: AppointmentType[];
   barbersForForm: BarberForForm[];
   services: Service[];
+
+  // 🔹 infos de plano por agendamento (opcionais)
+  isPlanCredit?: boolean;
+  planCreditIndex?: number | null;
+  planTotalCredits?: number | null;
 };
 
 export function AdminAppointmentRow({
@@ -28,6 +33,9 @@ export function AdminAppointmentRow({
   appointmentsForForm,
   barbersForForm,
   services,
+  isPlanCredit,
+  planCreditIndex,
+  planTotalCredits,
 }: AdminAppointmentRowProps) {
   const date = new Date(appt.scheduleAt);
   const dateStr = format(date, "dd/MM/yyyy", { locale: ptBR });
@@ -165,6 +173,10 @@ export function AdminAppointmentRow({
               cancelLimitHours={appt.service?.cancelLimitHours ?? undefined}
               cancelledByRole="ADMIN"
               concludedByRole="ADMIN"
+              // 🔹 infos de plano (para o modal "Conferir")
+              isPlanCredit={isPlanCredit}
+              planCreditIndex={planCreditIndex}
+              planTotalCredits={planTotalCredits}
             />
           </div>
         )}

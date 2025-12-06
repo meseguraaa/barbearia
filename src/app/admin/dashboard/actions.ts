@@ -280,6 +280,8 @@ export async function createAppointment(data: AppointmentData) {
               new Prisma.Decimal(totalBookings),
             );
 
+            // snapshots base; o ajuste de cobrança (1º crédito x restantes)
+            // será feito na conclusão (DONE)
             servicePriceAtTheTime = clientPlan.plan.price;
             barberPercentageAtTheTime = commissionPercentDecimal;
             barberEarningValue = perBooking;
@@ -377,6 +379,12 @@ export async function updateAppointment(id: string, data: AppointmentData) {
 /* ---------------------------------------------------------
  * CONCLUDE (DONE) – consumindo crédito do plano
  * e EXPIRANDO quando usar o último crédito
+ *
+ * REGRA DO PLANO:
+ * - Cliente paga o valor TOTAL do plano (ex: 360) só em UM crédito
+ * - Demais créditos daquele ClientPlan não cobram nada (0)
+ * - Barbeiro recebe comissão por crédito:
+ *   (plan.price * commissionPercent / 100) / totalBookings
  * ---------------------------------------------------------*/
 type ConcludeOptions = {
   concludedByRole?: RoleForAction;
@@ -464,6 +472,32 @@ export async function concludeAppointment(
       return;
     }
 
+    // 🔢 Cálculo da comissão por crédito para o barbeiro
+    const commissionPercentDecimal = new Prisma.Decimal(
+      clientPlan.plan.commissionPercent,
+    );
+
+    const totalCommissionValue = clientPlan.plan.price
+      .mul(commissionPercentDecimal)
+      .div(new Prisma.Decimal(100));
+
+    const perBooking = totalCommissionValue.div(
+      new Prisma.Decimal(totalBookings),
+    );
+
+    // 💰 Regra de cobrança do cliente:
+    // - Se ainda não havia créditos consumidos (usedBookings === 0 antes do incremento),
+    //   este atendimento é o primeiro crédito → cobra o valor total do plano.
+    // - Senão, este é 2º, 3º... crédito → não cobra nada do cliente.
+    const isFirstCredit = usedBookings === 0;
+
+    const newServicePriceAtTheTime = isFirstCredit
+      ? clientPlan.plan.price
+      : new Prisma.Decimal(0);
+
+    const newBarberPercentageAtTheTime = commissionPercentDecimal;
+    const newBarberEarningValue = perBooking;
+
     // 🔹 Descobre se este é o ÚLTIMO crédito
     const isLastCredit = usedBookings + 1 >= totalBookings;
 
@@ -475,6 +509,9 @@ export async function concludeAppointment(
         data: {
           status: "DONE",
           concludedByRole: options?.concludedByRole ?? null,
+          servicePriceAtTheTime: newServicePriceAtTheTime,
+          barberPercentageAtTheTime: newBarberPercentageAtTheTime,
+          barberEarningValue: newBarberEarningValue,
         },
       }),
       prisma.clientPlan.update({

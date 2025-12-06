@@ -19,12 +19,21 @@ type BarberGroup = {
   appointments: AppointmentWithBarberPrisma[];
 };
 
+type PlanCreditInfo = {
+  isPlanCredit: boolean;
+  planCreditIndex: number | null;
+  planTotalCredits: number | null;
+};
+
 type AdminAppointmentsByBarberProps = {
   group: BarberGroup;
   salesCount: number;
   appointmentsForForm: AppointmentType[];
   barbersForForm: BarberForForm[];
   services: Service[];
+
+  // 🔹 novo: infos de plano por agendamento (opcional)
+  planCreditInfoByAppointmentId?: Record<string, PlanCreditInfo>;
 };
 
 export function AdminAppointmentsByBarber({
@@ -33,6 +42,7 @@ export function AdminAppointmentsByBarber({
   appointmentsForForm,
   barbersForForm,
   services,
+  planCreditInfoByAppointmentId,
 }: AdminAppointmentsByBarberProps) {
   return (
     <div className="border border-border-primary rounded-xl overflow-hidden bg-background-tertiary">
@@ -53,15 +63,23 @@ export function AdminAppointmentsByBarber({
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <tbody>
-            {group.appointments.map((appt) => (
-              <AdminAppointmentRow
-                key={appt.id}
-                appt={appt}
-                appointmentsForForm={appointmentsForForm}
-                barbersForForm={barbersForForm}
-                services={services}
-              />
-            ))}
+            {group.appointments.map((appt) => {
+              const planInfo = planCreditInfoByAppointmentId?.[appt.id] ?? null;
+
+              return (
+                <AdminAppointmentRow
+                  key={appt.id}
+                  appt={appt}
+                  appointmentsForForm={appointmentsForForm}
+                  barbersForForm={barbersForForm}
+                  services={services}
+                  // 🔹 passando infos de plano para a linha
+                  isPlanCredit={planInfo?.isPlanCredit ?? false}
+                  planCreditIndex={planInfo?.planCreditIndex ?? null}
+                  planTotalCredits={planInfo?.planTotalCredits ?? null}
+                />
+              );
+            })}
           </tbody>
         </table>
       </div>

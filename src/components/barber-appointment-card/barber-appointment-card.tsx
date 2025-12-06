@@ -38,6 +38,11 @@ export type BarberDashboardAppointment = {
   cancelledByRole?: "ADMIN" | "BARBER" | "CLIENT" | null;
   concludedByRole?: "ADMIN" | "BARBER" | "CLIENT" | null;
   servicePriceAtTheTime?: number | bigint | null;
+
+  // 🔹 infos de plano para o card
+  isPlanCredit?: boolean;
+  planCreditIndex?: number | null;
+  planTotalCredits?: number | null;
 };
 
 type BarberAppointmentCardProps = {
@@ -227,6 +232,10 @@ export function BarberAppointmentCard({
                 }
                 cancelledByRole="BARBER"
                 concludedByRole="BARBER"
+                // 🔹 infos de plano para o modal "Conferir"
+                isPlanCredit={appointment.isPlanCredit}
+                planCreditIndex={appointment.planCreditIndex}
+                planTotalCredits={appointment.planTotalCredits}
               />
             </>
           )}

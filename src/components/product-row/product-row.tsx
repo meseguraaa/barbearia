@@ -12,6 +12,17 @@ type ProductRowProps = {
   product: ProductForRow;
 };
 
+const MAX_TEXT_LENGTH = 50;
+
+function truncate(
+  text: string | null | undefined,
+  max: number = MAX_TEXT_LENGTH,
+): string {
+  if (!text) return "";
+  if (text.length <= max) return text;
+  return text.slice(0, max - 1) + "…";
+}
+
 export function ProductRow({ product }: ProductRowProps) {
   // Garante que o objeto enviado para o dialog tenha os campos numéricos esperados
   const productForDialog: ProductForEditDialog = {
@@ -21,11 +32,15 @@ export function ProductRow({ product }: ProductRowProps) {
       product.barberPercentage !== null ? Number(product.barberPercentage) : 0,
   };
 
+  const displayName = truncate(product.name);
+  const displayDescription = truncate(product.description);
+
   return (
     <tr className="border-t border-border-primary">
       {/* NOME + FOTO */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
+          {/* Imagem sempre quadrada com cover */}
           <div className="h-10 w-10 overflow-hidden rounded-lg border border-border-primary bg-background-secondary">
             {product.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -40,12 +55,14 @@ export function ProductRow({ product }: ProductRowProps) {
               </div>
             )}
           </div>
+
+          {/* Título + descrição truncados */}
           <div className="flex flex-col">
             <span className="font-medium text-content-primary">
-              {product.name}
+              {displayName}
             </span>
-            <span className="text-[11px] text-content-secondary line-clamp-1">
-              {product.description}
+            <span className="text-[11px] text-content-secondary">
+              {displayDescription}
             </span>
           </div>
         </div>
