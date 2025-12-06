@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { createExpense } from "./actions";
 import { ExpenseDueDatePicker } from "@/components/expense-due-date-picker";
 import { AdminExpenseRow } from "@/components/admin-expense-row";
+import { OrderStatusBadge } from "@/components/order-status-badge";
+import type { OrderStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -115,8 +117,8 @@ export default async function AdminFinancePage({
   // Garante recorrência por série (mês a mês)
   await seedRecurringExpensesForMonth(monthStart, monthEnd);
 
-  const [expenses, appointmentsDone, productSales, barbers] = await Promise.all(
-    [
+  const [expenses, appointmentsDone, productSales, barbers, ordersForMonth] =
+    await Promise.all([
       // Despesas do mês
       prisma.expense.findMany({
         where: {
@@ -160,8 +162,29 @@ export default async function AdminFinancePage({
         where: { isActive: true },
         orderBy: { name: "asc" },
       }),
-    ],
-  );
+      // ⭐ Pedidos (serviços + produtos) criados no mês
+      prisma.order.findMany({
+        where: {
+          createdAt: {
+            gte: monthStart,
+            lte: monthEnd,
+          },
+        },
+        include: {
+          client: true,
+          barber: true,
+          items: {
+            include: {
+              service: true,
+              product: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      }),
+    ]);
 
   // ===== DESPESAS DO MÊS =====
   const totalExpenses = expenses.reduce((acc, expense) => {
@@ -209,6 +232,11 @@ export default async function AdminFinancePage({
     const commission = (total * percent) / 100;
     const net = total - commission;
     return acc + net;
+  }, 0);
+
+  // ⭐ Faturamento BRUTO do mês via pedidos (services + products)
+  const ordersTotalGrossMonth = ordersForMonth.reduce((acc, order) => {
+    return acc + Number(order.totalAmount);
   }, 0);
 
   // Lucro líquido final do mês:
@@ -370,6 +398,12 @@ export default async function AdminFinancePage({
         currencyFormatter={currencyFormatter}
       />
 
+      {/* PEDIDOS DO MÊS */}
+      <OrdersSection
+        orders={ordersForMonth}
+        currencyFormatter={currencyFormatter}
+      />
+
       {/* DESPESAS DO MÊS */}
       <div>
         <h2 className="text-subtitle text-content-primary">
@@ -476,6 +510,108 @@ function BarberMonthlyEarningsSection({
           })}
         </div>
       )}
+    </section>
+  );
+}
+
+/* ========= SEÇÃO: PEDIDOS DO MÊS ========= */
+
+function OrdersSection({
+  orders,
+  currencyFormatter,
+}: {
+  orders: Array<{
+    id: string;
+    status: OrderStatus;
+    totalAmount: any;
+    createdAt: Date;
+    client: { name: string | null } | null;
+    barber: { name: string | null } | null;
+    items: Array<{
+      id: string;
+      quantity: number;
+      service: { name: string } | null;
+      product: { name: string } | null;
+    }>;
+  }>;
+  currencyFormatter: Intl.NumberFormat;
+}) {
+  if (orders.length === 0) {
+    return (
+      <section className="space-y-2">
+        <div>
+          <h2 className="text-subtitle text-content-primary">Pedidos do mês</h2>
+          <p className="text-paragraph-small text-content-secondary">
+            Nenhum pedido registrado neste mês ainda.
+          </p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-subtitle text-content-primary">Pedidos do mês</h2>
+        <p className="text-paragraph-small text-content-secondary">
+          Lista de todos os pedidos de serviços e produtos registrados neste
+          mês.
+        </p>
+      </div>
+
+      <section className="overflow-x-auto rounded-xl border border-border-primary bg-background-tertiary">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b border-border-primary bg-muted/40 text-left text-label-small text-content-secondary">
+              <th className="px-4 py-2">Data</th>
+              <th className="px-4 py-2">Cliente</th>
+              <th className="px-4 py-2">Barbeiro</th>
+              <th className="px-4 py-2">Itens</th>
+              <th className="px-4 py-2 text-right">Total</th>
+              <th className="px-4 py-2 text-center">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {orders.map((order) => {
+              const dateStr = format(order.createdAt, "dd/MM/yyyy HH:mm", {
+                locale: ptBR,
+              });
+
+              const clientName = order.client?.name ?? "—";
+              const barberName = order.barber?.name ?? "—";
+
+              const itemsLabel =
+                order.items.length === 0
+                  ? "—"
+                  : order.items
+                      .map((item) => {
+                        const baseName =
+                          item.service?.name ?? item.product?.name ?? "Item";
+                        return `${item.quantity}x ${baseName}`;
+                      })
+                      .join(", ");
+
+              return (
+                <tr
+                  key={order.id}
+                  className="border-t border-border-primary text-paragraph-small text-content-primary"
+                >
+                  <td className="px-4 py-2 whitespace-nowrap">{dateStr}</td>
+                  <td className="px-4 py-2">{clientName}</td>
+                  <td className="px-4 py-2">{barberName}</td>
+                  <td className="px-4 py-2">{itemsLabel}</td>
+                  <td className="px-4 py-2 text-right">
+                    {currencyFormatter.format(Number(order.totalAmount))}
+                  </td>
+                  <td className="px-4 py-2 text-center">
+                    <OrderStatusBadge status={order.status} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
     </section>
   );
 }

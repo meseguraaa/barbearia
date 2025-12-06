@@ -19,9 +19,11 @@ export type ClientProduct = {
 
 type ProductCardProps = {
   product: ClientProduct;
+  // 🔹 novo: clientId opcional (cliente logado)
+  clientId?: string | null;
 };
 
-export function ProductCard({ product }: ProductCardProps) {
+export function ProductCard({ product, clientId }: ProductCardProps) {
   const [open, setOpen] = useState(false);
 
   const isOutOfStock = product.stockQuantity <= 0;
@@ -66,7 +68,7 @@ export function ProductCard({ product }: ProductCardProps) {
             onClick={() => setOpen(true)}
             variant="brand"
           >
-            Comprar
+            Reservar
           </Button>
         </div>
       </div>
@@ -76,6 +78,8 @@ export function ProductCard({ product }: ProductCardProps) {
         product={product}
         open={open}
         onOpenChange={setOpen}
+        // 🔹 repassa o clientId para o dialog criar o pedido para este cliente
+        clientId={clientId}
       />
     </>
   );

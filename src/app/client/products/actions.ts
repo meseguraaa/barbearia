@@ -6,10 +6,18 @@ import { z } from "zod";
 
 const purchaseSchema = z.object({
   productId: z.string(),
-  barberId: z.string(),
   quantity: z.number().min(1),
+  // 🔹 opcionalmente podemos vincular ao cliente
+  clientId: z.string().optional(),
 });
 
+/**
+ * Pedido de produto feito pelo CLIENTE (fora da barbearia).
+ *
+ * - NÃO baixa estoque
+ * - NÃO registra ProductSale
+ * - Cria Order com status PENDING_CHECKIN
+ */
 export async function createProductSale(data: unknown) {
   const parsed = purchaseSchema.safeParse(data);
 
@@ -17,7 +25,7 @@ export async function createProductSale(data: unknown) {
     throw new Error(parsed.error.issues[0]?.message || "Dados inválidos");
   }
 
-  const { productId, barberId, quantity } = parsed.data;
+  const { productId, quantity, clientId } = parsed.data;
 
   return await prisma.$transaction(async (tx) => {
     const product = await tx.product.findUnique({
@@ -28,45 +36,39 @@ export async function createProductSale(data: unknown) {
       throw new Error("Produto não encontrado ou inativo.");
     }
 
+    // 🔹 Mesmo sem baixar estoque agora, garantimos que a quantidade faz sentido
     if (product.stockQuantity < quantity) {
       throw new Error("Quantidade indisponível no estoque.");
     }
 
-    const barber = await tx.barber.findUnique({
-      where: { id: barberId, isActive: true },
-    });
+    const unitPrice = product.price; // Decimal
+    const totalPrice = unitPrice.mul(quantity); // Decimal
 
-    if (!barber) {
-      throw new Error("Barbeiro inválido.");
-    }
-
-    const unitPrice = product.price;
-    const totalPrice = unitPrice.mul(quantity);
-
-    const sale = await tx.productSale.create({
+    // 🔹 Cria o PEDIDO com status PENDING_CHECKIN (intenção de compra)
+    const order = await tx.order.create({
       data: {
-        productId,
-        barberId,
-        quantity,
-        unitPrice,
-        totalPrice,
+        clientId: clientId ?? null, // pedido vinculado ao cliente, quando logado
+        appointmentId: null, // não está ligado a um atendimento
+        barberId: null, // barbeiro será definido na barbearia, na finalização
+        status: "PENDING_CHECKIN",
+        totalAmount: totalPrice,
+        items: {
+          create: [
+            {
+              productId,
+              quantity,
+              unitPrice,
+              totalPrice,
+            },
+          ],
+        },
       },
     });
 
-    await tx.product.update({
-      where: { id: productId },
-      data: {
-        stockQuantity: product.stockQuantity - quantity,
-      },
-    });
-
-    // Revalidate pages
+    // Revalidate das telas relevantes para o cliente
     revalidatePath("/client/products");
-    revalidatePath("/admin/dashboard");
-    revalidatePath("/admin/clients");
-    revalidatePath("/admin/finance");
-    revalidatePath("/painel");
+    revalidatePath("/client/history");
 
-    return { ok: true, saleId: sale.id };
+    return { ok: true, orderId: order.id };
   });
 }

@@ -377,6 +377,50 @@ export async function updateAppointment(id: string, data: AppointmentData) {
 }
 
 /* ---------------------------------------------------------
+ * Helper: garantir que exista um PEDIDO para este atendimento
+ * ---------------------------------------------------------*/
+async function ensureOrderForAppointment(appointmentId: string) {
+  // Se já tiver pedido, não faz nada
+  const existingOrder = await prisma.order.findUnique({
+    where: { appointmentId },
+  });
+
+  if (existingOrder) return;
+
+  const appt = await prisma.appointment.findUnique({
+    where: { id: appointmentId },
+    include: { service: true },
+  });
+
+  if (!appt) return;
+  if (appt.status !== "DONE") return;
+  if (!appt.serviceId) return;
+
+  const priceDecimal =
+    appt.servicePriceAtTheTime ?? appt.service?.price ?? new Prisma.Decimal(0);
+
+  await prisma.order.create({
+    data: {
+      clientId: appt.clientId,
+      appointmentId: appt.id,
+      barberId: appt.barberId ?? null,
+      status: "PAID",
+      totalAmount: priceDecimal,
+      items: {
+        create: [
+          {
+            serviceId: appt.serviceId,
+            quantity: 1,
+            unitPrice: priceDecimal,
+            totalPrice: priceDecimal,
+          },
+        ],
+      },
+    },
+  });
+}
+
+/* ---------------------------------------------------------
  * CONCLUDE (DONE) – consumindo crédito do plano
  * e EXPIRANDO quando usar o último crédito
  *
@@ -411,6 +455,8 @@ export async function concludeAppointment(
           concludedByRole: options?.concludedByRole ?? appt.concludedByRole,
         },
       });
+
+      await ensureOrderForAppointment(id);
       return;
     }
 
@@ -423,6 +469,8 @@ export async function concludeAppointment(
           concludedByRole: options?.concludedByRole ?? null,
         },
       });
+
+      await ensureOrderForAppointment(id);
       return;
     }
 
@@ -441,6 +489,8 @@ export async function concludeAppointment(
           concludedByRole: options?.concludedByRole ?? null,
         },
       });
+
+      await ensureOrderForAppointment(id);
       return;
     }
 
@@ -453,6 +503,8 @@ export async function concludeAppointment(
           concludedByRole: options?.concludedByRole ?? null,
         },
       });
+
+      await ensureOrderForAppointment(id);
       return;
     }
 
@@ -469,6 +521,8 @@ export async function concludeAppointment(
           concludedByRole: options?.concludedByRole ?? null,
         },
       });
+
+      await ensureOrderForAppointment(id);
       return;
     }
 
@@ -530,6 +584,8 @@ export async function concludeAppointment(
             },
       }),
     ]);
+
+    await ensureOrderForAppointment(id);
   }, "Falha ao concluir o agendamento");
 }
 
