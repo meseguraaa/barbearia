@@ -259,7 +259,7 @@ export default async function ClientsPage() {
   });
 
   return (
-    <div className="space-y-8 max-w-7xl mx-auto py-4">
+    <div className="space-y-5 max-w-7xl">
       {/* HEADER */}
       <header className="flex items-center justify-between gap-4">
         <div>
@@ -426,41 +426,54 @@ export default async function ClientsPage() {
                   </div>
 
                   {/* Atendimentos */}
-                  <div className="rounded-xl border border-border-primary bg-background-secondary p-4 space-y-3">
+                  <div className="rounded-xl border border-border-primary bg-background-secondary p-4 space-y-2">
                     <p className="text-label-small text-content-secondary">
                       Atendimentos
                     </p>
-                    <div className="grid grid-cols-2 gap-3 text-paragraph-small">
-                      <div className="space-y-1">
-                        <p className="text-content-secondary">Agendamentos</p>
-                        <p className="text-content-primary font-semibold">
-                          {row.totalAppointments}
-                        </p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-content-secondary">Concluídos</p>
-                        <p className="text-content-primary font-semibold">
-                          {row.doneCount}
-                        </p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-content-secondary">Cancelados</p>
-                        <p className="text-content-primary font-semibold">
-                          {row.canceledCount}
-                        </p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-content-secondary">Canc. c/ taxa</p>
-                        <p className="text-content-primary font-semibold">
-                          {row.canceledWithFeeCount}
-                        </p>
-                      </div>
-                    </div>
-
                     <div className="space-y-1 text-paragraph-small">
-                      <p className="text-content-secondary">Frequência</p>
-                      <p className="text-content-primary font-medium">
-                        {row.frequencyLabel}
+                      <p>
+                        <span className="text-content-secondary">
+                          Agendamentos:{" "}
+                        </span>
+                        <span className="text-content-primary font-semibold">
+                          {row.totalAppointments}
+                        </span>
+                      </p>
+
+                      <p>
+                        <span className="text-content-secondary">
+                          Concluídos:{" "}
+                        </span>
+                        <span className="text-content-primary font-semibold">
+                          {row.doneCount}
+                        </span>
+                      </p>
+
+                      <p>
+                        <span className="text-content-secondary">
+                          Cancelados:{" "}
+                        </span>
+                        <span className="text-content-primary font-semibold">
+                          {row.canceledCount}
+                        </span>
+                      </p>
+
+                      <p>
+                        <span className="text-content-secondary">
+                          Canc. c/ taxa:{" "}
+                        </span>
+                        <span className="text-content-primary font-semibold">
+                          {row.canceledWithFeeCount}
+                        </span>
+                      </p>
+
+                      <p>
+                        <span className="text-content-secondary">
+                          Frequência:{" "}
+                        </span>
+                        <span className="text-content-primary font-semibold">
+                          {row.frequencyLabel}
+                        </span>
                       </p>
                     </div>
                   </div>
@@ -472,51 +485,58 @@ export default async function ClientsPage() {
                     </p>
 
                     <div className="space-y-1 text-paragraph-small">
-                      <p className="text-content-secondary">Total gasto</p>
-                      <p className="text-content-primary font-semibold">
-                        {row.totalSpent.toLocaleString("pt-BR", {
-                          style: "currency",
-                          currency: "BRL",
-                          minimumFractionDigits: 2,
-                        })}
+                      <p>
+                        <span className="text-content-secondary">
+                          Total gasto:{" "}
+                        </span>
+                        <span className="text-content-primary font-semibold">
+                          {row.totalSpent.toLocaleString("pt-BR", {
+                            style: "currency",
+                            currency: "BRL",
+                            minimumFractionDigits: 2,
+                          })}
+                        </span>
                       </p>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-3 text-paragraph-small">
-                      <div className="space-y-1">
-                        <p className="text-content-secondary">Planos</p>
-                        <p className="text-content-primary font-semibold">
+                      <p>
+                        <span className="text-content-secondary">
+                          Planos adquiridos:{" "}
+                        </span>
+                        <span className="text-content-primary font-semibold">
                           {row.totalPlans}
-                        </p>
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-content-secondary">
-                          Taxas de cancelamento
-                        </p>
-                        <p className="text-content-primary font-semibold">
+                        </span>
+                      </p>
+
+                      <p>
+                        <span className="text-content-secondary">
+                          Taxas de cancelamento:{" "}
+                        </span>
+                        <span className="text-content-primary font-semibold">
                           {row.totalCancelFee.toLocaleString("pt-BR", {
                             style: "currency",
                             currency: "BRL",
                             minimumFractionDigits: 2,
                           })}
-                        </p>
-                      </div>
-                    </div>
+                        </span>
+                      </p>
 
-                    <div className="space-y-1 text-paragraph-small">
-                      <p className="text-content-secondary">Status</p>
-                      {row.hasActivePlan ? (
-                        <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/40">
-                          Cliente de plano ativo
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="outline"
-                          className="border-border-primary text-content-secondary"
-                        >
-                          Sem plano ativo
-                        </Badge>
-                      )}
+                      <p>
+                        <span className="text-content-secondary">
+                          Status do plano:{" "}
+                        </span>
+                        {row.hasActivePlan ? (
+                          <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/40 ml-1">
+                            Cliente de plano ativo
+                          </Badge>
+                        ) : (
+                          <Badge
+                            variant="outline"
+                            className="border-border-primary text-content-secondary ml-1"
+                          >
+                            Sem plano ativo
+                          </Badge>
+                        )}
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -160,11 +160,30 @@ export function AppointmentActions({
    * --------------------------- */
   function handleConfirmConclude() {
     startTransition(async () => {
-      await concludeAppointment(appointmentId, {
+      const result = await concludeAppointment(appointmentId, {
         concludedByRole,
       });
+
       setIsReviewOpen(false);
-      router.refresh();
+
+      // Se a action retornar erro, apenas atualiza a página (ou depois colocamos toast)
+      if (result && typeof result === "object" && "error" in result) {
+        router.refresh();
+        return;
+      }
+
+      const orderId =
+        result && typeof result === "object" && "orderId" in result
+          ? (result as any).orderId
+          : null;
+
+      // 🔹 Se for ADMIN e tiver orderId → vai pro checkout
+      if (concludedByRole === "ADMIN" && orderId) {
+        router.push(`/admin/checkout`);
+      } else {
+        // 🔹 Se for BARBER (ou sem orderId) → só atualiza tela
+        router.refresh();
+      }
     });
   }
 

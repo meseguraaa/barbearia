@@ -295,14 +295,14 @@ export default async function BarberEarningsPage({
   const totalProductEarningsDay = dayProductSales.reduce((sum, sale) => {
     const percent = sale.product?.barberPercentage ?? 0;
     const total = Number(sale.totalPrice);
-    const commission = (total * percent) / 100;
+    const commission = (total * Number(percent)) / 100;
     return sum + commission;
   }, 0);
 
   const totalProductEarningsMonth = monthProductSales.reduce((sum, sale) => {
     const percent = sale.product?.barberPercentage ?? 0;
     const total = Number(sale.totalPrice);
-    const commission = (total * percent) / 100;
+    const commission = (total * Number(percent)) / 100;
     return sum + commission;
   }, 0);
 
@@ -338,7 +338,7 @@ export default async function BarberEarningsPage({
   const totalEarningsMonth =
     totalServiceEarningsMonth + totalProductEarningsMonth + totalCancelFeeMonth;
 
-  // ===== FORMATAÇÕES PARA A UI =====
+  // ===== FORMATAÇÕES PARA A UI (RESUMO) =====
   const summaryProps = {
     totalEarningsDay: currencyFormatter.format(totalEarningsDay),
     serviceEarningsDay: currencyFormatter.format(totalServiceEarningsDay),
@@ -399,6 +399,30 @@ export default async function BarberEarningsPage({
     };
   });
 
+  // ===== LINHAS DE PRODUTOS DO DIA (SEPARADAS) =====
+  const dayProductRows = dayProductSales.map((sale) => {
+    const timeStr = sale.soldAt.toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const productName = sale.product?.name ?? "Produto";
+    const totalNumber = Number(sale.totalPrice);
+    const percent = sale.product?.barberPercentage ?? 0;
+    const percentNumber = Number(percent);
+    const earningNumber = (totalNumber * percentNumber) / 100;
+
+    return {
+      id: `product-${sale.id}`,
+      clientName: "(Produto)",
+      description: `${productName} · ${sale.quantity} un.`,
+      time: timeStr,
+      priceFormatted: currencyFormatter.format(totalNumber),
+      percentageFormatted: `${percentNumber.toFixed(2)}%`,
+      earningFormatted: currencyFormatter.format(earningNumber),
+    };
+  });
+
   return (
     <div className="space-y-6">
       {/* HEADER LOCAL (com DatePicker na mesma linha) */}
@@ -416,7 +440,32 @@ export default async function BarberEarningsPage({
       <BarberEarningsSummary {...summaryProps} />
 
       {/* LISTA DE ATENDIMENTOS DO DIA */}
-      <BarberEarningsDayList appointments={dayAppointmentsRows} />
+      <section className="space-y-3">
+        <h2 className="text-subtitle text-content-primary">
+          Detalhamento de atendimentos do dia
+        </h2>
+        {dayAppointmentsRows.length === 0 ? (
+          <p className="text-paragraph-small text-content-secondary">
+            Você não teve atendimentos concluídos neste dia.
+          </p>
+        ) : (
+          <BarberEarningsDayList appointments={dayAppointmentsRows} />
+        )}
+      </section>
+
+      {/* LISTA DE VENDAS DE PRODUTOS DO DIA */}
+      <section className="space-y-3">
+        <h2 className="text-subtitle text-content-primary">
+          Detalhamento de vendas de produtos do dia
+        </h2>
+        {dayProductRows.length === 0 ? (
+          <p className="text-paragraph-small text-content-secondary">
+            Você não teve vendas de produtos neste dia.
+          </p>
+        ) : (
+          <BarberEarningsDayList appointments={dayProductRows} />
+        )}
+      </section>
     </div>
   );
 }

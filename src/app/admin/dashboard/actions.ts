@@ -163,13 +163,15 @@ async function getClientIdForAppointment(phone: string): Promise<string> {
 
 /* ---------------------------------------------------------
  * Wrapper para operações com try/catch + revalidate
+ * (agora repassa o retorno da operação)
  * ---------------------------------------------------------*/
-async function withAppointmentMutation(
-  operation: () => Promise<void>,
+async function withAppointmentMutation<T>(
+  operation: () => Promise<T>,
   defaultError: string,
-) {
+): Promise<T | { error: string }> {
   try {
-    await operation();
+    const result = await operation();
+
     // site público
     revalidatePath("/");
     // página do cliente
@@ -179,6 +181,8 @@ async function withAppointmentMutation(
     // dashboards barbeiro
     revalidatePath("/barber");
     revalidatePath("/barber/earnings");
+
+    return result;
   } catch (err) {
     console.error(err);
     return { error: defaultError };
@@ -377,34 +381,36 @@ export async function updateAppointment(id: string, data: AppointmentData) {
 }
 
 /* ---------------------------------------------------------
- * Helper: garantir que exista um PEDIDO para este atendimento
+ * Helper: garantir que exista um PEDIDO PENDENTE para este atendimento
+ * - retorna a order encontrada ou criada
  * ---------------------------------------------------------*/
 async function ensureOrderForAppointment(appointmentId: string) {
-  // Se já tiver pedido, não faz nada
-  const existingOrder = await prisma.order.findUnique({
+  // Se já tiver pedido, reaproveita
+  const existingOrder = await prisma.order.findFirst({
     where: { appointmentId },
   });
 
-  if (existingOrder) return;
+  if (existingOrder) return existingOrder;
 
   const appt = await prisma.appointment.findUnique({
     where: { id: appointmentId },
     include: { service: true },
   });
 
-  if (!appt) return;
-  if (appt.status !== "DONE") return;
-  if (!appt.serviceId) return;
+  if (!appt) return null;
+  if (appt.status !== "DONE") return null;
+  if (!appt.serviceId) return null;
 
   const priceDecimal =
     appt.servicePriceAtTheTime ?? appt.service?.price ?? new Prisma.Decimal(0);
 
-  await prisma.order.create({
+  const newOrder = await prisma.order.create({
     data: {
       clientId: appt.clientId,
       appointmentId: appt.id,
       barberId: appt.barberId ?? null,
-      status: "COMPLETED",
+      // 🔹 Agora o pedido nasce como PENDENTE (checkout depois)
+      status: "PENDING",
       totalAmount: priceDecimal,
       items: {
         create: [
@@ -418,6 +424,8 @@ async function ensureOrderForAppointment(appointmentId: string) {
       },
     },
   });
+
+  return newOrder;
 }
 
 /* ---------------------------------------------------------
@@ -429,6 +437,10 @@ async function ensureOrderForAppointment(appointmentId: string) {
  * - Demais créditos daquele ClientPlan não cobram nada (0)
  * - Barbeiro recebe comissão por crédito:
  *   (plan.price * commissionPercent / 100) / totalBookings
+ *
+ * Agora:
+ * - Sempre que concluir, tenta garantir uma Order PENDING desse atendimento
+ * - Retorna { orderId } (admin pode usar pra redirecionar pro checkout)
  * ---------------------------------------------------------*/
 type ConcludeOptions = {
   concludedByRole?: RoleForAction;
@@ -456,8 +468,8 @@ export async function concludeAppointment(
         },
       });
 
-      await ensureOrderForAppointment(id);
-      return;
+      const order = await ensureOrderForAppointment(id);
+      return { orderId: order?.id ?? null };
     }
 
     // Se não está vinculado a nenhum plano, só marca DONE
@@ -470,8 +482,8 @@ export async function concludeAppointment(
         },
       });
 
-      await ensureOrderForAppointment(id);
-      return;
+      const order = await ensureOrderForAppointment(id);
+      return { orderId: order?.id ?? null };
     }
 
     // Busca o plano do cliente
@@ -490,8 +502,8 @@ export async function concludeAppointment(
         },
       });
 
-      await ensureOrderForAppointment(id);
-      return;
+      const order = await ensureOrderForAppointment(id);
+      return { orderId: order?.id ?? null };
     }
 
     // Se o plano não está ativo, só conclui sem mexer em crédito
@@ -504,8 +516,8 @@ export async function concludeAppointment(
         },
       });
 
-      await ensureOrderForAppointment(id);
-      return;
+      const order = await ensureOrderForAppointment(id);
+      return { orderId: order?.id ?? null };
     }
 
     const totalBookings = clientPlan.plan.totalBookings;
@@ -522,8 +534,8 @@ export async function concludeAppointment(
         },
       });
 
-      await ensureOrderForAppointment(id);
-      return;
+      const order = await ensureOrderForAppointment(id);
+      return { orderId: order?.id ?? null };
     }
 
     // 🔢 Cálculo da comissão por crédito para o barbeiro
@@ -585,7 +597,8 @@ export async function concludeAppointment(
       }),
     ]);
 
-    await ensureOrderForAppointment(id);
+    const order = await ensureOrderForAppointment(id);
+    return { orderId: order?.id ?? null };
   }, "Falha ao concluir o agendamento");
 }
 

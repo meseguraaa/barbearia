@@ -6,7 +6,12 @@ import { OrderStatusBadge } from "@/components/order-status-badge";
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { finalizeProductOrder, cancelProductOrder } from "./actions";
+import {
+  finalizeProductOrder,
+  cancelProductOrder,
+  finalizeServiceOrder,
+  cancelServiceOrder,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +20,12 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminCheckoutPage() {
-  // 🔹 Busca todos os pedidos de produtos aguardando finalização na barbearia
-  const [pendingProductOrders, barbers] = await Promise.all([
+  // 🔹 Pedidos de produtos aguardando retirada (fluxo antigo)
+  const [
+    pendingProductOrders,
+    pendingServiceOrders,
+    barbers, // para selecionar barbeiro na venda de produto
+  ] = await Promise.all([
     prisma.order.findMany({
       where: {
         status: "PENDING_CHECKIN",
@@ -40,6 +49,38 @@ export default async function AdminCheckoutPage() {
         },
       },
     }),
+
+    // 🔹 NOVO: pedidos de serviço (atendimentos) aguardando checkout
+    prisma.order.findMany({
+      where: {
+        status: "PENDING",
+        items: {
+          some: {
+            serviceId: {
+              not: null,
+            },
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      include: {
+        client: true,
+        items: {
+          include: {
+            service: true,
+          },
+        },
+        appointment: {
+          include: {
+            barber: true,
+            service: true,
+          },
+        },
+      },
+    }),
+
     prisma.barber.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
@@ -53,23 +94,159 @@ export default async function AdminCheckoutPage() {
   const hasBarbers = barbers.length > 0;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto py-4">
-      {/* HEADER */}
+    <div className="space-y-8 max-w-7xl">
+      {/* HEADER GERAL */}
       <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-title text-content-primary">Checkout</h1>
           <p className="text-paragraph-medium text-content-secondary">
-            Finalize aqui os pedidos de produtos feitos pelos clientes e dê
-            baixa no estoque.
-          </p>
-          <p className="text-paragraph-small text-content-secondary">
-            Esta lista mostra apenas pedidos de produtos com status{" "}
-            <span className="font-medium">Aguardando retirada</span>.
+            Finalize os pagamentos de atendimentos e pedidos de produtos.
           </p>
         </div>
       </header>
 
-      {/* LISTAGEM DE PEDIDOS DE PRODUTOS */}
+      {/* ================================
+          1) CHECKOUT DE ATENDIMENTOS
+          ================================ */}
+      <section className="space-y-4">
+        <h2 className="text-subtitle text-content-primary">
+          Atendimentos aguardando checkout
+        </h2>
+
+        {pendingServiceOrders.length === 0 ? (
+          <p className="text-paragraph-small text-content-secondary">
+            Não há atendimentos aguardando pagamento no momento.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {pendingServiceOrders.map((order) => {
+              const createdAtStr = format(
+                order.createdAt,
+                "dd/MM/yyyy 'às' HH:mm",
+                { locale: ptBR },
+              );
+
+              const clientName =
+                order.client?.name ||
+                order.client?.email ||
+                order.appointment?.clientName ||
+                "Cliente não identificado";
+
+              const appointmentTime = order.appointment
+                ? format(
+                    order.appointment.scheduleAt,
+                    "dd/MM/yyyy 'às' HH:mm",
+                    {
+                      locale: ptBR,
+                    },
+                  )
+                : null;
+
+              const serviceItems = order.items.filter(
+                (item) => item.serviceId != null,
+              );
+
+              const itemsLabel =
+                serviceItems
+                  .map((item) => {
+                    const name = item.service?.name ?? "Serviço";
+                    return `${item.quantity}x ${name}`;
+                  })
+                  .join(", ") || "Serviço do atendimento";
+
+              const barberNameFromAppt = order.appointment?.barber?.name ?? "—";
+
+              const totalAmountNumber = Number(order.totalAmount ?? 0);
+
+              return (
+                <div
+                  key={order.id}
+                  className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3"
+                >
+                  {/* LINHA 1: ID + CLIENTE + STATUS */}
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-paragraph-small text-content-primary truncate">
+                        Pedido (atendimento) #{order.id.slice(0, 8)}
+                      </p>
+                      <p className="text-paragraph-small text-content-secondary truncate">
+                        Cliente:{" "}
+                        <span className="font-medium">{clientName}</span>
+                      </p>
+                      {appointmentTime && (
+                        <p className="text-paragraph-small text-content-secondary">
+                          Atendimento em {appointmentTime}
+                        </p>
+                      )}
+                      <p className="text-paragraph-small text-content-secondary">
+                        Criado em {createdAtStr}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-paragraph-small font-semibold text-content-primary">
+                        Total:{" "}
+                        {totalAmountNumber.toLocaleString("pt-BR", {
+                          style: "currency",
+                          currency: "BRL",
+                          minimumFractionDigits: 2,
+                        })}
+                      </span>
+                      <OrderStatusBadge status={order.status} />
+                    </div>
+                  </div>
+
+                  {/* LINHA 2: SERVIÇOS */}
+                  {itemsLabel && (
+                    <p className="text-paragraph-small text-content-secondary">
+                      Serviços: {itemsLabel}
+                    </p>
+                  )}
+
+                  {/* LINHA 3: BARBEIRO + AÇÕES */}
+                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border-primary">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-label-small text-content-secondary mb-1">
+                        Barbeiro responsável pelo atendimento
+                      </p>
+                      <p className="text-paragraph-small text-content-secondary">
+                        {barberNameFromAppt}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      {/* Cancelar pedido de serviço */}
+                      <form action={cancelServiceOrder}>
+                        <input type="hidden" name="orderId" value={order.id} />
+                        <Button
+                          type="submit"
+                          variant="outline"
+                          size="sm"
+                          className="text-red-500 border-red-500/40 hover:bg-red-500/5"
+                        >
+                          Cancelar checkout
+                        </Button>
+                      </form>
+
+                      {/* Finalizar pagamento do serviço */}
+                      <form action={finalizeServiceOrder}>
+                        <input type="hidden" name="orderId" value={order.id} />
+                        <Button type="submit" variant="brand" size="sm">
+                          Marcar como pago
+                        </Button>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ================================
+          2) CHECKOUT DE PRODUTOS (EXISTENTE)
+          ================================ */}
       <section className="space-y-4">
         <h2 className="text-subtitle text-content-primary">
           Pedidos de produtos aguardando checkout
@@ -117,7 +294,7 @@ export default async function AdminCheckoutPage() {
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-paragraph-small text-content-primary truncate">
-                        Pedido #{order.id.slice(0, 8)}
+                        Pedido (produto) #{order.id.slice(0, 8)}
                       </p>
                       <p className="text-paragraph-small text-content-secondary truncate">
                         Cliente:{" "}
@@ -150,7 +327,6 @@ export default async function AdminCheckoutPage() {
 
                   {/* LINHA 3: AÇÕES + BARBEIRO */}
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border-primary">
-                    {/* Seleção de barbeiro para finalização */}
                     <div className="flex-1 min-w-0">
                       <p className="text-label-small text-content-secondary mb-1">
                         Barbeiro responsável pela venda

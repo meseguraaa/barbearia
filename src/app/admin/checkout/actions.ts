@@ -1,33 +1,38 @@
+// app/admin/checkout/actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
-// 🔹 Helper: extrai string do FormData e valida
-function getFormValue(formData: FormData, key: string): string {
-  const value = formData.get(key);
-  if (typeof value !== "string" || !value) {
-    throw new Error(`Campo obrigatório ausente: ${key}`);
-  }
-  return value;
+/* ---------------------------------------------------------
+ * HELPERS
+ * ---------------------------------------------------------*/
+async function withRevalidate<T>(operation: () => Promise<T>): Promise<T> {
+  const result = await operation();
+
+  // Revalida páginas relacionadas
+  revalidatePath("/admin/checkout");
+  revalidatePath("/admin/dashboard");
+  revalidatePath("/barber");
+  revalidatePath("/barber/earnings");
+
+  return result;
 }
 
-/**
- * FINALIZAR VENDA
- *
- * - Só permite se o pedido estiver em PENDING_CHECKIN
- * - Garante que existem itens de produto
- * - Confere estoque de cada produto
- * - Cria ProductSale para cada item de produto
- * - Baixa estoque
- * - Marca o pedido como COMPLETED e define o barbeiro responsável
- */
-export async function finalizeProductOrder(formData: FormData): Promise<void> {
-  const orderId = getFormValue(formData, "orderId");
-  const barberId = getFormValue(formData, "barberId");
+/* ---------------------------------------------------------
+ * PRODUTOS – fluxo antigo (PENDING_CHECKIN → COMPLETED)
+ * ---------------------------------------------------------*/
+export async function finalizeProductOrder(formData: FormData) {
+  const orderId = formData.get("orderId") as string | null;
+  const barberId = formData.get("barberId") as string | null;
 
-  await prisma.$transaction(async (tx) => {
-    const order = await tx.order.findUnique({
+  if (!orderId || !barberId) {
+    throw new Error("Dados inválidos para finalizar pedido de produto.");
+  }
+
+  await withRevalidate(async () => {
+    const order = await prisma.order.findUnique({
       where: { id: orderId },
       include: {
         items: {
@@ -43,100 +48,71 @@ export async function finalizeProductOrder(formData: FormData): Promise<void> {
     }
 
     if (order.status !== "PENDING_CHECKIN") {
-      throw new Error(
-        "Apenas pedidos aguardando checkout podem ser finalizados.",
-      );
+      // nada a fazer, evita mexer em pedido já finalizado/cancelado
+      return;
     }
 
-    const barber = await tx.barber.findUnique({
-      where: { id: barberId, isActive: true },
-    });
+    // Atualiza estoque e cria registros de venda de produto
+    const productItems = order.items.filter((item) => item.productId != null);
 
-    if (!barber) {
-      throw new Error("Barbeiro inválido ou inativo.");
-    }
+    await prisma.$transaction(async (tx) => {
+      // Abate estoque e registra venda
+      for (const item of productItems) {
+        if (!item.productId || !item.product) continue;
 
-    const productItems = order.items.filter((item) => item.productId !== null);
+        const newQuantity = item.product.stockQuantity - item.quantity;
+        if (newQuantity < 0) {
+          // Aqui você pode decidir se lança erro ou deixa negativo.
+          // Por segurança, vamos limitar a zero.
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              stockQuantity: 0,
+            },
+          });
+        } else {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              stockQuantity: newQuantity,
+            },
+          });
+        }
 
-    if (productItems.length === 0) {
-      throw new Error("Este pedido não possui itens de produto.");
-    }
-
-    // 🔹 Confere estoque de todos os produtos antes de atualizar
-    for (const item of productItems) {
-      if (!item.product) {
-        throw new Error("Produto vinculado ao pedido não foi encontrado.");
+        await tx.productSale.create({
+          data: {
+            productId: item.productId,
+            barberId,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalPrice: item.totalPrice,
+          },
+        });
       }
 
-      if (item.product.stockQuantity < item.quantity) {
-        throw new Error(
-          `Estoque insuficiente para o produto "${item.product.name}".`,
-        );
-      }
-    }
-
-    // 🔹 Para cada item de produto:
-    // - baixa estoque
-    // - cria ProductSale
-    for (const item of productItems) {
-      const product = item.product!;
-      const productId = item.productId!;
-      const quantity = item.quantity;
-      const unitPrice = item.unitPrice; // Decimal
-      const totalPrice = item.totalPrice; // Decimal
-
-      // Baixa estoque
-      await tx.product.update({
-        where: { id: productId },
+      // Marca o pedido como concluído
+      await tx.order.update({
+        where: { id: orderId },
         data: {
-          stockQuantity: product.stockQuantity - quantity,
-        },
-      });
-
-      // Cria registro de venda de produto (ProductSale)
-      await tx.productSale.create({
-        data: {
-          productId,
+          status: "COMPLETED",
           barberId,
-          quantity,
-          unitPrice,
-          totalPrice,
         },
       });
-    }
-
-    // 🔹 Atualiza status do pedido para COMPLETED e seta o barbeiro
-    await tx.order.update({
-      where: { id: orderId },
-      data: {
-        status: "COMPLETED",
-        barberId,
-      },
     });
   });
 
-  // 🔹 Revalida telas relacionadas
-  revalidatePath("/admin/checkout");
-  revalidatePath("/client/history");
-  revalidatePath("/client/products");
-  revalidatePath("/admin/dashboard");
-  revalidatePath("/admin/finance");
-  revalidatePath("/admin/clients");
-  revalidatePath("/barber/earnings");
+  redirect("/admin/checkout");
 }
 
-/**
- * CANCELAR PEDIDO
- *
- * - Só permite se o pedido estiver em PENDING_CHECKIN
- * - Não mexe em estoque
- * - Não cria ProductSale
- */
-export async function cancelProductOrder(formData: FormData): Promise<void> {
-  const orderId = getFormValue(formData, "orderId");
+export async function cancelProductOrder(formData: FormData) {
+  const orderId = formData.get("orderId") as string | null;
 
-  await prisma.$transaction(async (tx) => {
-    const order = await tx.order.findUnique({
+  if (!orderId) {
+    throw new Error("Dados inválidos para cancelar pedido de produto.");
+  }
+
+  await withRevalidate(async () => {
+    const order = await prisma.order.findUnique({
       where: { id: orderId },
     });
 
@@ -144,13 +120,11 @@ export async function cancelProductOrder(formData: FormData): Promise<void> {
       throw new Error("Pedido não encontrado.");
     }
 
-    if (order.status !== "PENDING_CHECKIN") {
-      throw new Error(
-        "Apenas pedidos aguardando checkout podem ser cancelados.",
-      );
+    if (order.status === "COMPLETED" || order.status === "CANCELED") {
+      return;
     }
 
-    await tx.order.update({
+    await prisma.order.update({
       where: { id: orderId },
       data: {
         status: "CANCELED",
@@ -158,6 +132,81 @@ export async function cancelProductOrder(formData: FormData): Promise<void> {
     });
   });
 
-  revalidatePath("/admin/checkout");
-  revalidatePath("/client/history");
+  redirect("/admin/checkout");
+}
+
+/* ---------------------------------------------------------
+ * SERVIÇOS – novos (PENDING → COMPLETED / CANCELED)
+ * ---------------------------------------------------------*/
+export async function finalizeServiceOrder(formData: FormData) {
+  const orderId = formData.get("orderId") as string | null;
+
+  if (!orderId) {
+    throw new Error("Dados inválidos para finalizar checkout de serviço.");
+  }
+
+  await withRevalidate(async () => {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        appointment: true,
+        items: {
+          include: {
+            service: true,
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new Error("Pedido não encontrado.");
+    }
+
+    if (order.status !== "PENDING") {
+      // já foi tratado, não faz nada
+      return;
+    }
+
+    // Aqui não tem estoque pra mexer (é serviço),
+    // então só marcamos como COMPLETED.
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: "COMPLETED",
+      },
+    });
+  });
+
+  redirect("/admin/checkout");
+}
+
+export async function cancelServiceOrder(formData: FormData) {
+  const orderId = formData.get("orderId") as string | null;
+
+  if (!orderId) {
+    throw new Error("Dados inválidos para cancelar checkout de serviço.");
+  }
+
+  await withRevalidate(async () => {
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new Error("Pedido não encontrado.");
+    }
+
+    if (order.status === "COMPLETED" || order.status === "CANCELED") {
+      return;
+    }
+
+    await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: "CANCELED",
+      },
+    });
+  });
+
+  redirect("/admin/checkout");
 }
