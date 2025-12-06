@@ -26,15 +26,20 @@ import { formatTimeSaoPaulo } from "@/utills/datetime";
 import { Barber } from "@/types/barber";
 import { Service } from "@/types/service";
 import { deleteAppointment } from "@/app/admin/dashboard/actions";
+import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
+
+type AppointmentWithLock = Appointment & {
+  isLocked?: boolean; // vem da tela do cliente
+};
 
 type AppointmentCardProps = {
-  appointment: Appointment;
+  appointment: AppointmentWithLock;
   isFirstInSection?: boolean;
   /**
    * Lista de agendamentos (do dia) usada para
    * bloquear horários que encavalem ao editar.
    */
-  appointments?: Appointment[];
+  appointments?: AppointmentWithLock[];
   /**
    * Lista de barbeiros ativos (para o select de edição)
    */
@@ -67,6 +72,15 @@ export const AppointmentCard = ({
     toast.success("Agendamento excluído com sucesso");
     setIsDeleting(false);
   };
+
+  const isLocked = appointment.isLocked ?? false;
+
+  // ❗ Badge só para CONCLUÍDO / CANCELADO
+  const showBadge =
+    appointment.status === "DONE" || appointment.status === "CANCELED";
+
+  // ❗ Botões só quando está PENDENTE e ainda não chegou o horário
+  const showActions = !isLocked && appointment.status === "PENDING";
 
   // Converte Barber[] em objetos compatíveis com o AppointmentForm,
   // garantindo name e phone como string (sem null/undefined)
@@ -114,48 +128,59 @@ export const AppointmentCard = ({
         </span>
       </div>
 
-      {/* AÇÕES */}
+      {/* STATUS + AÇÕES (coluna da direita) */}
       <div className="text-right mt-2 md:mt-0 col-span-2 md:col-span-1 flex justify-end items-center gap-2">
-        {/* EDITAR */}
-        <AppointmentForm
-          appointment={appointment}
-          appointments={appointments}
-          barbers={barbersForForm}
-          services={services}
-        >
-          <Button variant="edit" size="icon">
-            <EditIcon size={16} />
-          </Button>
-        </AppointmentForm>
+        {/* Badge só para DONE / CANCELED */}
+        {showBadge && <AppointmentStatusBadge status={appointment.status} />}
 
-        {/* EXCLUIR – APENAS NA TELA DO USUÁRIO */}
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="remove" size="icon">
-              <DeleteIcon size={16} />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Excluir agendamento</AlertDialogTitle>
-              <AlertDialogDescription>
-                Tem certeza que deseja excluir este agendamento? Esta ação não
-                pode ser desfeita.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel disabled={isDeleting}>
-                Cancelar
-              </AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete} disabled={isDeleting}>
-                {isDeleting && (
-                  <LoadingIcon className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Confirmar exclusão
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {/* EDITAR / EXCLUIR só quando PENDENTE e antes do horário */}
+        {showActions && (
+          <>
+            {/* EDITAR */}
+            <AppointmentForm
+              appointment={appointment}
+              appointments={appointments}
+              barbers={barbersForForm}
+              services={services}
+            >
+              <Button variant="edit" size="icon">
+                <EditIcon size={16} />
+              </Button>
+            </AppointmentForm>
+
+            {/* EXCLUIR – APENAS NA TELA DO USUÁRIO */}
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="remove" size="icon">
+                  <DeleteIcon size={16} />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Excluir agendamento</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Tem certeza que deseja excluir este agendamento? Esta ação
+                    não pode ser desfeita.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isDeleting}>
+                    Cancelar
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDelete}
+                    disabled={isDeleting}
+                  >
+                    {isDeleting && (
+                      <LoadingIcon className="mr-2 h-4 w-4 animate-spin" />
+                    )}
+                    Confirmar exclusão
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+        )}
       </div>
     </div>
   );

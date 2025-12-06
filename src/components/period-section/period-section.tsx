@@ -38,18 +38,16 @@ export const PeriodSection = ({
       {period.appointments.length > 0 ? (
         <div className="px-5">
           <div>
-            {period.appointments.map(
-              (appointment: Appointment, index: number) => (
-                <AppointmentCard
-                  key={appointment.id}
-                  appointment={appointment}
-                  appointments={period.appointments}
-                  isFirstInSection={index === 0}
-                  barbers={barbers}
-                  services={services}
-                />
-              ),
-            )}
+            {period.appointments.map((appointment, index) => (
+              <AppointmentCard
+                key={appointment.id}
+                appointment={appointment}
+                appointments={period.appointments}
+                isFirstInSection={index === 0}
+                barbers={barbers}
+                services={services}
+              />
+            ))}
           </div>
         </div>
       ) : (

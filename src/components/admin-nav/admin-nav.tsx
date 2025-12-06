@@ -10,7 +10,8 @@ import {
   Package,
   Wallet,
   Users,
-  CalendarCheck, // ← ícone para Agendamentos
+  CalendarCheck, // Agendamentos
+  ShoppingCart, // ← Ícone para Checkout
 } from "lucide-react";
 
 type AdminLink = {
@@ -22,8 +23,11 @@ type AdminLink = {
 const adminLinks: AdminLink[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
 
-  // 🔥 NOVA PÁGINA DE AGENDAMENTOS
+  // 🔥 AGENDAMENTOS
   { href: "/admin/appointments", label: "Agendamentos", icon: CalendarCheck },
+
+  // 🔥 NOVO CHECKOUT
+  { href: "/admin/checkout", label: "Checkout", icon: ShoppingCart },
 
   { href: "/admin/professional", label: "Profissionais", icon: Scissors },
   { href: "/admin/services", label: "Serviços", icon: ListChecks },

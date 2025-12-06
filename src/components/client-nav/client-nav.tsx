@@ -23,6 +23,11 @@ const clientLinks: ClientLink[] = [
     label: "Produtos",
     icon: ShoppingBag,
   },
+  {
+    href: "/client/history",
+    label: "Histórico",
+    icon: UserRound,
+  },
 ];
 
 export function ClientNav() {

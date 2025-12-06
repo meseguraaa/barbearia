@@ -9,13 +9,6 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 
 import { createProductSale } from "@/app/client/products/actions";
 import type { ClientProduct } from "@/components/product-card";
@@ -24,28 +17,24 @@ type ProductPurchaseDialogProps = {
   product: ClientProduct;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  // 🔹 clientId opcional (cliente logado)
+  clientId?: string | null;
 };
 
 export function ProductPurchaseDialog({
   product,
   open,
   onOpenChange,
+  clientId,
 }: ProductPurchaseDialogProps) {
   const [quantity, setQuantity] = useState(1);
-  const [barbers, setBarbers] = useState<{ id: string; name: string }[]>([]);
-  const [barberId, setBarberId] = useState("");
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState("");
 
   useEffect(() => {
     if (!open) return;
 
-    fetch("/api/barbers")
-      .then((res) => res.json())
-      .then((data) => setBarbers(data));
-
     setQuantity(1);
-    setBarberId("");
     setError("");
   }, [open]);
 
@@ -67,17 +56,20 @@ export function ProductPurchaseDialog({
         const result = await createProductSale({
           productId: product.id,
           quantity,
-          barberId,
+          // 🔹 vincula o pedido ao cliente quando existir
+          clientId: clientId ?? undefined,
         });
 
         if (!result?.ok) {
-          setError("Não foi possível concluir a compra.");
+          setError("Não foi possível registrar o pedido.");
           return;
         }
 
         onOpenChange(false);
       } catch (err: any) {
-        setError(err.message || "Erro inesperado ao realizar compra.");
+        setError(
+          err.message || "Erro inesperado ao registrar o pedido de produto.",
+        );
       }
     });
   };
@@ -87,7 +79,7 @@ export function ProductPurchaseDialog({
       <DialogContent className="bg-background-secondary border-border-primary">
         <DialogHeader>
           <DialogTitle className="text-title text-content-primary">
-            Comprar {product.name}
+            Reservar {product.name}
           </DialogTitle>
         </DialogHeader>
 
@@ -99,6 +91,12 @@ export function ProductPurchaseDialog({
             className="w-full h-40 object-cover rounded-lg border border-border-primary"
           />
 
+          <p className="text-content-secondary text-sm">
+            Esse pedido será registrado no seu histórico e finalizado na
+            barbearia, no momento da compra.
+          </p>
+
+          {/* DESCRIÇÃO */}
           <p className="text-content-secondary text-sm">
             {product.description}
           </p>
@@ -122,41 +120,20 @@ export function ProductPurchaseDialog({
             </div>
           </div>
 
-          {/* BARBEIRO */}
-          <div className="space-y-1">
-            <label className="text-label-small text-content-secondary">
-              Barbeiro responsável
-            </label>
-
-            <Select value={barberId} onValueChange={setBarberId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione o barbeiro" />
-              </SelectTrigger>
-
-              <SelectContent>
-                {barbers.map((barber) => (
-                  <SelectItem key={barber.id} value={barber.id}>
-                    {barber.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           {/* TOTAL */}
           <div className="text-right font-medium text-content-primary">
-            Total: R$ {total.toFixed(2)}
+            Total estimado: R$ {total.toFixed(2)}
           </div>
 
           {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
           <Button
             className="w-full"
-            disabled={!barberId || isPending}
+            disabled={isPending}
             variant="brand"
             onClick={handlePurchase}
           >
-            {isPending ? "Processando..." : "Confirmar compra"}
+            {isPending ? "Registrando pedido..." : "Confirmar pedido"}
           </Button>
         </div>
       </DialogContent>

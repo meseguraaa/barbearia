@@ -93,6 +93,8 @@ export default async function Home({ searchParams }: HomeProps) {
     isActive: service.isActive,
   }));
 
+  const now = new Date();
+
   const appointments: AppointmentType[] = rawAppointments.map((apt) => {
     const time = apt.scheduleAt.toLocaleTimeString("pt-BR", {
       hour: "2-digit",
@@ -109,13 +111,18 @@ export default async function Home({ searchParams }: HomeProps) {
 
     const barberData = barbers.find((b) => b.id === apt.barberId);
 
+    const status = apt.status ?? "PENDING";
+
+    // 🔐 travar ações quando o horário chegou ou passou
+    const isLocked = apt.scheduleAt <= now;
+
     return {
       id: apt.id,
       clientName: apt.clientName,
       phone: apt.phone,
       description: apt.description,
       scheduleAt: apt.scheduleAt,
-      status: apt.status ?? "PENDING",
+      status,
       barberId: apt.barberId ?? "",
       barber: apt.barber
         ? {
@@ -129,7 +136,12 @@ export default async function Home({ searchParams }: HomeProps) {
         : undefined,
       time,
       period,
-    };
+
+      // 🔹 campos extras para o front:
+      // - isLocked: não pode mais editar/excluir no cliente
+      //   (use isso no PeriodSection para esconder os botões)
+      isLocked,
+    } as AppointmentType & { isLocked: boolean };
   });
 
   const periods = groupAppointmentByPeriod(appointments);
@@ -198,9 +210,7 @@ export default async function Home({ searchParams }: HomeProps) {
         {/* HEADER DO CLIENTE */}
         <header className="flex items-start justify-between mb-8">
           <div>
-            <p className="text-paragraph-small-size text-content-secondary">
-              Olá,
-            </p>
+            <p className="text-content-secondary">Olá,</p>
             <p className="text-title-size text-content-primary">{userName}</p>
           </div>
 
@@ -214,7 +224,7 @@ export default async function Home({ searchParams }: HomeProps) {
             <h1 className="text-title-size text-content-primary mb-2">
               Sua Agenda
             </h1>
-            <p className="text-paragraph-medium-size text-content-secondary">
+            <p className="text-content-secondary">
               Selecione o serviço, a data e o horário para fazer seu
               agendamento.
             </p>

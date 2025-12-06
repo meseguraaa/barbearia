@@ -30,7 +30,14 @@ import {
   UserCircle,
 } from "lucide-react";
 import { IMaskInput } from "react-imask";
-import { format, setHours, setMinutes, startOfToday } from "date-fns";
+import {
+  addMinutes,
+  format,
+  isSameDay,
+  setHours,
+  setMinutes,
+  startOfToday,
+} from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
 import { Calendar } from "../ui/calendar";
@@ -50,7 +57,6 @@ import {
 } from "@/app/admin/dashboard/actions";
 import { ReactNode, useEffect, useState } from "react";
 import { Appointment } from "@/types/appointment";
-import { getAvailableTimes } from "@/components/appointment-form/constants-and-utils";
 import {
   appointmentFormSchema,
   AppointFormValues,
@@ -84,6 +90,130 @@ type ClientPlanSummary = {
   endDate: string | Date;
   serviceIds: string[]; // serviços cobertos pelo plano
 };
+
+/* ------------------------------------------------------------------
+ * Helpers para cálculo de horários disponíveis no front
+ * ------------------------------------------------------------------ */
+
+function parseTimeToDate(baseDate: Date, time: string): Date {
+  const [hoursStr, minutesStr] = time.split(":");
+  const hours = Number(hoursStr);
+  const minutes = Number(minutesStr);
+
+  const d = new Date(baseDate);
+  d.setHours(hours, minutes, 0, 0);
+  return d;
+}
+
+function intervalsOverlap(
+  startA: Date,
+  endA: Date,
+  startB: Date,
+  endB: Date,
+): boolean {
+  // sobrepõe se um começa antes do outro terminar E termina depois do outro começar
+  return startA < endB && endA > startB;
+}
+
+type BuildAvailableTimesArgs = {
+  availabilityWindows?: AvailabilityWindow[];
+  selectedDate: Date;
+  selectedBarberId: string;
+  serviceDurationMinutes: number;
+  appointments: Appointment[];
+  currentAppointmentId?: string;
+  servicesList: Service[];
+  slotIntervalMinutes?: number; // passo entre horários (ex: 30min)
+};
+
+function buildAvailableTimes({
+  availabilityWindows,
+  selectedDate,
+  selectedBarberId,
+  serviceDurationMinutes,
+  appointments,
+  currentAppointmentId,
+  servicesList,
+  slotIntervalMinutes = 30,
+}: BuildAvailableTimesArgs): string[] {
+  if (!availabilityWindows || availabilityWindows.length === 0) {
+    return [];
+  }
+
+  // Filtra agendamentos do barbeiro, no mesmo dia, e ignora CANCELADO
+  const dayAppointments = appointments.filter((appt) => {
+    if (!appt.barberId || appt.barberId !== selectedBarberId) return false;
+
+    const apptDate = new Date(appt.scheduleAt);
+    if (!isSameDay(apptDate, selectedDate)) return false;
+
+    if ((appt as any).status === "CANCELED") return false;
+
+    // ao editar, não consideramos o próprio agendamento como bloqueio
+    if (currentAppointmentId && appt.id === currentAppointmentId) {
+      return false;
+    }
+
+    return true;
+  });
+
+  // Intervalos ocupados [start, end)
+  const busyIntervals = dayAppointments
+    .map((appt) => {
+      const start = new Date(appt.scheduleAt);
+
+      const matchedServiceById = appt.serviceId
+        ? servicesList.find((s) => s.id === appt.serviceId)
+        : undefined;
+
+      const matchedServiceByName = servicesList.find(
+        (s) => s.name === appt.description,
+      );
+
+      const finalService = matchedServiceById ?? matchedServiceByName;
+      const duration =
+        finalService?.durationMinutes != null
+          ? finalService.durationMinutes
+          : 30; // fallback
+
+      const end = addMinutes(start, duration);
+
+      return { start, end };
+    })
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  const availableSlots: string[] = [];
+
+  for (const window of availabilityWindows) {
+    const windowStart = parseTimeToDate(selectedDate, window.startTime);
+    const windowEnd = parseTimeToDate(selectedDate, window.endTime);
+
+    let slotStart = new Date(windowStart);
+
+    // gera slots enquando o serviço inteiro cabe dentro da janela
+    while (
+      addMinutes(slotStart, serviceDurationMinutes).getTime() <=
+      windowEnd.getTime()
+    ) {
+      const slotEnd = addMinutes(slotStart, serviceDurationMinutes);
+
+      const hasConflict = busyIntervals.some((busy) =>
+        intervalsOverlap(slotStart, slotEnd, busy.start, busy.end),
+      );
+
+      if (!hasConflict) {
+        // formata como HH:mm
+        const hours = String(slotStart.getHours()).padStart(2, "0");
+        const minutes = String(slotStart.getMinutes()).padStart(2, "0");
+        availableSlots.push(`${hours}:${minutes}`);
+      }
+
+      slotStart = addMinutes(slotStart, slotIntervalMinutes);
+    }
+  }
+
+  return availableSlots;
+}
 
 type AppointmentFormProps = {
   appointment?: Appointment;
@@ -405,24 +535,31 @@ export const AppointmentForm = ({
     };
   }, [selectedDate, selectedBarberId]);
 
-  // Protege contra qualquer erro em getAvailableTimes
+  // ===== horários disponíveis considerando duração do serviço e agendamentos =====
   let availableTimes: string[] = [];
 
   try {
-    if (selectedServiceId && selectedDate && selectedBarberId) {
-      availableTimes =
-        getAvailableTimes({
-          date: selectedDate,
-          service: selectedServiceName,
-          appointments,
-          currentAppointmentId: appointment?.id,
-          availabilityWindows,
-        }) ?? [];
+    if (
+      selectedServiceId &&
+      selectedDate &&
+      selectedBarberId &&
+      selectedServiceData
+    ) {
+      availableTimes = buildAvailableTimes({
+        availabilityWindows,
+        selectedDate,
+        selectedBarberId,
+        serviceDurationMinutes: selectedServiceData.durationMinutes,
+        appointments,
+        currentAppointmentId: appointment?.id,
+        servicesList,
+        slotIntervalMinutes: 30,
+      });
     } else {
       availableTimes = [];
     }
   } catch (error) {
-    console.error("AppointmentForm ▶ erro em getAvailableTimes", {
+    console.error("AppointmentForm ▶ erro ao calcular horários disponíveis", {
       error,
       hasAppointments: appointments?.length,
       currentAppointmentId: appointment?.id,
