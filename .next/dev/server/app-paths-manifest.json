@@ -1,8 +1,9 @@
 {
-  "/barber/availability/page": "app/barber/availability/page.js",
-  "/client/schedule/page": "app/client/schedule/page.js",
+  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
   "/admin/appointments/page": "app/admin/appointments/page.js",
+  "/admin/finance/page": "app/admin/finance/page.js",
+  "/client/schedule/page": "app/client/schedule/page.js",
   "/admin/professional/page": "app/admin/professional/page.js",
-  "/admin/products/page": "app/admin/products/page.js",
-  "/admin/dashboard/page": "app/admin/dashboard/page.js"
+  "/client/history/page": "app/client/history/page.js",
+  "/barber/availability/page": "app/barber/availability/page.js"
 }

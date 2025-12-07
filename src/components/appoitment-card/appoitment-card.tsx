@@ -4,11 +4,7 @@ import { cn } from "@/lib/utils";
 import { Appointment } from "@/types/appointment";
 import { AppointmentForm } from "../appointment-form";
 import { Button } from "../ui/button";
-import {
-  Pen as EditIcon,
-  Trash2 as DeleteIcon,
-  Loader2 as LoadingIcon,
-} from "lucide-react";
+import { Pen as EditIcon, Loader2 as LoadingIcon } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,24 +25,14 @@ import { deleteAppointment } from "@/app/admin/dashboard/actions";
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
 
 type AppointmentWithLock = Appointment & {
-  isLocked?: boolean; // vem da tela do cliente
+  isLocked?: boolean;
 };
 
 type AppointmentCardProps = {
   appointment: AppointmentWithLock;
   isFirstInSection?: boolean;
-  /**
-   * Lista de agendamentos (do dia) usada para
-   * bloquear horários que encavalem ao editar.
-   */
   appointments?: AppointmentWithLock[];
-  /**
-   * Lista de barbeiros ativos (para o select de edição)
-   */
   barbers: Barber[];
-  /**
-   * Lista de serviços ativos (para o select de edição)
-   */
   services: Service[];
 };
 
@@ -69,21 +55,17 @@ export const AppointmentCard = ({
       return;
     }
 
-    toast.success("Agendamento excluído com sucesso");
+    toast.success("Agendamento cancelado com sucesso");
     setIsDeleting(false);
   };
 
   const isLocked = appointment.isLocked ?? false;
 
-  // ❗ Badge só para CONCLUÍDO / CANCELADO
   const showBadge =
     appointment.status === "DONE" || appointment.status === "CANCELED";
 
-  // ❗ Botões só quando está PENDENTE e ainda não chegou o horário
   const showActions = !isLocked && appointment.status === "PENDING";
 
-  // Converte Barber[] em objetos compatíveis com o AppointmentForm,
-  // garantindo name e phone como string (sem null/undefined)
   const barbersForForm = barbers.map((barber) => ({
     id: barber.id,
     name: barber.name ?? "Barbeiro",
@@ -92,6 +74,24 @@ export const AppointmentCard = ({
     isActive: barber.isActive ?? true,
     role: "BARBER" as const,
   }));
+
+  const barberAny = appointment.barber as any;
+  const barberAvatarUrl: string | null =
+    barberAny?.user?.image ??
+    barberAny?.avatarUrl ??
+    barberAny?.imageUrl ??
+    barberAny?.image ??
+    null;
+
+  const barberInitials =
+    appointment.barber?.name
+      ?.trim()
+      .split(" ")
+      .map((n) => n[0]?.toUpperCase())
+      .slice(0, 2)
+      .join("") || "PB";
+
+  const serviceLabel = appointment.description ?? "";
 
   return (
     <div
@@ -102,38 +102,56 @@ export const AppointmentCard = ({
     >
       {/* HORÁRIO */}
       <div className="text-left pr-4 md:pr-0">
-        <span className="text-label-small text-content-primary font-semibold">
+        <span className="text-content-primary font-semibold">
           {formatTimeSaoPaulo(appointment.scheduleAt)}
         </span>
       </div>
 
-      {/* CLIENTE + BARBEIRO */}
+      {/* PROFISSIONAL + SERVIÇO */}
       <div className="text-right md:text-left md:pr-4">
-        <div className="flex flex-col items-end md:items-start gap-1">
-          <span className=" text-label-small-size text-content-primary font-semibold">
-            {appointment.clientName}
-          </span>
-          {appointment.barber?.name && (
-            <span className="text-paragraph-small-size text-content-secondary">
-              {appointment.barber.name}
+        <div className="flex items-center justify-end md:justify-start gap-3">
+          <div className="h-10 w-10 rounded-full overflow-hidden border border-border-primary bg-background-secondary flex items-center justify-center text-content-primary shrink-0">
+            {barberAvatarUrl ? (
+              <img
+                src={barberAvatarUrl}
+                alt={appointment.barber?.name ?? "Profissional"}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span>{barberInitials}</span>
+            )}
+          </div>
+
+          <div className="flex flex-col items-end md:items-start gap-0.5 text-content-primary">
+            <span>
+              Profissional:{" "}
+              <span className="font-semibold">
+                {appointment.barber?.name ?? "Profissional"}
+              </span>
             </span>
-          )}
+
+            {serviceLabel && (
+              <span className="md:hidden">
+                Serviço: <span className="font-semibold">{serviceLabel}</span>
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* DESCRIÇÃO */}
-      <div className="text-left pr-4 hidden md:block mt-1 md:mt-0 col-span-2 md:col-span-1">
-        <span className="text-paragraph-small-size text-content-secondary">
-          {appointment.description}
-        </span>
+      {/* SERVIÇO (desktop) */}
+      <div className="text-left pr-4 hidden md:block col-span-2 md:col-span-1">
+        {serviceLabel && (
+          <span className="text-content-primary">
+            Serviço: <span className="font-semibold">{serviceLabel}</span>
+          </span>
+        )}
       </div>
 
-      {/* STATUS + AÇÕES (coluna da direita) */}
-      <div className="text-right mt-2 md:mt-0 col-span-2 md:col-span-1 flex justify-end items-center gap-2">
-        {/* Badge só para DONE / CANCELED */}
+      {/* AÇÕES */}
+      <div className="text-right col-span-2 md:col-span-1 flex justify-end items-center gap-2">
         {showBadge && <AppointmentStatusBadge status={appointment.status} />}
 
-        {/* EDITAR / EXCLUIR só quando PENDENTE e antes do horário */}
         {showActions && (
           <>
             {/* EDITAR */}
@@ -148,25 +166,32 @@ export const AppointmentCard = ({
               </Button>
             </AppointmentForm>
 
-            {/* EXCLUIR – APENAS NA TELA DO USUÁRIO */}
+            {/* CANCELAR */}
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="remove" size="icon">
-                  <DeleteIcon size={16} />
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  className="px-9 h-8 flex items-center justify-center"
+                >
+                  Cancelar
                 </Button>
               </AlertDialogTrigger>
+
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Excluir agendamento</AlertDialogTitle>
+                  <AlertDialogTitle>Cancelar agendamento</AlertDialogTitle>
                   <AlertDialogDescription>
-                    Tem certeza que deseja excluir este agendamento? Esta ação
+                    Tem certeza que deseja cancelar este agendamento? Essa ação
                     não pode ser desfeita.
                   </AlertDialogDescription>
                 </AlertDialogHeader>
+
                 <AlertDialogFooter>
                   <AlertDialogCancel disabled={isDeleting}>
-                    Cancelar
+                    Fechar
                   </AlertDialogCancel>
+
                   <AlertDialogAction
                     onClick={handleDelete}
                     disabled={isDeleting}
@@ -174,7 +199,7 @@ export const AppointmentCard = ({
                     {isDeleting && (
                       <LoadingIcon className="mr-2 h-4 w-4 animate-spin" />
                     )}
-                    Confirmar exclusão
+                    Confirmar cancelamento
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>

@@ -30,14 +30,7 @@ import {
   UserCircle,
 } from "lucide-react";
 import { IMaskInput } from "react-imask";
-import {
-  addMinutes,
-  format,
-  isSameDay,
-  setHours,
-  setMinutes,
-  startOfToday,
-} from "date-fns";
+import { addMinutes, format, isSameDay, startOfToday } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { cn } from "@/lib/utils";
 import { Calendar } from "../ui/calendar";
@@ -62,7 +55,7 @@ import {
   AppointFormValues,
 } from "@/components/appointment-form/schema";
 import { Service } from "@/types/service";
-import { useSession } from "next-auth/react"; // sessão do usuário
+import { useSession } from "next-auth/react";
 
 // mesmo formato do util
 type AvailabilityWindow = {
@@ -70,7 +63,7 @@ type AvailabilityWindow = {
   endTime: string;
 };
 
-// Tipo normalizado de barbeiro só para o formulário
+// Tipo normalizado de profissional só para o formulário
 type AppointmentBarber = {
   id: string;
   name: string; // sempre string pra exibir direitinho
@@ -111,7 +104,6 @@ function intervalsOverlap(
   startB: Date,
   endB: Date,
 ): boolean {
-  // sobrepõe se um começa antes do outro terminar E termina depois do outro começar
   return startA < endB && endA > startB;
 }
 
@@ -123,7 +115,7 @@ type BuildAvailableTimesArgs = {
   appointments: Appointment[];
   currentAppointmentId?: string;
   servicesList: Service[];
-  slotIntervalMinutes?: number; // passo entre horários (ex: 30min)
+  slotIntervalMinutes?: number;
 };
 
 function buildAvailableTimes({
@@ -140,7 +132,7 @@ function buildAvailableTimes({
     return [];
   }
 
-  // Filtra agendamentos do barbeiro, no mesmo dia, e ignora CANCELADO
+  // Filtra agendamentos do profissional, no mesmo dia, e ignora CANCELADO
   const dayAppointments = appointments.filter((appt) => {
     if (!appt.barberId || appt.barberId !== selectedBarberId) return false;
 
@@ -149,7 +141,6 @@ function buildAvailableTimes({
 
     if ((appt as any).status === "CANCELED") return false;
 
-    // ao editar, não consideramos o próprio agendamento como bloqueio
     if (currentAppointmentId && appt.id === currentAppointmentId) {
       return false;
     }
@@ -157,7 +148,6 @@ function buildAvailableTimes({
     return true;
   });
 
-  // Intervalos ocupados [start, end)
   const busyIntervals = dayAppointments
     .map((appt) => {
       const start = new Date(appt.scheduleAt);
@@ -174,7 +164,7 @@ function buildAvailableTimes({
       const duration =
         finalService?.durationMinutes != null
           ? finalService.durationMinutes
-          : 30; // fallback
+          : 30;
 
       const end = addMinutes(start, duration);
 
@@ -190,7 +180,6 @@ function buildAvailableTimes({
 
     let slotStart = new Date(windowStart);
 
-    // gera slots enquando o serviço inteiro cabe dentro da janela
     while (
       addMinutes(slotStart, serviceDurationMinutes).getTime() <=
       windowEnd.getTime()
@@ -202,7 +191,6 @@ function buildAvailableTimes({
       );
 
       if (!hasConflict) {
-        // formata como HH:mm
         const hours = String(slotStart.getHours()).padStart(2, "0");
         const minutes = String(slotStart.getMinutes()).padStart(2, "0");
         availableSlots.push(`${hours}:${minutes}`);
@@ -215,34 +203,25 @@ function buildAvailableTimes({
   return availableSlots;
 }
 
+// 🔹 helper para garantir lista SEMPRE em ordem alfabética
+function sortProfessionals(list: AppointmentBarber[]): AppointmentBarber[] {
+  return [...list].sort((a, b) =>
+    (a.name ?? "").localeCompare(b.name ?? "", "pt-BR", {
+      sensitivity: "base",
+    }),
+  );
+}
+
 type AppointmentFormProps = {
   appointment?: Appointment;
-  /**
-   * Lista de agendamentos já existentes (do dia atual ou vários dias).
-   * A função interna filtra por data.
-   */
   appointments?: Appointment[];
   /**
-   * Lista de barbeiros ativos já normalizados
+   * Lista de profissionais ativos já normalizados
    */
   barbers: AppointmentBarber[];
-  /**
-   * Lista de serviços ativos
-   */
   services?: Service[];
-  /**
-   * Children para usos onde o componente é chamado como:
-   * <AppointmentForm>...</AppointmentForm>
-   * (não é obrigatório usar)
-   */
   children?: ReactNode;
-  /**
-   * Nome padrão do cliente (se quiser forçar algo externo)
-   */
   defaultClientName?: string;
-  /**
-   * 🔹 Plano do cliente logado, se existir
-   */
   clientPlan?: ClientPlanSummary | null;
 };
 
@@ -251,18 +230,15 @@ export const AppointmentForm = ({
   appointments = [],
   barbers,
   services,
-  children, // ainda não usamos, mas mantemos pra compat
+  children,
   defaultClientName,
   clientPlan,
 }: AppointmentFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const isEdit = !!appointment?.id;
-
-  // garante array estável dentro do componente
   const servicesList = services ?? [];
 
-  // 🔹 Sessão: pegamos role, nome e telefone do usuário logado
   const { data: session } = useSession();
   const role = (session?.user as any)?.role;
   const sessionClientName =
@@ -270,10 +246,6 @@ export const AppointmentForm = ({
   const sessionPhone =
     role === "CLIENT" ? ((session?.user as any)?.phone ?? "") : "";
 
-  // Nome inicial que o formulário vai usar:
-  // 1º prioridade: prop defaultClientName (se vier explícito)
-  // 2º prioridade: nome do CLIENT autenticado
-  // 3º: string vazia
   const initialClientName = defaultClientName ?? sessionClientName ?? "";
 
   const form = useForm<AppointFormValues>({
@@ -291,11 +263,8 @@ export const AppointmentForm = ({
 
   const onSubmit = async (data: AppointFormValues) => {
     const [hour, minute] = data.time.split(":");
-
-    const scheduleAt = setMinutes(
-      setHours(data.scheduleAt, Number(hour)),
-      Number(minute),
-    );
+    const scheduleAt = new Date(data.scheduleAt);
+    scheduleAt.setHours(Number(hour), Number(minute), 0, 0);
 
     const payload = {
       clientName: data.clientName,
@@ -331,7 +300,6 @@ export const AppointmentForm = ({
     });
   };
 
-  // Handler que transforma erros de validação em toast
   const handleSubmit = form.handleSubmit(onSubmit, (errors) => {
     const firstError = Object.values(errors)[0];
 
@@ -347,7 +315,6 @@ export const AppointmentForm = ({
   });
 
   useEffect(() => {
-    // novo agendamento
     if (!appointment) {
       form.reset({
         clientName: initialClientName,
@@ -361,7 +328,6 @@ export const AppointmentForm = ({
       return;
     }
 
-    // edição
     const date = new Date(appointment.scheduleAt);
     const time = format(date, "HH:mm");
 
@@ -387,7 +353,6 @@ export const AppointmentForm = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appointment, servicesList.length, initialClientName, sessionPhone]);
 
-  // log leve pra garantir que está renderizando por agendamento
   useEffect(() => {
     if (appointment?.id) {
       console.log("AppointmentForm ▶ render para agendamento", {
@@ -397,7 +362,6 @@ export const AppointmentForm = ({
     }
   }, [appointment?.id, appointment?.clientName]);
 
-  // Observa campos que mandam no fluxo
   const selectedServiceId = form.watch("serviceId");
   const selectedDate = form.watch("scheduleAt");
   const selectedTime = form.watch("time");
@@ -407,9 +371,6 @@ export const AppointmentForm = ({
     (service) => service.id === selectedServiceId,
   );
 
-  const selectedServiceName = selectedServiceData?.name ?? "";
-
-  // 🔹 Regras do plano do cliente (espelho do admin, mas sem data)
   const hasActivePlan =
     !!clientPlan &&
     clientPlan.status === "ACTIVE" &&
@@ -423,15 +384,15 @@ export const AppointmentForm = ({
   const normalizedEndDate =
     clientPlan && clientPlan.endDate ? new Date(clientPlan.endDate) : null;
 
-  // ===== buscar barbeiros disponíveis para a data =====
-  const [availableBarbers, setAvailableBarbers] =
-    useState<AppointmentBarber[]>(barbers);
+  // ===== profissionais disponíveis para a data =====
+  const [availableBarbers, setAvailableBarbers] = useState<AppointmentBarber[]>(
+    () => sortProfessionals(barbers),
+  );
   const [isLoadingBarbers, setIsLoadingBarbers] = useState(false);
 
   useEffect(() => {
-    // sem data → lista padrão (todos ativos)
     if (!selectedDate) {
-      setAvailableBarbers(barbers);
+      setAvailableBarbers(sortProfessionals(barbers));
       return;
     }
 
@@ -446,11 +407,8 @@ export const AppointmentForm = ({
           isoDate,
         )) as AppointmentBarber[];
 
-        // Garantir que sempre seja array
         result = Array.isArray(result) ? result : [];
 
-        // Se estamos editando e o barbeiro do agendamento não estiver na lista,
-        // adiciona ele pra não "sumir" da edição.
         if (isEdit && appointment?.barberId) {
           const existsInResult = result.some(
             (b) => b.id === appointment.barberId,
@@ -466,16 +424,15 @@ export const AppointmentForm = ({
         }
 
         if (!cancelled) {
-          setAvailableBarbers(result);
+          setAvailableBarbers(sortProfessionals(result));
         }
       } catch (error) {
         console.error(
-          "AppointmentForm ▶ erro ao buscar barbeiros disponíveis na data",
+          "AppointmentForm ▶ erro ao buscar profissionais disponíveis na data",
           error,
         );
         if (!cancelled) {
-          // fallback: mostra todos
-          setAvailableBarbers(barbers);
+          setAvailableBarbers(sortProfessionals(barbers));
         }
       } finally {
         if (!cancelled) {
@@ -489,13 +446,12 @@ export const AppointmentForm = ({
     };
   }, [selectedDate, barbers, isEdit, appointment?.barberId]);
 
-  // ===== buscar janelas de disponibilidade do barbeiro =====
+  // ===== janelas de disponibilidade do profissional =====
   const [availabilityWindows, setAvailabilityWindows] = useState<
     AvailabilityWindow[] | undefined
   >(undefined);
 
   useEffect(() => {
-    // se não tem data ou barbeiro, não tem por que buscar
     if (!selectedDate || !selectedBarberId) {
       setAvailabilityWindows(undefined);
       return;
@@ -512,7 +468,6 @@ export const AppointmentForm = ({
         );
 
         if (!cancelled) {
-          // windows pode ser null, [] ou array de janelas
           if (!windows) {
             setAvailabilityWindows(undefined);
           } else {
@@ -521,7 +476,7 @@ export const AppointmentForm = ({
         }
       } catch (error) {
         console.error(
-          "AppointmentForm ▶ erro ao buscar disponibilidade do barbeiro",
+          "AppointmentForm ▶ erro ao buscar disponibilidade do profissional",
           error,
         );
         if (!cancelled) {
@@ -535,7 +490,7 @@ export const AppointmentForm = ({
     };
   }, [selectedDate, selectedBarberId]);
 
-  // ===== horários disponíveis considerando duração do serviço e agendamentos =====
+  // ===== horários disponíveis =====
   let availableTimes: string[] = [];
 
   try {
@@ -646,7 +601,7 @@ export const AppointmentForm = ({
               )}
             />
 
-            {/* SERVIÇO (1º passo) */}
+            {/* SERVIÇO */}
             <FormField
               control={form.control}
               name="serviceId"
@@ -664,10 +619,7 @@ export const AppointmentForm = ({
                           (s) => s.id === value,
                         );
 
-                        // espelha o nome do serviço na descrição
                         form.setValue("description", service?.name ?? "");
-
-                        // Mudou serviço → limpa data, hora e barbeiro
                         form.setValue("scheduleAt", undefined as any);
                         form.setValue("time", "");
                         form.setValue("barberId", "");
@@ -696,7 +648,6 @@ export const AppointmentForm = ({
                     </Select>
                   </FormControl>
 
-                  {/* 🔹 Info do serviço OU info do plano */}
                   {selectedServiceData && (
                     <div className="mt-2 text-paragraph-small-size text-content-secondary">
                       {hasActivePlan && isServiceCoveredByPlan ? (
@@ -740,7 +691,7 @@ export const AppointmentForm = ({
               )}
             />
 
-            {/* DATA (2º passo) */}
+            {/* DATA */}
             <FormField
               control={form.control}
               name="scheduleAt"
@@ -785,7 +736,6 @@ export const AppointmentForm = ({
                         selected={field.value}
                         onSelect={(date) => {
                           field.onChange(date ?? undefined);
-                          // Mudou data → limpa hora e barbeiro
                           form.setValue("time", "");
                           form.setValue("barberId", "");
                         }}
@@ -799,20 +749,19 @@ export const AppointmentForm = ({
               )}
             />
 
-            {/* BARBEIRO (3º passo) */}
+            {/* PROFISSIONAL */}
             <FormField
               control={form.control}
               name="barberId"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="text-label-medium-size text-content-primary">
-                    Barbeiro
+                    Profissional
                   </FormLabel>
                   <FormControl>
                     <Select
                       onValueChange={(value) => {
                         field.onChange(value);
-                        // Mudou barbeiro → limpa horário
                         form.setValue("time", "");
                       }}
                       value={field.value}
@@ -835,7 +784,7 @@ export const AppointmentForm = ({
                                 ? "Selecione um serviço"
                                 : !selectedDate
                                   ? "Selecione uma data"
-                                  : "Selecione o barbeiro"
+                                  : "Selecione o profissional"
                             }
                           />
                         </div>
@@ -848,14 +797,14 @@ export const AppointmentForm = ({
                           </SelectItem>
                         ) : isLoadingBarbers ? (
                           <SelectItem disabled value="loading-barbers">
-                            Carregando barbeiros disponíveis...
+                            Carregando profissionais disponíveis...
                           </SelectItem>
                         ) : availableBarbers.length === 0 ? (
                           <SelectItem disabled value="no-barbers">
-                            Nenhum barbeiro disponível nessa data
+                            Nenhum profissional disponível nessa data
                           </SelectItem>
                         ) : (
-                          availableBarbers.map((barber) => (
+                          sortProfessionals(availableBarbers).map((barber) => (
                             <SelectItem key={barber.id} value={barber.id}>
                               {barber.name}
                             </SelectItem>
@@ -868,7 +817,7 @@ export const AppointmentForm = ({
               )}
             />
 
-            {/* HORA (4º passo) */}
+            {/* HORA */}
             <FormField
               control={form.control}
               name="time"
@@ -905,7 +854,7 @@ export const AppointmentForm = ({
                                 : !selectedDate
                                   ? "Selecione uma data"
                                   : !selectedBarberId
-                                    ? "Selecione o barbeiro"
+                                    ? "Selecione o profissional"
                                     : "Selecione um horário"
                             }
                           />
@@ -917,7 +866,7 @@ export const AppointmentForm = ({
                         !selectedDate ||
                         !selectedBarberId ? (
                           <SelectItem disabled value="no-selection">
-                            Selecione o serviço, a data e o barbeiro
+                            Selecione o serviço, a data e o profissional
                           </SelectItem>
                         ) : availableTimes.length === 0 ? (
                           <SelectItem disabled value="no-times">
