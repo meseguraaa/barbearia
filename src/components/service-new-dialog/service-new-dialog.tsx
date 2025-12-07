@@ -9,8 +9,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { redirect } from "next/navigation";
 import { createService } from "@/app/admin/services/actions";
+import { prisma } from "@/lib/prisma";
 
-export function ServiceNewDialog() {
+export async function ServiceNewDialog() {
+  const barbers = await prisma.barber.findMany({
+    where: {
+      isActive: true,
+    },
+    orderBy: {
+      name: "asc",
+    },
+  });
+
   return (
     <Dialog>
       <DialogTrigger asChild>
@@ -144,6 +154,37 @@ export function ServiceNewDialog() {
               placeholder="Ex: 50"
               className="bg-background-tertiary border-border-primary text-content-primary"
             />
+          </div>
+
+          {/* PROFISSIONAIS QUE REALIZAM O SERVIÇO */}
+          <div className="space-y-2">
+            <p className="text-label-small text-content-secondary">
+              Profissionais que realizam este serviço{" "}
+              <span className="text-red-500">*</span>
+            </p>
+
+            {barbers.length === 0 ? (
+              <p className="text-paragraph-small text-content-secondary">
+                Nenhum profissional ativo cadastrado no momento.
+              </p>
+            ) : (
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-border-primary bg-background-tertiary p-2">
+                {barbers.map((barber) => (
+                  <label
+                    key={barber.id}
+                    className="flex items-center gap-2 text-paragraph-small text-content-primary"
+                  >
+                    <input
+                      type="checkbox"
+                      name="professionalIds"
+                      value={barber.id}
+                      className="h-4 w-4 rounded border-border-primary"
+                    />
+                    <span>{barber.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

@@ -64,6 +64,7 @@ type AvailabilityWindow = {
 };
 
 // Tipo normalizado de profissional só para o formulário
+// Agora pode carregar também os serviços que ele realiza
 type AppointmentBarber = {
   id: string;
   name: string; // sempre string pra exibir direitinho
@@ -71,6 +72,7 @@ type AppointmentBarber = {
   phone: string;
   isActive: boolean;
   role: "BARBER";
+  serviceIds?: string[]; // IDs de serviços que este profissional realiza
 };
 
 // 🔹 Resumo do plano do cliente para o formulário
@@ -212,11 +214,32 @@ function sortProfessionals(list: AppointmentBarber[]): AppointmentBarber[] {
   );
 }
 
+// 🔹 filtra profissionais que executam o serviço selecionado
+function filterProfessionalsByService(
+  list: AppointmentBarber[],
+  selectedServiceId: string | undefined,
+): AppointmentBarber[] {
+  if (!selectedServiceId) {
+    return sortProfessionals(list);
+  }
+
+  return sortProfessionals(
+    list.filter((barber) => {
+      // backward-compatible: se não vier serviceIds, não filtra
+      if (!barber.serviceIds || barber.serviceIds.length === 0) {
+        return true;
+      }
+      return barber.serviceIds.includes(selectedServiceId);
+    }),
+  );
+}
+
 type AppointmentFormProps = {
   appointment?: Appointment;
   appointments?: Appointment[];
   /**
-   * Lista de profissionais ativos já normalizados
+   * Lista de profissionais ativos já normalizados.
+   * Idealmente incluindo serviceIds (serviços que cada profissional executa).
    */
   barbers: AppointmentBarber[];
   services?: Service[];
@@ -235,6 +258,8 @@ export const AppointmentForm = ({
   clientPlan,
 }: AppointmentFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
+
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
   const isEdit = !!appointment?.id;
   const servicesList = services ?? [];
@@ -384,15 +409,15 @@ export const AppointmentForm = ({
   const normalizedEndDate =
     clientPlan && clientPlan.endDate ? new Date(clientPlan.endDate) : null;
 
-  // ===== profissionais disponíveis para a data =====
-  const [availableBarbers, setAvailableBarbers] = useState<AppointmentBarber[]>(
-    () => sortProfessionals(barbers),
-  );
+  // ===== profissionais disponíveis para a data (sem filtro de serviço ainda) =====
+  const [availableBarbersForDate, setAvailableBarbersForDate] = useState<
+    AppointmentBarber[]
+  >(() => sortProfessionals(barbers));
   const [isLoadingBarbers, setIsLoadingBarbers] = useState(false);
 
   useEffect(() => {
     if (!selectedDate) {
-      setAvailableBarbers(sortProfessionals(barbers));
+      setAvailableBarbersForDate(sortProfessionals(barbers));
       return;
     }
 
@@ -409,6 +434,8 @@ export const AppointmentForm = ({
 
         result = Array.isArray(result) ? result : [];
 
+        // Garantir que o barbeiro do agendamento em edição apareça,
+        // mesmo que não esteja na lista de disponibilidade retornada
         if (isEdit && appointment?.barberId) {
           const existsInResult = result.some(
             (b) => b.id === appointment.barberId,
@@ -424,7 +451,7 @@ export const AppointmentForm = ({
         }
 
         if (!cancelled) {
-          setAvailableBarbers(sortProfessionals(result));
+          setAvailableBarbersForDate(sortProfessionals(result));
         }
       } catch (error) {
         console.error(
@@ -432,7 +459,7 @@ export const AppointmentForm = ({
           error,
         );
         if (!cancelled) {
-          setAvailableBarbers(sortProfessionals(barbers));
+          setAvailableBarbersForDate(sortProfessionals(barbers));
         }
       } finally {
         if (!cancelled) {
@@ -445,6 +472,12 @@ export const AppointmentForm = ({
       cancelled = true;
     };
   }, [selectedDate, barbers, isEdit, appointment?.barberId]);
+
+  // Lista final de profissionais exibidos: disponíveis NA DATA + que fazem o SERVIÇO
+  const filteredBarbers = filterProfessionalsByService(
+    availableBarbersForDate,
+    selectedServiceId,
+  );
 
   // ===== janelas de disponibilidade do profissional =====
   const [availabilityWindows, setAvailabilityWindows] = useState<
@@ -649,21 +682,32 @@ export const AppointmentForm = ({
                   </FormControl>
 
                   {selectedServiceData && (
-                    <div className="mt-2 text-paragraph-small-size text-content-secondary">
+                    <div className="mt-0.5 text-paragraph-small-size text-content-secondary">
                       {hasActivePlan && isServiceCoveredByPlan ? (
                         <>
-                          <span className="font-semibold">
-                            {clientPlan!.planName}
-                          </span>{" "}
-                          — {clientPlan!.usedBookings} /{" "}
-                          {clientPlan!.totalBookings} agendamentos usados
-                          <span className="block text-xs mt-1">
-                            Este atendimento usará 1 crédito do seu plano.
+                          <span className="font-bold">
+                            {clientPlan!.planName} - {clientPlan!.usedBookings}{" "}
+                            /{" "}
                           </span>
+                          {clientPlan!.totalBookings} agendamentos usados
+                          <span className="block text-xs mt-0.5">
+                            Este atendimento usará <b>1 crédito</b> do seu
+                            plano.
+                          </span>
+                          {selectedServiceData?.durationMinutes != null && (
+                            <span className="block text-xs mt-0.5">
+                              Duração do serviço:{" "}
+                              <span className="font-semibold">
+                                {selectedServiceData.durationMinutes} minutos
+                              </span>
+                            </span>
+                          )}
                           {normalizedEndDate && (
                             <span className="block text-xs mt-0.5">
                               Validade até{" "}
-                              {normalizedEndDate.toLocaleDateString("pt-BR")}
+                              <span className="font-semibold">
+                                {normalizedEndDate.toLocaleDateString("pt-BR")}
+                              </span>
                             </span>
                           )}
                         </>
@@ -700,7 +744,10 @@ export const AppointmentForm = ({
                   <FormLabel className="text-label-medium-size text-content-primary">
                     Data
                   </FormLabel>
-                  <Popover>
+                  <Popover
+                    open={isDatePickerOpen}
+                    onOpenChange={setIsDatePickerOpen}
+                  >
                     <PopoverTrigger asChild>
                       <FormControl>
                         <Button
@@ -710,6 +757,10 @@ export const AppointmentForm = ({
                             "w-full justify-between text-left font-normal bg-background-tertiary border-border-primary text-content-primary hover:bg-background-tertiary hover:border-border-secondary hover:text-content-primary focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand focus:border-border-brand focus-visible:border-border-brand disabled:opacity-60 disabled:cursor-not-allowed",
                             !field.value && "text-content-secondary",
                           )}
+                          onClick={() => {
+                            if (!selectedServiceId) return;
+                            setIsDatePickerOpen(true);
+                          }}
                         >
                           <div className="flex items-center gap-2">
                             <CalendarIcon
@@ -738,6 +789,11 @@ export const AppointmentForm = ({
                           field.onChange(date ?? undefined);
                           form.setValue("time", "");
                           form.setValue("barberId", "");
+
+                          // 👇 SÓ FECHA QUANDO UM DIA É SELECIONADO
+                          if (date) {
+                            setIsDatePickerOpen(false);
+                          }
                         }}
                         disabled={(date) =>
                           !selectedServiceId || date < startOfToday()
@@ -773,7 +829,7 @@ export const AppointmentForm = ({
     bg-background-tertiary border-border-primary text-content-primary
     focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
     focus:border-border-brand focus-visible:border-border-brand
-    disabled:opacity-60 disabled:cursor-not-allowed disabled:pointer-events-none
+    disabled:opacity-100 disabled:cursor-not-allowed disabled:pointer-events-none
   "
                       >
                         <div className="flex items-center gap-2">
@@ -799,12 +855,13 @@ export const AppointmentForm = ({
                           <SelectItem disabled value="loading-barbers">
                             Carregando profissionais disponíveis...
                           </SelectItem>
-                        ) : availableBarbers.length === 0 ? (
-                          <SelectItem disabled value="no-barbers">
-                            Nenhum profissional disponível nessa data
+                        ) : filteredBarbers.length === 0 ? (
+                          <SelectItem value="no-barbers">
+                            Nenhum profissional disponível para este serviço
+                            nessa data
                           </SelectItem>
                         ) : (
-                          sortProfessionals(availableBarbers).map((barber) => (
+                          filteredBarbers.map((barber) => (
                             <SelectItem key={barber.id} value={barber.id}>
                               {barber.name}
                             </SelectItem>

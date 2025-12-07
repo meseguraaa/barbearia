@@ -165,6 +165,9 @@ model Barber {
   // ⭐ PEDIDOS LIGADOS AO BARBEIRO (quem fez a venda / atendeu)
   orders Order[]
 
+  // 🔹 Serviços que esse profissional executa
+  services ServiceProfessional[]
+
   @@map("barbers")
 }
 
@@ -189,7 +192,28 @@ model Service {
   updatedAt  DateTime    @updatedAt
   orderItems OrderItem[]
 
+  // 🔹 Profissionais que fazem este serviço
+  professionals ServiceProfessional[]
+
   @@map("services")
+}
+
+// ⭐ TABELA PIVOT: SERVIÇO x BARBEIRO/PROFISSIONAL
+model ServiceProfessional {
+  id String @id @default(cuid())
+
+  serviceId String
+  barberId  String
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  barber  Barber  @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([serviceId, barberId])
+  @@index([barberId])
+  @@map("service_professionals")
 }
 
 // =======================

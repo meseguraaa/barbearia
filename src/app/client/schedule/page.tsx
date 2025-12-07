@@ -98,10 +98,18 @@ export default async function Home({ searchParams }: HomeProps) {
     },
   });
 
-  // barbeiros ativos vindos do model Barber
+  // 🔹 barbeiros ativos vindos do model Barber
+  //    agora incluindo os serviços que cada um realiza (ServiceProfessional)
   const barbersPrisma = await prisma.barber.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
+    include: {
+      services: {
+        select: {
+          serviceId: true,
+        },
+      },
+    },
   });
 
   const barbers: Barber[] = barbersPrisma.map((barber) => ({
@@ -184,14 +192,16 @@ export default async function Home({ searchParams }: HomeProps) {
 
   const periods = groupAppointmentByPeriod(appointments);
 
-  // Array específico para o AppointmentForm: garante name/phone como string
-  const barbersForForm = barbers.map((barber) => ({
+  // 🔹 Array específico para o AppointmentForm:
+  //    aqui já mandamos também os serviceIds (serviços que cada profissional executa)
+  const barbersForForm = barbersPrisma.map((barber) => ({
     id: barber.id,
     name: barber.name ?? "Barbeiro",
     email: barber.email,
     phone: barber.phone ?? "",
     isActive: barber.isActive ?? true,
     role: "BARBER" as const,
+    serviceIds: barber.services.map((s) => s.serviceId),
   }));
 
   // 🔹 Plano ativo do cliente logado (para o AppointmentForm)

@@ -692,14 +692,42 @@ export async function getAvailableBarbersForDateAction(dateISO: string) {
     );
   }
 
-  const barbers = await getAvailableBarbersOnDate(date);
+  // 🔹 Usa util que já calcula disponibilidade
+  const baseBarbers = await getAvailableBarbersOnDate(date);
 
-  return barbers.map((b) => ({
+  if (!baseBarbers || baseBarbers.length === 0) {
+    return [];
+  }
+
+  // 🔹 Busca no Prisma os serviços que cada barbeiro realiza
+  const prismaBarbers = await prisma.barber.findMany({
+    where: {
+      id: {
+        in: baseBarbers.map((b) => b.id),
+      },
+    },
+    include: {
+      services: {
+        select: {
+          serviceId: true,
+        },
+      },
+    },
+  });
+
+  const servicesMap = new Map<string, string[]>(
+    prismaBarbers.map((b) => [b.id, b.services.map((s) => s.serviceId)]),
+  );
+
+  // 🔹 devolve no formato esperado pelo AppointmentForm,
+  //     com serviceIds para filtrar por serviço no front
+  return baseBarbers.map((b) => ({
     id: b.id,
     name: b.name,
     email: b.email,
     phone: b.phone ?? "",
     isActive: b.isActive,
     role: "BARBER" as const,
+    serviceIds: servicesMap.get(b.id) ?? [],
   }));
 }
