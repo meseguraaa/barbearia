@@ -77,7 +77,7 @@ export function ServiceEditDialog({ service }: ServiceEditDialogProps) {
           {/* NOME */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
-              Nome do serviço
+              Nome do serviço <span className="text-red-500">*</span>
             </label>
             <Input
               name="name"
@@ -90,7 +90,7 @@ export function ServiceEditDialog({ service }: ServiceEditDialogProps) {
           {/* VALOR */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
-              Valor (R$)
+              Valor (R$) <span className="text-red-500">*</span>
             </label>
             <Input
               name="price"
@@ -105,7 +105,7 @@ export function ServiceEditDialog({ service }: ServiceEditDialogProps) {
           {/* DURAÇÃO */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
-              Duração (minutos)
+              Duração (minutos) <span className="text-red-500">*</span>
             </label>
             <Input
               name="durationMinutes"
@@ -119,7 +119,8 @@ export function ServiceEditDialog({ service }: ServiceEditDialogProps) {
           {/* PORCENTAGEM DO BARBEIRO */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
-              Porcentagem do barbeiro (%)
+              Porcentagem do barbeiro (%){" "}
+              <span className="text-red-500">*</span>
             </label>
             <Input
               name="barberPercentage"
@@ -127,31 +128,34 @@ export function ServiceEditDialog({ service }: ServiceEditDialogProps) {
               step="0.01"
               min={0}
               max={100}
+              required
               defaultValue={barberPercentageDefault}
               placeholder="Ex: 50"
               className="bg-background-tertiary border-border-primary text-content-primary"
             />
           </div>
 
-          {/* LIMITE DE CANCELAMENTO */}
+          {/* LIMITE DE CANCELAMENTO — AGORA OBRIGATÓRIO */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
-              Limite para cobrança de taxa (horas antes do horário)
+              Limite para cobrança de taxa (horas antes do horário){" "}
+              <span className="text-red-500">*</span>
             </label>
             <Input
               name="cancelLimitHours"
               type="number"
               min={0}
+              required
               defaultValue={cancelLimitHoursDefault}
               placeholder="Ex: 2 (até 2h antes)"
               className="bg-background-tertiary border-border-primary text-content-primary"
             />
           </div>
 
-          {/* TAXA DE CANCELAMENTO */}
+          {/* TAXA DE CANCELAMENTO — AGORA OBRIGATÓRIO */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
-              Taxa de cancelamento (%)
+              Taxa de cancelamento (%) <span className="text-red-500">*</span>
             </label>
             <Input
               name="cancelFeePercentage"
@@ -159,6 +163,7 @@ export function ServiceEditDialog({ service }: ServiceEditDialogProps) {
               step="0.01"
               min={0}
               max={100}
+              required
               defaultValue={cancelFeePercentageDefault}
               placeholder="Ex: 50"
               className="bg-background-tertiary border-border-primary text-content-primary"

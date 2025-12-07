@@ -60,7 +60,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
           {/* NOME */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
-              Nome do produto
+              Nome do produto <span className="text-red-500">*</span>
             </label>
             <Input
               name="name"
@@ -73,7 +73,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
           {/* FOTO (UPLOAD) */}
           <UploadImageField
             name="imageUrl"
-            label="Foto do produto"
+            label="Foto do produto *"
             required
             defaultValue={product.imageUrl ?? ""}
             helperText="Essa imagem será exibida na listagem de produtos."
@@ -82,7 +82,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
           {/* DESCRIÇÃO */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
-              Descrição
+              Descrição <span className="text-red-500">*</span>
             </label>
             <Textarea
               name="description"
@@ -96,7 +96,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
           {/* VALOR */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
-              Valor (R$)
+              Valor (R$) <span className="text-red-500">*</span>
             </label>
             <Input
               name="price"
@@ -110,13 +110,15 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
           {/* PORCENTAGEM DO BARBEIRO */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
-              Porcentagem do barbeiro (%)
+              Porcentagem do barbeiro (%){" "}
+              <span className="text-red-500">*</span>
             </label>
             <Input
               name="barberPercentage"
               type="number"
               min={0}
               max={100}
+              required
               defaultValue={
                 product.barberPercentageAsNumber !== null &&
                 product.barberPercentageAsNumber !== undefined
@@ -131,12 +133,13 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
           {/* ESTOQUE */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
-              Estoque
+              Estoque <span className="text-red-500">*</span>
             </label>
             <Input
               name="stockQuantity"
               type="number"
               min={0}
+              required
               defaultValue={product.stockQuantity}
               className="bg-background-tertiary border-border-primary text-content-primary"
             />
@@ -145,7 +148,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
           {/* CATEGORIA / FINALIDADE */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
-              Categoria / Finalidade
+              Categoria / Finalidade <span className="text-red-500">*</span>
             </label>
             <Input
               name="category"

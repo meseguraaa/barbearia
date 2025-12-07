@@ -38,7 +38,7 @@ export function ServiceNewDialog() {
               className="text-label-small text-content-secondary"
               htmlFor="name"
             >
-              Nome do serviço
+              Nome do serviço <span className="text-red-500">*</span>
             </label>
             <Input
               id="name"
@@ -54,7 +54,7 @@ export function ServiceNewDialog() {
               className="text-label-small text-content-secondary"
               htmlFor="price"
             >
-              Valor (R$)
+              Valor (R$) <span className="text-red-500">*</span>
             </label>
             <Input
               id="price"
@@ -72,7 +72,7 @@ export function ServiceNewDialog() {
               className="text-label-small text-content-secondary"
               htmlFor="durationMinutes"
             >
-              Duração (minutos)
+              Duração (minutos) <span className="text-red-500">*</span>
             </label>
             <Input
               id="durationMinutes"
@@ -89,7 +89,8 @@ export function ServiceNewDialog() {
               className="text-label-small text-content-secondary"
               htmlFor="barberPercentage"
             >
-              Porcentagem do barbeiro (%)
+              Porcentagem do barbeiro (%){" "}
+              <span className="text-red-500">*</span>
             </label>
             <Input
               id="barberPercentage"
@@ -98,36 +99,39 @@ export function ServiceNewDialog() {
               step="0.01"
               min={0}
               max={100}
+              required
               placeholder="Ex: 50"
               className="bg-background-tertiary border-border-primary text-content-primary"
             />
           </div>
 
-          {/* LIMITE DE CANCELAMENTO */}
+          {/* LIMITE DE CANCELAMENTO — AGORA OBRIGATÓRIO */}
           <div className="space-y-1">
             <label
               className="text-label-small text-content-secondary"
               htmlFor="cancelLimitHours"
             >
-              Limite para cobrança de taxa (horas antes do horário)
+              Limite para cobrança de taxa (horas antes do horário){" "}
+              <span className="text-red-500">*</span>
             </label>
             <Input
               id="cancelLimitHours"
               name="cancelLimitHours"
               type="number"
               min={0}
+              required
               placeholder="Ex: 2 (até 2h antes)"
               className="bg-background-tertiary border-border-primary text-content-primary"
             />
           </div>
 
-          {/* TAXA DE CANCELAMENTO */}
+          {/* TAXA DE CANCELAMENTO — AGORA OBRIGATÓRIO */}
           <div className="space-y-1">
             <label
               className="text-label-small text-content-secondary"
               htmlFor="cancelFeePercentage"
             >
-              Taxa de cancelamento (%)
+              Taxa de cancelamento (%) <span className="text-red-500">*</span>
             </label>
             <Input
               id="cancelFeePercentage"
@@ -136,6 +140,7 @@ export function ServiceNewDialog() {
               step="0.01"
               min={0}
               max={100}
+              required
               placeholder="Ex: 50"
               className="bg-background-tertiary border-border-primary text-content-primary"
             />

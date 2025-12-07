@@ -1,205 +1,5 @@
 {
   "node": {
-    "405b303e60f3d8d8134b4b73681a217086743f4b57": {
-      "workers": {
-        "app/admin/clients/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fclients%2Factions.ts%22%2C%5B%7B%22id%22%3A%22405b303e60f3d8d8134b4b73681a217086743f4b57%22%2C%22exportedName%22%3A%22createClientAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fclients%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/admin/clients/page": "action-browser"
-      },
-      "filename": "app/admin/clients/actions.ts",
-      "exportedName": "createClientAction"
-    },
-    "40389ebb0259e7e1bf48a1c308597e58ad1ed5d207": {
-      "workers": {
-        "app/client/schedule/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/barber/dashboard/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/admin/appointments/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/client/schedule/page": "action-browser",
-        "app/barber/dashboard/page": "action-browser",
-        "app/admin/appointments/page": "action-browser"
-      },
-      "filename": "app/admin/dashboard/actions.ts",
-      "exportedName": "deleteAppointment"
-    },
-    "406b8f1f488f3a247bf641ee18946648c1c702c618": {
-      "workers": {
-        "app/client/schedule/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/barber/dashboard/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/admin/appointments/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/client/schedule/page": "action-browser",
-        "app/barber/dashboard/page": "action-browser",
-        "app/admin/appointments/page": "action-browser"
-      },
-      "filename": "app/admin/dashboard/actions.ts",
-      "exportedName": "createAppointment"
-    },
-    "407afc955991f64d755d11b779f09e7c583456ea02": {
-      "workers": {
-        "app/client/schedule/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/barber/dashboard/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/admin/appointments/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/client/schedule/page": "action-browser",
-        "app/barber/dashboard/page": "action-browser",
-        "app/admin/appointments/page": "action-browser"
-      },
-      "filename": "app/admin/dashboard/actions.ts",
-      "exportedName": "getAvailableBarbersForDateAction"
-    },
-    "6006992f04da31ffea24b71bc890e85b0f332eb0e2": {
-      "workers": {
-        "app/client/schedule/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/barber/dashboard/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/admin/appointments/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/client/schedule/page": "action-browser",
-        "app/barber/dashboard/page": "action-browser",
-        "app/admin/appointments/page": "action-browser"
-      },
-      "filename": "app/admin/dashboard/actions.ts",
-      "exportedName": "getAvailabilityWindowsForBarberOnDateAction"
-    },
-    "605145aaabbb36ba11c06887fe7b5b51f13088fe9a": {
-      "workers": {
-        "app/client/schedule/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/barber/dashboard/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/admin/appointments/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/client/schedule/page": "action-browser",
-        "app/barber/dashboard/page": "action-browser",
-        "app/admin/appointments/page": "action-browser"
-      },
-      "filename": "app/admin/dashboard/actions.ts",
-      "exportedName": "cancelAppointment"
-    },
-    "607bf0fec5f731ad7f6522e732f05af8e037ff5aed": {
-      "workers": {
-        "app/client/schedule/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/barber/dashboard/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/admin/appointments/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/client/schedule/page": "action-browser",
-        "app/barber/dashboard/page": "action-browser",
-        "app/admin/appointments/page": "action-browser"
-      },
-      "filename": "app/admin/dashboard/actions.ts",
-      "exportedName": "concludeAppointment"
-    },
-    "60c95d3906a919970ea0237dbf1cfdf97d9980585a": {
-      "workers": {
-        "app/client/schedule/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/barber/dashboard/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        },
-        "app/admin/appointments/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/client/schedule/page": "action-browser",
-        "app/barber/dashboard/page": "action-browser",
-        "app/admin/appointments/page": "action-browser"
-      },
-      "filename": "app/admin/dashboard/actions.ts",
-      "exportedName": "updateAppointment"
-    },
-    "00f4070e3ea1880af80dee15b8192076d2179efea0": {
-      "workers": {
-        "app/client/schedule/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/client/schedule/page": "action-browser"
-      },
-      "filename": "app/client/profile/actions.ts",
-      "exportedName": "getClientProfileAction"
-    },
-    "409765b7401d698a1064d27e77de1258bd09f3a890": {
-      "workers": {
-        "app/client/schedule/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/client/schedule/page": "action-browser"
-      },
-      "filename": "app/client/profile/actions.ts",
-      "exportedName": "updateClientPhoneAction"
-    },
     "40e49a3b1c860596c40a5590448695ab8fd27e55f4": {
       "workers": {
         "app/admin/services/page": {
@@ -395,23 +195,218 @@
       "filename": "components/client-plan-row/client-plan-row.tsx",
       "exportedName": "$$RSC_SERVER_ACTION_0"
     },
-    "401b7cab2a3164f744e442e34d825e848fbfc8f36e": {
+    "40389ebb0259e7e1bf48a1c308597e58ad1ed5d207": {
       "workers": {
-        "app/admin/professional/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-new-dialog%2Fprofessional-new-dialog.tsx%22%2C%5B%7B%22id%22%3A%22401b7cab2a3164f744e442e34d825e848fbfc8f36e%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-new-dialog%2Fprofessional-new-dialog.tsx%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fprofessional%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407465eab6053cf8bcdca143e9d91cd9e6ae91dccd%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240a72b2a92e15205546c99e32ee861a040cdd41585%22%2C%22exportedName%22%3A%22updateBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240f20ed564dac6f3dafa20acef46e2e6b4369354a8%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%2C%5B%7B%22id%22%3A%2260a923a016004d315b6860d02aa3fa50467ca44e83%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%7D%5D%5D%5D&__client_imported__=!",
+        "app/client/schedule/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
           "async": false
         }
       },
       "layer": {
-        "app/admin/professional/page": "rsc"
+        "app/client/schedule/page": "action-browser"
       },
-      "filename": "components/professional-new-dialog/professional-new-dialog.tsx",
-      "exportedName": "$$RSC_SERVER_ACTION_0"
+      "filename": "app/admin/dashboard/actions.ts",
+      "exportedName": "deleteAppointment"
+    },
+    "406b8f1f488f3a247bf641ee18946648c1c702c618": {
+      "workers": {
+        "app/client/schedule/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/client/schedule/page": "action-browser"
+      },
+      "filename": "app/admin/dashboard/actions.ts",
+      "exportedName": "createAppointment"
+    },
+    "407afc955991f64d755d11b779f09e7c583456ea02": {
+      "workers": {
+        "app/client/schedule/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/client/schedule/page": "action-browser"
+      },
+      "filename": "app/admin/dashboard/actions.ts",
+      "exportedName": "getAvailableBarbersForDateAction"
+    },
+    "6006992f04da31ffea24b71bc890e85b0f332eb0e2": {
+      "workers": {
+        "app/client/schedule/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/client/schedule/page": "action-browser"
+      },
+      "filename": "app/admin/dashboard/actions.ts",
+      "exportedName": "getAvailabilityWindowsForBarberOnDateAction"
+    },
+    "605145aaabbb36ba11c06887fe7b5b51f13088fe9a": {
+      "workers": {
+        "app/client/schedule/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/client/schedule/page": "action-browser"
+      },
+      "filename": "app/admin/dashboard/actions.ts",
+      "exportedName": "cancelAppointment"
+    },
+    "607bf0fec5f731ad7f6522e732f05af8e037ff5aed": {
+      "workers": {
+        "app/client/schedule/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/client/schedule/page": "action-browser"
+      },
+      "filename": "app/admin/dashboard/actions.ts",
+      "exportedName": "concludeAppointment"
+    },
+    "60c95d3906a919970ea0237dbf1cfdf97d9980585a": {
+      "workers": {
+        "app/client/schedule/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/client/schedule/page": "action-browser"
+      },
+      "filename": "app/admin/dashboard/actions.ts",
+      "exportedName": "updateAppointment"
+    },
+    "00f4070e3ea1880af80dee15b8192076d2179efea0": {
+      "workers": {
+        "app/client/schedule/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/client/schedule/page": "action-browser"
+      },
+      "filename": "app/client/profile/actions.ts",
+      "exportedName": "getClientProfileAction"
+    },
+    "409765b7401d698a1064d27e77de1258bd09f3a890": {
+      "workers": {
+        "app/client/schedule/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fdashboard%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240389ebb0259e7e1bf48a1c308597e58ad1ed5d207%22%2C%22exportedName%22%3A%22deleteAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406b8f1f488f3a247bf641ee18946648c1c702c618%22%2C%22exportedName%22%3A%22createAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22407afc955991f64d755d11b779f09e7c583456ea02%22%2C%22exportedName%22%3A%22getAvailableBarbersForDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%226006992f04da31ffea24b71bc890e85b0f332eb0e2%22%2C%22exportedName%22%3A%22getAvailabilityWindowsForBarberOnDateAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22605145aaabbb36ba11c06887fe7b5b51f13088fe9a%22%2C%22exportedName%22%3A%22cancelAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%22607bf0fec5f731ad7f6522e732f05af8e037ff5aed%22%2C%22exportedName%22%3A%22concludeAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c95d3906a919970ea0237dbf1cfdf97d9980585a%22%2C%22exportedName%22%3A%22updateAppointment%22%2C%22filename%22%3A%22app%2Fadmin%2Fdashboard%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fclient%2Fprofile%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200f4070e3ea1880af80dee15b8192076d2179efea0%22%2C%22exportedName%22%3A%22getClientProfileAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409765b7401d698a1064d27e77de1258bd09f3a890%22%2C%22exportedName%22%3A%22updateClientPhoneAction%22%2C%22filename%22%3A%22app%2Fclient%2Fprofile%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/client/schedule/page": "action-browser"
+      },
+      "filename": "app/client/profile/actions.ts",
+      "exportedName": "updateClientPhoneAction"
+    },
+    "4048d14d4ccb515193cab5d16bf5a804c57c4bc48e": {
+      "workers": {
+        "app/admin/products/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fproducts%2Factions.ts%22%2C%5B%7B%22id%22%3A%224048d14d4ccb515193cab5d16bf5a804c57c4bc48e%22%2C%22exportedName%22%3A%22toggleProductStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%224064af0b83209f3733b4d8d16227cbd35a9b352b3f%22%2C%22exportedName%22%3A%22createProductAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240ac35c240691b06614b5d2b34c814a86408f50879%22%2C%22exportedName%22%3A%22createProduct%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%226001b7c1d3f876436bf07178bfbb504fec603a77aa%22%2C%22exportedName%22%3A%22toggleProductStatusAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%22600a76d4630cc4daaf5cf95d8d54baa130e185571e%22%2C%22exportedName%22%3A%22updateProduct%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%22603d444dd2273d3477c4a61ab2e3ea6180fc3713f2%22%2C%22exportedName%22%3A%22updateProductAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/admin/products/page": "action-browser"
+      },
+      "filename": "app/admin/products/actions.ts",
+      "exportedName": "toggleProductStatus"
+    },
+    "4064af0b83209f3733b4d8d16227cbd35a9b352b3f": {
+      "workers": {
+        "app/admin/products/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fproducts%2Factions.ts%22%2C%5B%7B%22id%22%3A%224048d14d4ccb515193cab5d16bf5a804c57c4bc48e%22%2C%22exportedName%22%3A%22toggleProductStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%224064af0b83209f3733b4d8d16227cbd35a9b352b3f%22%2C%22exportedName%22%3A%22createProductAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240ac35c240691b06614b5d2b34c814a86408f50879%22%2C%22exportedName%22%3A%22createProduct%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%226001b7c1d3f876436bf07178bfbb504fec603a77aa%22%2C%22exportedName%22%3A%22toggleProductStatusAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%22600a76d4630cc4daaf5cf95d8d54baa130e185571e%22%2C%22exportedName%22%3A%22updateProduct%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%22603d444dd2273d3477c4a61ab2e3ea6180fc3713f2%22%2C%22exportedName%22%3A%22updateProductAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/admin/products/page": "action-browser"
+      },
+      "filename": "app/admin/products/actions.ts",
+      "exportedName": "createProductAction"
+    },
+    "40ac35c240691b06614b5d2b34c814a86408f50879": {
+      "workers": {
+        "app/admin/products/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fproducts%2Factions.ts%22%2C%5B%7B%22id%22%3A%224048d14d4ccb515193cab5d16bf5a804c57c4bc48e%22%2C%22exportedName%22%3A%22toggleProductStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%224064af0b83209f3733b4d8d16227cbd35a9b352b3f%22%2C%22exportedName%22%3A%22createProductAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240ac35c240691b06614b5d2b34c814a86408f50879%22%2C%22exportedName%22%3A%22createProduct%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%226001b7c1d3f876436bf07178bfbb504fec603a77aa%22%2C%22exportedName%22%3A%22toggleProductStatusAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%22600a76d4630cc4daaf5cf95d8d54baa130e185571e%22%2C%22exportedName%22%3A%22updateProduct%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%22603d444dd2273d3477c4a61ab2e3ea6180fc3713f2%22%2C%22exportedName%22%3A%22updateProductAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/admin/products/page": "action-browser"
+      },
+      "filename": "app/admin/products/actions.ts",
+      "exportedName": "createProduct"
+    },
+    "6001b7c1d3f876436bf07178bfbb504fec603a77aa": {
+      "workers": {
+        "app/admin/products/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fproducts%2Factions.ts%22%2C%5B%7B%22id%22%3A%224048d14d4ccb515193cab5d16bf5a804c57c4bc48e%22%2C%22exportedName%22%3A%22toggleProductStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%224064af0b83209f3733b4d8d16227cbd35a9b352b3f%22%2C%22exportedName%22%3A%22createProductAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240ac35c240691b06614b5d2b34c814a86408f50879%22%2C%22exportedName%22%3A%22createProduct%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%226001b7c1d3f876436bf07178bfbb504fec603a77aa%22%2C%22exportedName%22%3A%22toggleProductStatusAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%22600a76d4630cc4daaf5cf95d8d54baa130e185571e%22%2C%22exportedName%22%3A%22updateProduct%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%22603d444dd2273d3477c4a61ab2e3ea6180fc3713f2%22%2C%22exportedName%22%3A%22updateProductAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/admin/products/page": "action-browser"
+      },
+      "filename": "app/admin/products/actions.ts",
+      "exportedName": "toggleProductStatusAction"
+    },
+    "600a76d4630cc4daaf5cf95d8d54baa130e185571e": {
+      "workers": {
+        "app/admin/products/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fproducts%2Factions.ts%22%2C%5B%7B%22id%22%3A%224048d14d4ccb515193cab5d16bf5a804c57c4bc48e%22%2C%22exportedName%22%3A%22toggleProductStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%224064af0b83209f3733b4d8d16227cbd35a9b352b3f%22%2C%22exportedName%22%3A%22createProductAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240ac35c240691b06614b5d2b34c814a86408f50879%22%2C%22exportedName%22%3A%22createProduct%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%226001b7c1d3f876436bf07178bfbb504fec603a77aa%22%2C%22exportedName%22%3A%22toggleProductStatusAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%22600a76d4630cc4daaf5cf95d8d54baa130e185571e%22%2C%22exportedName%22%3A%22updateProduct%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%22603d444dd2273d3477c4a61ab2e3ea6180fc3713f2%22%2C%22exportedName%22%3A%22updateProductAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/admin/products/page": "action-browser"
+      },
+      "filename": "app/admin/products/actions.ts",
+      "exportedName": "updateProduct"
+    },
+    "603d444dd2273d3477c4a61ab2e3ea6180fc3713f2": {
+      "workers": {
+        "app/admin/products/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fproducts%2Factions.ts%22%2C%5B%7B%22id%22%3A%224048d14d4ccb515193cab5d16bf5a804c57c4bc48e%22%2C%22exportedName%22%3A%22toggleProductStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%224064af0b83209f3733b4d8d16227cbd35a9b352b3f%22%2C%22exportedName%22%3A%22createProductAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240ac35c240691b06614b5d2b34c814a86408f50879%22%2C%22exportedName%22%3A%22createProduct%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%226001b7c1d3f876436bf07178bfbb504fec603a77aa%22%2C%22exportedName%22%3A%22toggleProductStatusAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%22600a76d4630cc4daaf5cf95d8d54baa130e185571e%22%2C%22exportedName%22%3A%22updateProduct%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%2C%7B%22id%22%3A%22603d444dd2273d3477c4a61ab2e3ea6180fc3713f2%22%2C%22exportedName%22%3A%22updateProductAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fproducts%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/admin/products/page": "action-browser"
+      },
+      "filename": "app/admin/products/actions.ts",
+      "exportedName": "updateProductAction"
+    },
+    "405b303e60f3d8d8134b4b73681a217086743f4b57": {
+      "workers": {
+        "app/admin/clients/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fclients%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240320bbce80cee1770570680e588d6419e2b03f9cc%22%2C%22exportedName%22%3A%22updateClientAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fclients%2Factions.ts%22%7D%2C%7B%22id%22%3A%22405b303e60f3d8d8134b4b73681a217086743f4b57%22%2C%22exportedName%22%3A%22createClientAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fclients%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/admin/clients/page": "action-browser"
+      },
+      "filename": "app/admin/clients/actions.ts",
+      "exportedName": "createClientAction"
     },
     "407465eab6053cf8bcdca143e9d91cd9e6ae91dccd": {
       "workers": {
         "app/admin/professional/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-new-dialog%2Fprofessional-new-dialog.tsx%22%2C%5B%7B%22id%22%3A%22401b7cab2a3164f744e442e34d825e848fbfc8f36e%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-new-dialog%2Fprofessional-new-dialog.tsx%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fprofessional%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407465eab6053cf8bcdca143e9d91cd9e6ae91dccd%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240a72b2a92e15205546c99e32ee861a040cdd41585%22%2C%22exportedName%22%3A%22updateBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240f20ed564dac6f3dafa20acef46e2e6b4369354a8%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%2C%5B%7B%22id%22%3A%2260a923a016004d315b6860d02aa3fa50467ca44e83%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%7D%5D%5D%5D&__client_imported__=!",
+          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fprofessional%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407465eab6053cf8bcdca143e9d91cd9e6ae91dccd%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240a72b2a92e15205546c99e32ee861a040cdd41585%22%2C%22exportedName%22%3A%22updateBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240f20ed564dac6f3dafa20acef46e2e6b4369354a8%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%2C%5B%7B%22id%22%3A%2260a923a016004d315b6860d02aa3fa50467ca44e83%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         }
       },
@@ -424,7 +419,7 @@
     "40a72b2a92e15205546c99e32ee861a040cdd41585": {
       "workers": {
         "app/admin/professional/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-new-dialog%2Fprofessional-new-dialog.tsx%22%2C%5B%7B%22id%22%3A%22401b7cab2a3164f744e442e34d825e848fbfc8f36e%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-new-dialog%2Fprofessional-new-dialog.tsx%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fprofessional%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407465eab6053cf8bcdca143e9d91cd9e6ae91dccd%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240a72b2a92e15205546c99e32ee861a040cdd41585%22%2C%22exportedName%22%3A%22updateBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240f20ed564dac6f3dafa20acef46e2e6b4369354a8%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%2C%5B%7B%22id%22%3A%2260a923a016004d315b6860d02aa3fa50467ca44e83%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%7D%5D%5D%5D&__client_imported__=!",
+          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fprofessional%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407465eab6053cf8bcdca143e9d91cd9e6ae91dccd%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240a72b2a92e15205546c99e32ee861a040cdd41585%22%2C%22exportedName%22%3A%22updateBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240f20ed564dac6f3dafa20acef46e2e6b4369354a8%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%2C%5B%7B%22id%22%3A%2260a923a016004d315b6860d02aa3fa50467ca44e83%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         }
       },
@@ -437,7 +432,7 @@
     "40f20ed564dac6f3dafa20acef46e2e6b4369354a8": {
       "workers": {
         "app/admin/professional/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-new-dialog%2Fprofessional-new-dialog.tsx%22%2C%5B%7B%22id%22%3A%22401b7cab2a3164f744e442e34d825e848fbfc8f36e%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-new-dialog%2Fprofessional-new-dialog.tsx%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fprofessional%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407465eab6053cf8bcdca143e9d91cd9e6ae91dccd%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240a72b2a92e15205546c99e32ee861a040cdd41585%22%2C%22exportedName%22%3A%22updateBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240f20ed564dac6f3dafa20acef46e2e6b4369354a8%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%2C%5B%7B%22id%22%3A%2260a923a016004d315b6860d02aa3fa50467ca44e83%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%7D%5D%5D%5D&__client_imported__=!",
+          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fprofessional%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407465eab6053cf8bcdca143e9d91cd9e6ae91dccd%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240a72b2a92e15205546c99e32ee861a040cdd41585%22%2C%22exportedName%22%3A%22updateBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240f20ed564dac6f3dafa20acef46e2e6b4369354a8%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%2C%5B%7B%22id%22%3A%2260a923a016004d315b6860d02aa3fa50467ca44e83%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         }
       },
@@ -450,7 +445,7 @@
     "60a923a016004d315b6860d02aa3fa50467ca44e83": {
       "workers": {
         "app/admin/professional/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-new-dialog%2Fprofessional-new-dialog.tsx%22%2C%5B%7B%22id%22%3A%22401b7cab2a3164f744e442e34d825e848fbfc8f36e%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-new-dialog%2Fprofessional-new-dialog.tsx%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fprofessional%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407465eab6053cf8bcdca143e9d91cd9e6ae91dccd%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240a72b2a92e15205546c99e32ee861a040cdd41585%22%2C%22exportedName%22%3A%22updateBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240f20ed564dac6f3dafa20acef46e2e6b4369354a8%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%2C%5B%7B%22id%22%3A%2260a923a016004d315b6860d02aa3fa50467ca44e83%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%7D%5D%5D%5D&__client_imported__=!",
+          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fprofessional%2Factions.ts%22%2C%5B%7B%22id%22%3A%22407465eab6053cf8bcdca143e9d91cd9e6ae91dccd%22%2C%22exportedName%22%3A%22toggleBarberStatus%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240a72b2a92e15205546c99e32ee861a040cdd41585%22%2C%22exportedName%22%3A%22updateBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240f20ed564dac6f3dafa20acef46e2e6b4369354a8%22%2C%22exportedName%22%3A%22createBarber%22%2C%22filename%22%3A%22app%2Fadmin%2Fprofessional%2Factions.ts%22%7D%5D%5D%2C%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fcomponents%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%2C%5B%7B%22id%22%3A%2260a923a016004d315b6860d02aa3fa50467ca44e83%22%2C%22exportedName%22%3A%22%24%24RSC_SERVER_ACTION_0%22%2C%22filename%22%3A%22components%2Fprofessional-edit-dialog%2Fprofessional-edit-dialog.tsx%22%7D%5D%5D%5D&__client_imported__=!",
           "async": false
         }
       },
@@ -460,96 +455,18 @@
       "filename": "components/professional-edit-dialog/professional-edit-dialog.tsx",
       "exportedName": "$$RSC_SERVER_ACTION_0"
     },
-    "40398e5c97755d640476d2d07a022207063aea7460": {
+    "40320bbce80cee1770570680e588d6419e2b03f9cc": {
       "workers": {
-        "app/barber/availability/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fbarber%2Favailability%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240398e5c97755d640476d2d07a022207063aea7460%22%2C%22exportedName%22%3A%22saveWeeklyAvailability%22%2C%22filename%22%3A%22app%2Fbarber%2Favailability%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409e937e084ec4766b85847e150eff100d9adf37fc%22%2C%22exportedName%22%3A%22createDailyException%22%2C%22filename%22%3A%22app%2Fbarber%2Favailability%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c36231aa25e0afa354675525dbc64b1f6def5147%22%2C%22exportedName%22%3A%22deleteDailyException%22%2C%22filename%22%3A%22app%2Fbarber%2Favailability%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
+        "app/admin/clients/page": {
+          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fclients%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240320bbce80cee1770570680e588d6419e2b03f9cc%22%2C%22exportedName%22%3A%22updateClientAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fclients%2Factions.ts%22%7D%2C%7B%22id%22%3A%22405b303e60f3d8d8134b4b73681a217086743f4b57%22%2C%22exportedName%22%3A%22createClientAction%22%2C%22filename%22%3A%22app%2Fadmin%2Fclients%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
           "async": false
         }
       },
       "layer": {
-        "app/barber/availability/page": "action-browser"
+        "app/admin/clients/page": "action-browser"
       },
-      "filename": "app/barber/availability/actions.ts",
-      "exportedName": "saveWeeklyAvailability"
-    },
-    "409e937e084ec4766b85847e150eff100d9adf37fc": {
-      "workers": {
-        "app/barber/availability/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fbarber%2Favailability%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240398e5c97755d640476d2d07a022207063aea7460%22%2C%22exportedName%22%3A%22saveWeeklyAvailability%22%2C%22filename%22%3A%22app%2Fbarber%2Favailability%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409e937e084ec4766b85847e150eff100d9adf37fc%22%2C%22exportedName%22%3A%22createDailyException%22%2C%22filename%22%3A%22app%2Fbarber%2Favailability%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c36231aa25e0afa354675525dbc64b1f6def5147%22%2C%22exportedName%22%3A%22deleteDailyException%22%2C%22filename%22%3A%22app%2Fbarber%2Favailability%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/barber/availability/page": "action-browser"
-      },
-      "filename": "app/barber/availability/actions.ts",
-      "exportedName": "createDailyException"
-    },
-    "60c36231aa25e0afa354675525dbc64b1f6def5147": {
-      "workers": {
-        "app/barber/availability/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fbarber%2Favailability%2Factions.ts%22%2C%5B%7B%22id%22%3A%2240398e5c97755d640476d2d07a022207063aea7460%22%2C%22exportedName%22%3A%22saveWeeklyAvailability%22%2C%22filename%22%3A%22app%2Fbarber%2Favailability%2Factions.ts%22%7D%2C%7B%22id%22%3A%22409e937e084ec4766b85847e150eff100d9adf37fc%22%2C%22exportedName%22%3A%22createDailyException%22%2C%22filename%22%3A%22app%2Fbarber%2Favailability%2Factions.ts%22%7D%2C%7B%22id%22%3A%2260c36231aa25e0afa354675525dbc64b1f6def5147%22%2C%22exportedName%22%3A%22deleteDailyException%22%2C%22filename%22%3A%22app%2Fbarber%2Favailability%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/barber/availability/page": "action-browser"
-      },
-      "filename": "app/barber/availability/actions.ts",
-      "exportedName": "deleteDailyException"
-    },
-    "4058c7c47af805428007ee7ad352161d221feaf29c": {
-      "workers": {
-        "app/admin/checkout/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fcheckout%2Factions.ts%22%2C%5B%7B%22id%22%3A%22404e8f6ed49cfca1cf42a3b257a91b676d83c5a2e4%22%2C%22exportedName%22%3A%22cancelServiceOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%2C%7B%22id%22%3A%224058c7c47af805428007ee7ad352161d221feaf29c%22%2C%22exportedName%22%3A%22cancelProductOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%2C%7B%22id%22%3A%22405c4d23891d88deb45f934635447d58051a03451d%22%2C%22exportedName%22%3A%22finalizeProductOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406f23aa413607bf9db10496d3ef4939937c592736%22%2C%22exportedName%22%3A%22finalizeServiceOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/admin/checkout/page": "rsc"
-      },
-      "filename": "app/admin/checkout/actions.ts",
-      "exportedName": "cancelProductOrder"
-    },
-    "405c4d23891d88deb45f934635447d58051a03451d": {
-      "workers": {
-        "app/admin/checkout/page": {
-          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fcheckout%2Factions.ts%22%2C%5B%7B%22id%22%3A%22404e8f6ed49cfca1cf42a3b257a91b676d83c5a2e4%22%2C%22exportedName%22%3A%22cancelServiceOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%2C%7B%22id%22%3A%224058c7c47af805428007ee7ad352161d221feaf29c%22%2C%22exportedName%22%3A%22cancelProductOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%2C%7B%22id%22%3A%22405c4d23891d88deb45f934635447d58051a03451d%22%2C%22exportedName%22%3A%22finalizeProductOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406f23aa413607bf9db10496d3ef4939937c592736%22%2C%22exportedName%22%3A%22finalizeServiceOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/admin/checkout/page": "rsc"
-      },
-      "filename": "app/admin/checkout/actions.ts",
-      "exportedName": "finalizeProductOrder"
-    },
-    "00a98bca139908579d622c7b1c2793e65497934a6a": {
-      "workers": {
-        "app/painel/login/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fpainel%2Flogin%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200a98bca139908579d622c7b1c2793e65497934a6a%22%2C%22exportedName%22%3A%22logoutPainel%22%2C%22filename%22%3A%22app%2Fpainel%2Flogin%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240234e74e170802fbffdda53e0dc6ea06ca492aa4b%22%2C%22exportedName%22%3A%22loginPainel%22%2C%22filename%22%3A%22app%2Fpainel%2Flogin%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/painel/login/page": "action-browser"
-      },
-      "filename": "app/painel/login/actions.ts",
-      "exportedName": "logoutPainel"
-    },
-    "40234e74e170802fbffdda53e0dc6ea06ca492aa4b": {
-      "workers": {
-        "app/painel/login/page": {
-          "moduleId": "(action-browser)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fpainel%2Flogin%2Factions.ts%22%2C%5B%7B%22id%22%3A%2200a98bca139908579d622c7b1c2793e65497934a6a%22%2C%22exportedName%22%3A%22logoutPainel%22%2C%22filename%22%3A%22app%2Fpainel%2Flogin%2Factions.ts%22%7D%2C%7B%22id%22%3A%2240234e74e170802fbffdda53e0dc6ea06ca492aa4b%22%2C%22exportedName%22%3A%22loginPainel%22%2C%22filename%22%3A%22app%2Fpainel%2Flogin%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=true!",
-          "async": false
-        }
-      },
-      "layer": {
-        "app/painel/login/page": "action-browser"
-      },
-      "filename": "app/painel/login/actions.ts",
-      "exportedName": "loginPainel"
+      "filename": "app/admin/clients/actions.ts",
+      "exportedName": "updateClientAction"
     },
     "40334fe2b27ac30fb9e84aff2d90aec60f66aebb68": {
       "workers": {
@@ -667,6 +584,32 @@
       },
       "filename": "app/admin/checkout/actions.ts",
       "exportedName": "cancelServiceOrder"
+    },
+    "4058c7c47af805428007ee7ad352161d221feaf29c": {
+      "workers": {
+        "app/admin/checkout/page": {
+          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fcheckout%2Factions.ts%22%2C%5B%7B%22id%22%3A%22404e8f6ed49cfca1cf42a3b257a91b676d83c5a2e4%22%2C%22exportedName%22%3A%22cancelServiceOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%2C%7B%22id%22%3A%224058c7c47af805428007ee7ad352161d221feaf29c%22%2C%22exportedName%22%3A%22cancelProductOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%2C%7B%22id%22%3A%22405c4d23891d88deb45f934635447d58051a03451d%22%2C%22exportedName%22%3A%22finalizeProductOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406f23aa413607bf9db10496d3ef4939937c592736%22%2C%22exportedName%22%3A%22finalizeServiceOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/admin/checkout/page": "rsc"
+      },
+      "filename": "app/admin/checkout/actions.ts",
+      "exportedName": "cancelProductOrder"
+    },
+    "405c4d23891d88deb45f934635447d58051a03451d": {
+      "workers": {
+        "app/admin/checkout/page": {
+          "moduleId": "(rsc)/./node_modules/next/dist/build/webpack/loaders/next-flight-action-entry-loader.js?actions=%5B%5B%22%2FUsers%2Fbrunoleal%2FDocuments%2FCursos%2FNEXTJS%2Fbarbearia%2Fsrc%2Fapp%2Fadmin%2Fcheckout%2Factions.ts%22%2C%5B%7B%22id%22%3A%22404e8f6ed49cfca1cf42a3b257a91b676d83c5a2e4%22%2C%22exportedName%22%3A%22cancelServiceOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%2C%7B%22id%22%3A%224058c7c47af805428007ee7ad352161d221feaf29c%22%2C%22exportedName%22%3A%22cancelProductOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%2C%7B%22id%22%3A%22405c4d23891d88deb45f934635447d58051a03451d%22%2C%22exportedName%22%3A%22finalizeProductOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%2C%7B%22id%22%3A%22406f23aa413607bf9db10496d3ef4939937c592736%22%2C%22exportedName%22%3A%22finalizeServiceOrder%22%2C%22filename%22%3A%22app%2Fadmin%2Fcheckout%2Factions.ts%22%7D%5D%5D%5D&__client_imported__=!",
+          "async": false
+        }
+      },
+      "layer": {
+        "app/admin/checkout/page": "rsc"
+      },
+      "filename": "app/admin/checkout/actions.ts",
+      "exportedName": "finalizeProductOrder"
     },
     "406f23aa413607bf9db10496d3ef4939937c592736": {
       "workers": {

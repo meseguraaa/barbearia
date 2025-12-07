@@ -1,8 +1,7 @@
-// src/components/admin-new-client-dialog/admin-new-client-dialog.tsx
+// components/admin-new-client-dialog/admin-new-client-dialog.tsx
 "use client";
 
-import { FormEvent } from "react";
-import { toast } from "sonner";
+import { useState, useTransition } from "react";
 
 import {
   Dialog,
@@ -15,51 +14,42 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { createClientAction } from "@/app/admin/clients/actions";
 
+// máscara (99) 99999-9999
+function formatPhone(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 11); // até 11 dígitos
+
+  if (digits.length === 0) return "";
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 7) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  }
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
 export function AdminNewClientDialog() {
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  const [open, setOpen] = useState(false);
+  const [isPending, startTransition] = useTransition();
 
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    const email = String(formData.get("email") ?? "").trim();
+  const [phone, setPhone] = useState("");
 
-    if (!email) {
-      toast.error("Informe um e-mail.");
-      return;
-    }
+  function handlePhoneChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const masked = formatPhone(e.target.value);
+    setPhone(masked);
+  }
 
-    try {
-      const res = await fetch(
-        `/api/admin/check-client-email?email=${encodeURIComponent(email)}`,
-      );
+  function handleCreate(formData: FormData) {
+    // garante que o valor que vai pra action está mascarado
+    formData.set("phone", phone);
 
-      // se a rota der erro, tratamos com toast e não quebramos a tela
-      if (!res.ok) {
-        console.error(
-          "Falha ao chamar /api/admin/check-client-email",
-          res.status,
-        );
-        toast.error("Não foi possível validar o e-mail. Tente novamente.");
-        return;
-      }
-
-      const data = (await res.json()) as { exists: boolean };
-
-      if (data.exists) {
-        toast.error("E-mail já cadastrado.");
-        return;
-      }
-
-      // Se passou na validação, envia o form normalmente → dispara o server action
-      form.submit();
-    } catch (error) {
-      console.error("Erro ao verificar e-mail:", error);
-      toast.error("Não foi possível validar o e-mail. Tente novamente.");
-    }
+    startTransition(async () => {
+      await createClientAction(formData);
+      // se a action não lançar erro, fechamos o modal
+      setOpen(false);
+    });
   }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={(next) => !isPending && setOpen(next)}>
       <DialogTrigger asChild>
         <Button variant="brand">Novo cliente</Button>
       </DialogTrigger>
@@ -71,23 +61,20 @@ export function AdminNewClientDialog() {
           </DialogTitle>
         </DialogHeader>
 
-        <form
-          action={createClientAction}
-          onSubmit={handleSubmit}
-          className="space-y-4"
-        >
+        <form action={handleCreate} className="space-y-4">
           {/* NOME */}
           <div className="space-y-1">
             <label
               className="text-label-small text-content-secondary"
               htmlFor="name"
             >
-              Nome
+              Nome <span className="text-red-500">*</span>
             </label>
             <Input
               id="name"
               name="name"
               required
+              disabled={isPending}
               className="bg-background-tertiary border-border-primary text-content-primary"
             />
           </div>
@@ -98,54 +85,44 @@ export function AdminNewClientDialog() {
               className="text-label-small text-content-secondary"
               htmlFor="email"
             >
-              E-mail
+              E-mail <span className="text-red-500">*</span>
             </label>
             <Input
               id="email"
               type="email"
               name="email"
               required
+              disabled={isPending}
               className="bg-background-tertiary border-border-primary text-content-primary"
             />
           </div>
 
-          {/* TELEFONE (obrigatório) */}
+          {/* TELEFONE */}
           <div className="space-y-1">
             <label
               className="text-label-small text-content-secondary"
               htmlFor="phone"
             >
-              Telefone
+              Telefone <span className="text-red-500">*</span>
             </label>
             <Input
               id="phone"
               name="phone"
+              type="tel"
               required
+              placeholder="(99) 99999-9999"
+              value={phone}
+              onChange={handlePhoneChange}
+              disabled={isPending}
               className="bg-background-tertiary border-border-primary text-content-primary"
-              placeholder="(11) 99999-9999"
             />
           </div>
 
-          {/* DATA DE NASCIMENTO (dd/mm/aaaa) */}
-          <div className="space-y-1">
-            <label
-              className="text-label-small text-content-secondary"
-              htmlFor="birthday"
-            >
-              Data de nascimento
-            </label>
-            <Input
-              id="birthday"
-              name="birthday"
-              placeholder="dd/mm/aaaa"
-              required
-              className="bg-background-tertiary border-border-primary text-content-primary"
-            />
-          </div>
+          {/* se quiser adicionar aniversário depois, dá pra vir aqui */}
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="submit" variant="brand">
-              Salvar
+            <Button type="submit" variant="brand" disabled={isPending}>
+              {isPending ? "Salvando..." : "Criar cliente"}
             </Button>
           </div>
         </form>
