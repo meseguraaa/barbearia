@@ -1,3 +1,4 @@
+// app/admin/services/actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
@@ -42,7 +43,7 @@ export async function createService(formData: FormData) {
     true,
   );
 
-  // IDs dos profissionais que executam este serviço
+  // IDs dos profissionais que realizam o serviço (checkboxes)
   const rawProfessionalIds = formData.getAll("professionalIds");
   const professionalIds = rawProfessionalIds
     .map((v) => String(v ?? "").trim())
@@ -82,29 +83,24 @@ export async function createService(formData: FormData) {
     }
   }
 
-  // cria o serviço + vínculos com profissionais (se vierem)
-  await prisma.$transaction(async (tx) => {
-    const service = await tx.service.create({
-      data: {
-        name,
-        price,
-        durationMinutes,
-        isActive: true,
-        barberPercentage: barberPercentage ?? 0,
-        cancelLimitHours: cancelLimitHours ?? null,
-        cancelFeePercentage: cancelFeePercentage ?? null,
-      },
-    });
-
-    if (professionalIds.length > 0) {
-      await tx.serviceProfessional.createMany({
-        data: professionalIds.map((barberId) => ({
-          serviceId: service.id,
-          barberId,
+  await prisma.service.create({
+    data: {
+      name,
+      price,
+      durationMinutes,
+      isActive: true,
+      barberPercentage: barberPercentage ?? 0,
+      cancelLimitHours: cancelLimitHours ?? null,
+      cancelFeePercentage: cancelFeePercentage ?? null,
+      // vincula os profissionais (se vierem)
+      professionals: {
+        create: professionalIds.map((barberId) => ({
+          barber: {
+            connect: { id: barberId },
+          },
         })),
-        skipDuplicates: true,
-      });
-    }
+      },
+    },
   });
 
   revalidateAll();
@@ -153,7 +149,7 @@ export async function updateService(id: string, formData: FormData) {
     true,
   );
 
-  // IDs dos profissionais que executam este serviço
+  // IDs dos profissionais selecionados no form
   const rawProfessionalIds = formData.getAll("professionalIds");
   const professionalIds = rawProfessionalIds
     .map((v) => String(v ?? "").trim())
@@ -197,8 +193,8 @@ export async function updateService(id: string, formData: FormData) {
     }
   }
 
-  // atualiza serviço + vínculos com profissionais na mesma transação
   await prisma.$transaction(async (tx) => {
+    // Atualiza os dados do serviço
     await tx.service.update({
       where: { id },
       data: {
@@ -211,12 +207,12 @@ export async function updateService(id: string, formData: FormData) {
       },
     });
 
-    // reseta vínculos antigos
+    // Reseta vínculos antigos
     await tx.serviceProfessional.deleteMany({
       where: { serviceId: id },
     });
 
-    // recria vínculos novos
+    // Cria vínculos novos (se tiver)
     if (professionalIds.length > 0) {
       await tx.serviceProfessional.createMany({
         data: professionalIds.map((barberId) => ({
@@ -405,4 +401,165 @@ export async function updatePlan(id: string, formData: FormData) {
  * CLIENTE x PLANO
  * ===================================================================== */
 
-/* ... resto do arquivo igual ao seu (createClientPlanForClient, expireClientPlan, revalidateClientPlan) ... */
+/**
+ * Atribui um plano a um cliente (cria ClientPlan)
+ */
+export async function createClientPlanForClient(formData: FormData) {
+  const planId = String(formData.get("planId") ?? "").trim();
+  const clientId = String(formData.get("clientId") ?? "").trim();
+
+  if (!planId || !clientId) {
+    throw new Error("Plano e cliente são obrigatórios.");
+  }
+
+  const plan = await prisma.plan.findUnique({
+    where: { id: planId },
+  });
+
+  if (!plan) {
+    throw new Error("Plano não encontrado.");
+  }
+
+  // Regra: 1 plano ativo por cliente
+  const existingActivePlan = await prisma.clientPlan.findFirst({
+    where: {
+      clientId,
+      status: "ACTIVE",
+    },
+  });
+
+  if (existingActivePlan) {
+    throw new Error("Este cliente já possui um plano ativo.");
+  }
+
+  const startDate = new Date();
+  const endDate = new Date();
+  endDate.setDate(endDate.getDate() + plan.durationDays);
+
+  await prisma.clientPlan.create({
+    data: {
+      clientId,
+      planId,
+      startDate,
+      endDate,
+      usedBookings: 0,
+      status: "ACTIVE",
+    },
+  });
+
+  revalidateAll();
+}
+
+/**
+ * Marca um ClientPlan como EXPIRADO
+ */
+export async function expireClientPlan(formData: FormData) {
+  const clientPlanId = String(formData.get("clientPlanId") ?? "").trim();
+
+  if (!clientPlanId) {
+    throw new Error("ID do plano do cliente é obrigatório.");
+  }
+
+  const clientPlan = await prisma.clientPlan.findUnique({
+    where: { id: clientPlanId },
+  });
+
+  if (!clientPlan) {
+    throw new Error("Plano do cliente não encontrado.");
+  }
+
+  if (clientPlan.status !== "ACTIVE") {
+    // nada a fazer, mas não precisa quebrar
+    return;
+  }
+
+  await prisma.clientPlan.update({
+    where: { id: clientPlanId },
+    data: {
+      status: "EXPIRED",
+    },
+  });
+
+  revalidateAll();
+}
+
+/**
+ * Revalida um plano de cliente:
+ * - Expira o plano atual (se ainda não estiver expirado)
+ * - Cria um novo ClientPlan para o mesmo cliente com o plano escolhido
+ */
+export async function revalidateClientPlan(formData: FormData) {
+  const clientPlanId = String(formData.get("clientPlanId") ?? "").trim();
+  const newPlanId = String(formData.get("newPlanId") ?? "").trim();
+
+  if (!clientPlanId || !newPlanId) {
+    throw new Error("Plano atual e novo plano são obrigatórios.");
+  }
+
+  const clientPlan = await prisma.clientPlan.findUnique({
+    where: { id: clientPlanId },
+    include: {
+      plan: true,
+    },
+  });
+
+  if (!clientPlan) {
+    throw new Error("Plano do cliente não encontrado.");
+  }
+
+  // Agora aceitamos revalidar planos ACTIVE ou EXPIRED,
+  // desde que já tenham todos os créditos usados.
+  if (clientPlan.status !== "ACTIVE" && clientPlan.status !== "EXPIRED") {
+    throw new Error("Apenas planos ativos ou expirados podem ser revalidados.");
+  }
+
+  // Regra de negócio: só revalidar se já usou todos os créditos
+  const totalBookings = clientPlan.plan.totalBookings;
+  if (clientPlan.usedBookings < totalBookings) {
+    throw new Error(
+      "Este plano ainda possui créditos disponíveis e não pode ser revalidado.",
+    );
+  }
+
+  const newPlan = await prisma.plan.findUnique({
+    where: { id: newPlanId },
+  });
+
+  if (!newPlan) {
+    throw new Error("Novo plano não encontrado.");
+  }
+
+  if (!newPlan.isActive) {
+    throw new Error("Não é possível revalidar com um plano inativo.");
+  }
+
+  const startDate = new Date();
+  const endDate = new Date();
+  endDate.setDate(endDate.getDate() + newPlan.durationDays);
+
+  await prisma.$transaction(async (tx) => {
+    // Expira o plano atual (caso ainda não esteja expirado)
+    if (clientPlan.status !== "EXPIRED") {
+      await tx.clientPlan.update({
+        where: { id: clientPlanId },
+        data: {
+          status: "EXPIRED",
+        },
+      });
+    }
+
+    // Cria um novo plano para o cliente
+    await tx.clientPlan.create({
+      data: {
+        clientId: clientPlan.clientId,
+        planId: newPlan.id,
+        startDate,
+        endDate,
+        usedBookings: 0,
+        status: "ACTIVE",
+      },
+    });
+  });
+
+  revalidateAll();
+}
