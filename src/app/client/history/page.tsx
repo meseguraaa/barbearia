@@ -10,6 +10,7 @@ import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
 import { OrderStatusBadge } from "@/components/order-status-badge";
 import { Button } from "@/components/ui/button";
 import { MonthPicker } from "@/components/month-picker";
+import { ClientAppointmentReviewDialog } from "@/components/client-appointment-review-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -53,62 +54,84 @@ export default async function ClientHistoryPage({
   const monthStart = startOfMonth(referenceDate);
   const monthEnd = endOfMonth(referenceDate);
 
-  const [doneAppointments, canceledAppointments, orders] = await Promise.all([
-    prisma.appointment.findMany({
-      where: {
-        clientId: userId,
-        status: "DONE",
-        scheduleAt: {
-          gte: monthStart,
-          lte: monthEnd,
-        },
-      },
-      orderBy: {
-        scheduleAt: "desc",
-      },
-      include: {
-        barber: true,
-        service: true,
-      },
-    }),
-    prisma.appointment.findMany({
-      where: {
-        clientId: userId,
-        status: "CANCELED",
-        scheduleAt: {
-          gte: monthStart,
-          lte: monthEnd,
-        },
-      },
-      orderBy: {
-        scheduleAt: "desc",
-      },
-      include: {
-        barber: true,
-        service: true,
-      },
-    }),
-    prisma.order.findMany({
-      where: {
-        clientId: userId,
-        createdAt: {
-          gte: monthStart,
-          lte: monthEnd,
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-      include: {
-        items: {
-          include: {
-            service: true,
-            product: true,
+  const [doneAppointments, canceledAppointments, orders, reviewTags] =
+    await Promise.all([
+      prisma.appointment.findMany({
+        where: {
+          clientId: userId,
+          status: "DONE",
+          scheduleAt: {
+            gte: monthStart,
+            lte: monthEnd,
           },
         },
-      },
-    }),
-  ]);
+        orderBy: {
+          scheduleAt: "desc",
+        },
+        include: {
+          barber: true,
+          service: true,
+          review: {
+            include: {
+              tags: {
+                include: {
+                  tag: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+      prisma.appointment.findMany({
+        where: {
+          clientId: userId,
+          status: "CANCELED",
+          scheduleAt: {
+            gte: monthStart,
+            lte: monthEnd,
+          },
+        },
+        orderBy: {
+          scheduleAt: "desc",
+        },
+        include: {
+          barber: true,
+          service: true,
+        },
+      }),
+      prisma.order.findMany({
+        where: {
+          clientId: userId,
+          createdAt: {
+            gte: monthStart,
+            lte: monthEnd,
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        include: {
+          items: {
+            include: {
+              service: true,
+              product: true,
+            },
+          },
+        },
+      }),
+      prisma.reviewTag.findMany({
+        where: {
+          isActive: true,
+        },
+        orderBy: {
+          label: "asc",
+        },
+        select: {
+          id: true,
+          label: true,
+        },
+      }),
+    ]);
 
   // só pedidos que têm pelo menos 1 produto
   const productOrders = orders.filter((order) =>
@@ -194,6 +217,27 @@ export default async function ClientHistoryPage({
                     : 0;
 
                 const monthKey = format(appt.scheduleAt, "yyyy-MM");
+                const hasReview = !!appt.review;
+
+                let reviewStars = "";
+                let reviewTagsLabels: string[] = [];
+                let reviewCommentPreview = "";
+
+                if (appt.review) {
+                  const filled = "★".repeat(appt.review.rating);
+                  const empty = "☆".repeat(5 - appt.review.rating);
+                  reviewStars = filled + empty;
+
+                  reviewTagsLabels =
+                    appt.review.tags?.map((t) => t.tag.label) ?? [];
+
+                  if (appt.review.comment) {
+                    reviewCommentPreview =
+                      appt.review.comment.length > 80
+                        ? appt.review.comment.slice(0, 77) + "..."
+                        : appt.review.comment;
+                  }
+                }
 
                 return (
                   <div
@@ -201,8 +245,8 @@ export default async function ClientHistoryPage({
                     data-month={monthKey}
                     className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border-primary bg-background-tertiary px-4 py-2.5"
                   >
-                    {/* ESQUERDA: descrição + data + barbeiro */}
-                    <div className="flex-1 min-w-0">
+                    {/* ESQUERDA: descrição + data + barbeiro + avaliação/botão */}
+                    <div className="flex-1 min-w-0 space-y-1">
                       <p className="text-paragraph-small text-content-primary truncate">
                         {appt.description}
                       </p>
@@ -217,10 +261,42 @@ export default async function ClientHistoryPage({
                           </>
                         )}
                       </p>
+
+                      {/* Avaliação ou botão para avaliar */}
+                      {hasReview ? (
+                        <div className="flex flex-wrap items-center gap-2 text-paragraph-small">
+                          <span className="text-yellow-500">{reviewStars}</span>
+
+                          {reviewTagsLabels.length > 0 && (
+                            <span className="text-content-secondary truncate">
+                              · {reviewTagsLabels.slice(0, 3).join(" · ")}
+                            </span>
+                          )}
+
+                          {reviewCommentPreview && (
+                            <span className="text-content-tertiary truncate">
+                              · “{reviewCommentPreview}”
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="pt-1">
+                          <ClientAppointmentReviewDialog
+                            defaultOpen={false}
+                            appointment={{
+                              id: appt.id,
+                              barberName: appt.barber?.name ?? "Profissional",
+                              serviceName: appt.service?.name ?? "Atendimento",
+                              scheduleAt: appt.scheduleAt,
+                            }}
+                            tags={reviewTags}
+                          />
+                        </div>
+                      )}
                     </div>
 
                     {/* DIREITA: valor + status */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-col items-end gap-1 min-w-[120px]">
                       <span className="text-paragraph-small font-semibold text-content-primary whitespace-nowrap">
                         {currencyFormatter.format(priceNumber)}
                       </span>

@@ -162,6 +162,7 @@ export default async function AdminCheckoutPage({
             Finalize os pagamentos de atendimentos e pedidos de produtos.
           </p>
         </div>
+        <MonthPicker />
       </header>
 
       {/* ================================
@@ -497,8 +498,6 @@ function OrdersSection({
             Mês selecionado: <span className="font-medium">{monthLabel}</span>
           </p>
         </div>
-
-        <MonthPicker />
       </div>
 
       {orders.length === 0 ? (

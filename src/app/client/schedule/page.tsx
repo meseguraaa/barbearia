@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { nextAuthOptions } from "@/lib/nextauth";
 import { redirect } from "next/navigation";
@@ -14,6 +13,7 @@ import type { Appointment as AppointmentType } from "@/types/appointment";
 import type { Barber } from "@/types/barber";
 import type { Service } from "@/types/service";
 import { ClientProfileDialog } from "@/components/client-profile-dialog";
+import { ClientAppointmentReviewDialog } from "@/components/client-appointment-review-dialog";
 
 // força essa página a ser dinâmica (sem cache estático)
 export const dynamic = "force-dynamic";
@@ -58,6 +58,71 @@ export default async function Home({ searchParams }: HomeProps) {
   // usado pra escolher o texto "primeira vez"
   const isFirstTimeProfile =
     dbUser?.role === "CLIENT" && shouldOpenProfileModal;
+
+  // 🔎 Busca atendimento DONE mais recente, sem avaliação e sem modal mostrado ainda
+  let pendingReviewAppointment: {
+    id: string;
+    scheduleAt: Date;
+    barberName: string;
+    serviceName: string;
+  } | null = null;
+
+  let reviewTags:
+    | {
+        id: string;
+        label: string;
+      }[]
+    | [] = [];
+
+  if (dbUser?.role === "CLIENT") {
+    const appointment = await prisma.appointment.findFirst({
+      where: {
+        clientId: userId,
+        status: "DONE",
+        reviewModalShown: false,
+        review: {
+          is: null,
+        },
+      },
+      orderBy: {
+        scheduleAt: "desc",
+      },
+      include: {
+        barber: true,
+        service: true,
+      },
+    });
+
+    if (appointment) {
+      pendingReviewAppointment = {
+        id: appointment.id,
+        scheduleAt: appointment.scheduleAt,
+        barberName: appointment.barber?.name ?? "Profissional",
+        serviceName: appointment.service?.name ?? "Atendimento",
+      };
+
+      // 🔹 Só buscamos as tags se realmente houver avaliação pendente
+      reviewTags = await prisma.reviewTag.findMany({
+        where: {
+          isActive: true,
+        },
+        orderBy: {
+          label: "asc",
+        },
+        select: {
+          id: true,
+          label: true,
+        },
+      });
+    }
+  }
+
+  // 🔓 Só abrimos o modal de avaliação automaticamente se:
+  // - for cliente
+  // - tiver atendimento pendente de avaliação
+  // - e NÃO estiver abrindo o modal de perfil (prioridade para o perfil)
+  const shouldOpenReviewModal =
+    !!pendingReviewAppointment && !shouldOpenProfileModal;
 
   const resolvedSearchParams = await searchParams;
   const dateParam = resolvedSearchParams.date;
@@ -262,13 +327,29 @@ export default async function Home({ searchParams }: HomeProps) {
             <p className="text-title-size text-content-primary">{userName}</p>
           </div>
 
-          {/* Modal de perfil abre automaticamente se faltar telefone/aniversário */}
-          <ClientProfileDialog
-            userName={userName}
-            userImage={userImage}
-            defaultOpen={shouldOpenProfileModal}
-            isFirstTime={isFirstTimeProfile}
-          />
+          <div className="flex items-center gap-3">
+            {/* Modal de avaliação pós-login (abre automaticamente se houver atendimento pendente de avaliação) */}
+            {pendingReviewAppointment && (
+              <ClientAppointmentReviewDialog
+                defaultOpen={shouldOpenReviewModal}
+                appointment={{
+                  id: pendingReviewAppointment.id,
+                  barberName: pendingReviewAppointment.barberName,
+                  serviceName: pendingReviewAppointment.serviceName,
+                  scheduleAt: pendingReviewAppointment.scheduleAt,
+                }}
+                tags={reviewTags}
+              />
+            )}
+
+            {/* Modal de perfil abre automaticamente se faltar telefone/aniversário */}
+            <ClientProfileDialog
+              userName={userName}
+              userImage={userImage}
+              defaultOpen={shouldOpenProfileModal}
+              isFirstTime={isFirstTimeProfile}
+            />
+          </div>
         </header>
 
         {/* TÍTULO DA AGENDA */}

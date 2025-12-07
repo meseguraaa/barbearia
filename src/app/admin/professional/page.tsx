@@ -55,6 +55,13 @@ type DailyAvailabilityRow = {
   intervals: { startTime: string; endTime: string }[];
 };
 
+type ProfessionalReviewStats = {
+  avgRating: number;
+  totalReviews: number;
+  ratingsCount: { rating: number; count: number }[];
+  topTags: { label: string; count: number }[];
+};
+
 type ProfessionalRow = {
   id: string;
   name: string;
@@ -67,6 +74,7 @@ type ProfessionalRow = {
   userId: string | null;
   weeklyAvailabilities: WeeklyAvailabilityRow[];
   dailyAvailabilities: DailyAvailabilityRow[];
+  reviewStats: ProfessionalReviewStats | null;
 };
 
 function buildWeeklySummaryLabel(weekly: WeeklyAvailabilityRow[]): string {
@@ -123,37 +131,91 @@ export default async function ProfessionalsPage() {
       dailyAvailabilities: {
         include: { intervals: true },
       },
+      reviews: {
+        include: {
+          tags: {
+            include: {
+              tag: true,
+            },
+          },
+        },
+      },
     },
   });
 
-  const rows: ProfessionalRow[] = barbers.map((barber) => ({
-    id: barber.id,
-    name: barber.name,
-    email: barber.email,
-    phone: barber.phone ?? "—",
-    // 🔹 foto vem do User.image
-    imageUrl: barber.user?.image ?? null,
-    isActive: barber.isActive,
-    createdAt: barber.createdAt,
-    updatedAt: barber.updatedAt,
-    userId: barber.userId,
-    weeklyAvailabilities: barber.weeklyAvailabilities.map((w) => ({
-      weekday: w.weekday,
-      isActive: w.isActive,
-      intervals: w.intervals.map((i) => ({
-        startTime: i.startTime,
-        endTime: i.endTime,
+  const rows: ProfessionalRow[] = barbers.map((barber) => {
+    const reviews = barber.reviews ?? [];
+    let reviewStats: ProfessionalReviewStats | null = null;
+
+    if (reviews.length > 0) {
+      const totalReviews = reviews.length;
+      const sumRatings = reviews.reduce((acc, r) => acc + r.rating, 0);
+      const avgRating = sumRatings / totalReviews;
+
+      // distribuição de notas 1..5
+      const ratingsCountMap = new Map<number, number>();
+      for (let i = 1; i <= 5; i++) ratingsCountMap.set(i, 0);
+      for (const r of reviews) {
+        ratingsCountMap.set(r.rating, (ratingsCountMap.get(r.rating) ?? 0) + 1);
+      }
+      const ratingsCount = Array.from(ratingsCountMap.entries())
+        .map(([rating, count]) => ({ rating, count }))
+        .sort((a, b) => b.rating - a.rating);
+
+      // tags mais usadas
+      const tagMap = new Map<string, number>();
+      for (const r of reviews) {
+        for (const rt of r.tags ?? []) {
+          const label = rt.tag.label;
+          tagMap.set(label, (tagMap.get(label) ?? 0) + 1);
+        }
+      }
+      const topTags = Array.from(tagMap.entries())
+        .map(([label, count]) => ({ label, count }))
+        .sort((a, b) => {
+          if (b.count !== a.count) return b.count - a.count;
+          return a.label.localeCompare(b.label);
+        })
+        .slice(0, 5);
+
+      reviewStats = {
+        avgRating,
+        totalReviews,
+        ratingsCount,
+        topTags,
+      };
+    }
+
+    return {
+      id: barber.id,
+      name: barber.name,
+      email: barber.email,
+      phone: barber.phone ?? "—",
+      // 🔹 foto vem do User.image
+      imageUrl: barber.user?.image ?? null,
+      isActive: barber.isActive,
+      createdAt: barber.createdAt,
+      updatedAt: barber.updatedAt,
+      userId: barber.userId,
+      weeklyAvailabilities: barber.weeklyAvailabilities.map((w) => ({
+        weekday: w.weekday,
+        isActive: w.isActive,
+        intervals: w.intervals.map((i) => ({
+          startTime: i.startTime,
+          endTime: i.endTime,
+        })),
       })),
-    })),
-    dailyAvailabilities: barber.dailyAvailabilities.map((d) => ({
-      date: d.date,
-      type: d.type,
-      intervals: d.intervals.map((i) => ({
-        startTime: i.startTime,
-        endTime: i.endTime,
+      dailyAvailabilities: barber.dailyAvailabilities.map((d) => ({
+        date: d.date,
+        type: d.type,
+        intervals: d.intervals.map((i) => ({
+          startTime: i.startTime,
+          endTime: i.endTime,
+        })),
       })),
-    })),
-  }));
+      reviewStats,
+    };
+  });
 
   const activeRows = rows.filter((r) => r.isActive);
   const inactiveRows = rows.filter((r) => !r.isActive);
@@ -163,6 +225,9 @@ export default async function ProfessionalsPage() {
     const exceptionsSummary = buildExceptionsSummaryLabel(
       row.dailyAvailabilities,
     );
+
+    const review = row.reviewStats;
+    const avgRatingDisplay = review ? review.avgRating.toFixed(2) : "—";
 
     return (
       <AccordionItem
@@ -255,9 +320,97 @@ export default async function ProfessionalsPage() {
           </div>
         </div>
 
-        {/* CONTEÚDO: DISPONIBILIDADE (SOMENTE LEITURA) */}
+        {/* CONTEÚDO: REPUTAÇÃO + DISPONIBILIDADE (SOMENTE LEITURA) */}
         <AccordionContent className="border-t border-border-primary px-4 py-4">
           <div className="space-y-6">
+            {/* BLOCO: Reputação do profissional */}
+            <div className="rounded-2xl border border-border-primary bg-background-secondary p-4 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                <div>
+                  <h2 className="text-label-small text-content-primary">
+                    Reputação do profissional
+                  </h2>
+                  <p className="text-paragraph-small text-content-secondary">
+                    Visão geral das avaliações feitas pelos clientes nos
+                    atendimentos deste profissional.
+                  </p>
+                </div>
+                {review && (
+                  <div className="text-right">
+                    <p className="text-paragraph-small text-content-secondary">
+                      Nota média
+                    </p>
+                    <p className="text-title font-semibold text-content-primary">
+                      {avgRatingDisplay}
+                      <span className="ml-2 text-yellow-500 align-middle">
+                        {"★".repeat(Math.round(review.avgRating))}
+                      </span>
+                    </p>
+                    <p className="text-paragraph-small text-content-secondary">
+                      {review.totalReviews}{" "}
+                      {review.totalReviews === 1 ? "avaliação" : "avaliações"}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {!review ? (
+                <div className="mt-2 rounded-xl border border-dashed border-border-primary bg-background-tertiary px-4 py-6 text-center text-paragraph-small text-content-secondary">
+                  Ainda não há avaliações registradas para este profissional.
+                </div>
+              ) : (
+                <div className="grid gap-4 md:grid-cols-[2fr,3fr]">
+                  {/* Distribuição de notas */}
+                  <div className="space-y-2">
+                    <p className="text-label-small text-content-primary">
+                      Distribuição de notas
+                    </p>
+                    <div className="space-y-1 text-[11px] text-content-secondary">
+                      {review.ratingsCount.map((r) => (
+                        <div
+                          key={r.rating}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <span className="flex items-center gap-1">
+                            <span className="text-yellow-500">{r.rating}★</span>
+                          </span>
+                          <span className="text-content-primary font-medium">
+                            {r.count}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Tags mais frequentes */}
+                  <div className="space-y-2">
+                    <p className="text-label-small text-content-primary">
+                      Principais motivos citados
+                    </p>
+                    {review.topTags.length === 0 ? (
+                      <p className="text-[11px] text-content-secondary">
+                        Ainda não há tags suficientes para exibir aqui.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {review.topTags.map((tag) => (
+                          <span
+                            key={tag.label}
+                            className="rounded-full border border-border-primary bg-background-tertiary px-3 py-1 text-[11px] text-content-secondary"
+                          >
+                            {tag.label}{" "}
+                            <span className="text-content-tertiary">
+                              · {tag.count}
+                            </span>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* BLOCO: Disponibilidade semanal */}
             <div className="rounded-2xl border border-border-primary bg-background-secondary p-4 space-y-4">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
@@ -425,7 +578,7 @@ export default async function ProfessionalsPage() {
         <div>
           <h1 className="text-title text-content-primary">Profissionais</h1>
           <p className="text-paragraph-medium text-content-secondary">
-            Veja a disponibilidade de cada profissional para agendamentos.
+            Veja a disponibilidade e a reputação de cada profissional.
           </p>
         </div>
         <ProfessionalNewDialog />
