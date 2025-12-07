@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { nextAuthOptions } from "@/lib/nextauth";
+import { redirect } from "next/navigation";
 
 import { AppointmentForm } from "@/components/appointment-form";
 import { DatePicker } from "@/components/date-picker";
@@ -29,6 +30,34 @@ export default async function Home({ searchParams }: HomeProps) {
   const userId = (session?.user as any)?.id as string | undefined;
   const userName = (session?.user as any)?.name ?? "Cliente";
   const userImage = (session?.user as any)?.image ?? "/default-avatar.png";
+
+  // 🔐 Se não tiver usuário logado, manda pro login
+  if (!userId) {
+    redirect("/login");
+  }
+
+  // 🔎 Busca usuário pra ver role + perfil
+  const dbUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      role: true,
+      phone: true,
+      birthday: true,
+    },
+  });
+
+  let shouldOpenProfileModal = false;
+
+  if (dbUser && dbUser.role === "CLIENT") {
+    const isMissingPhone = !dbUser.phone || dbUser.phone.trim() === "";
+    const isMissingBirthday = !dbUser.birthday;
+
+    shouldOpenProfileModal = isMissingPhone || isMissingBirthday;
+  }
+
+  // usado pra escolher o texto "primeira vez"
+  const isFirstTimeProfile =
+    dbUser?.role === "CLIENT" && shouldOpenProfileModal;
 
   const resolvedSearchParams = await searchParams;
   const dateParam = resolvedSearchParams.date;
@@ -136,10 +165,7 @@ export default async function Home({ searchParams }: HomeProps) {
         : undefined,
       time,
       period,
-
-      // 🔹 campos extras para o front:
-      // - isLocked: não pode mais editar/excluir no cliente
-      //   (use isso no PeriodSection para esconder os botões)
+      // 🔹 campo extra para o front:
       isLocked,
     } as AppointmentType & { isLocked: boolean };
   });
@@ -214,8 +240,13 @@ export default async function Home({ searchParams }: HomeProps) {
             <p className="text-title-size text-content-primary">{userName}</p>
           </div>
 
-          {/* Agora o trigger abre o modal de perfil */}
-          <ClientProfileDialog userName={userName} userImage={userImage} />
+          {/* Modal de perfil abre automaticamente se faltar telefone/aniversário */}
+          <ClientProfileDialog
+            userName={userName}
+            userImage={userImage}
+            defaultOpen={shouldOpenProfileModal}
+            isFirstTime={isFirstTimeProfile}
+          />
         </header>
 
         {/* TÍTULO DA AGENDA */}

@@ -1,41 +1,105 @@
-import type { Barber } from "@prisma/client";
+// components/professional-row.tsx
+"use client";
 
+import type { Barber } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { ServiceStatusBadge } from "@/components/service-status-badge";
 import { toggleBarberStatus } from "@/app/admin/professional/actions";
 import { ProfessionalEditDialog } from "@/components/professional-edit-dialog";
 
-type ProfessionalRowProps = {
-  barber: Barber;
+export type AdminProfessionalRowData = Barber & {
+  avatarUrl: string | null;
+  weeklyScheduleLabel: string;
+  exceptionsLabel: string;
+  // 🔹 nova propriedade opcional, usada quando já temos a URL da imagem
+  imageUrl?: string | null;
 };
 
-export function ProfessionalRow({ barber }: ProfessionalRowProps) {
-  return (
-    <tr className="border-t border-border-primary">
-      <td className="px-4 py-3">{barber.name}</td>
-      <td className="px-4 py-3">{barber.email}</td>
-      <td className="px-4 py-3">{barber.phone ?? "-"}</td>
+type ProfessionalRowProps = {
+  row: AdminProfessionalRowData;
+};
 
-      {/* STATUS usando ServiceStatusBadge */}
+export function ProfessionalRow({ row }: ProfessionalRowProps) {
+  // Prioriza imageUrl, depois avatarUrl, depois inicial do nome
+  const avatarToShow = row.imageUrl ?? row.avatarUrl ?? null;
+
+  return (
+    <tr className="border-b border-border-primary last:border-b-0">
+      {/* PROFISSIONAL (foto + nome + email + telefone) */}
       <td className="px-4 py-3">
-        <ServiceStatusBadge isActive={barber.isActive} />
+        <div className="flex items-center gap-3">
+          {/* Avatar */}
+          <div className="h-10 w-10 overflow-hidden rounded-full bg-background-secondary border border-border-primary flex items-center justify-center text-xs font-medium text-content-secondary">
+            {avatarToShow ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={avatarToShow}
+                alt={row.name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <span>{row.name.charAt(0).toUpperCase()}</span>
+            )}
+          </div>
+
+          {/* Infos do profissional */}
+          <div className="flex flex-col">
+            <span className="text-paragraph-medium text-content-primary font-medium">
+              {row.name}
+            </span>
+            <span className="text-paragraph-small text-content-secondary">
+              {row.email || "Sem e-mail"}
+            </span>
+            <span className="text-paragraph-small text-content-secondary">
+              {row.phone || "Sem telefone"}
+            </span>
+          </div>
+        </div>
       </td>
 
+      {/* ESCALA (resumo semanal) */}
+      <td className="px-4 py-3 text-paragraph-small text-content-primary">
+        {row.weeklyScheduleLabel}
+      </td>
+
+      {/* EXCEÇÕES (resumo de folgas/ajustes) */}
+      <td className="px-4 py-3 text-paragraph-small text-content-primary">
+        {row.exceptionsLabel}
+      </td>
+
+      {/* STATUS usando ServiceStatusBadge */}
+      <td className="px-4 py-3 text-center">
+        <ServiceStatusBadge isActive={row.isActive} />
+      </td>
+
+      {/* AÇÕES (Editar + Ativar/Desativar) */}
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-2">
           {/* EDITAR */}
-          <ProfessionalEditDialog barber={barber} />
+          <ProfessionalEditDialog
+            barber={{
+              id: row.id,
+              name: row.name,
+              email: row.email,
+              phone: row.phone,
+              isActive: row.isActive,
+              createdAt: row.createdAt,
+              updatedAt: row.updatedAt,
+              userId: row.userId,
+              imageUrl: row.imageUrl ?? row.avatarUrl ?? null,
+            }}
+          />
 
           {/* ATIVAR / DESATIVAR */}
           <form action={toggleBarberStatus}>
-            <input type="hidden" name="barberId" value={barber.id} />
+            <input type="hidden" name="barberId" value={row.id} />
             <Button
-              variant={barber.isActive ? "destructive" : "active"}
+              variant={row.isActive ? "destructive" : "active"}
               size="sm"
               type="submit"
               className="border-border-primary hover:bg-muted/40"
             >
-              {barber.isActive ? "Desativar" : "Ativar"}
+              {row.isActive ? "Desativar" : "Ativar"}
             </Button>
           </form>
         </div>

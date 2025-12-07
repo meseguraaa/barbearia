@@ -16,11 +16,15 @@ import {
   updateClientPhoneAction,
 } from "@/app/client/profile/actions";
 import { toast } from "sonner";
-import { Calendar as CalendarIcon, ChevronDown } from "lucide-react";
+import { Calendar as CalendarIcon } from "lucide-react";
 
 type ClientProfileDialogProps = {
   userName: string;
   userImage: string;
+  // abre o modal automaticamente (primeiro acesso / perfil incompleto)
+  defaultOpen?: boolean;
+  // controla a mensagem exibida para o cliente
+  isFirstTime?: boolean;
 };
 
 function formatIsoToDisplay(iso: string | undefined | null): string {
@@ -49,24 +53,24 @@ function formatPhoneDisplay(value: string): string {
   if (digits.length === 0) return "";
 
   if (digits.length <= 2) {
-    // "(" + D ou "(" + DD
     return `(${digits}`;
   }
 
   if (digits.length <= 7) {
-    // (00) 0 / (00) 00 / ... / (00) 00000
     return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
   }
 
-  // (00) 00000-0000
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
 export function ClientProfileDialog({
   userName,
   userImage,
+  defaultOpen,
+  isFirstTime,
 }: ClientProfileDialogProps) {
-  const [open, setOpen] = useState(false);
+  // se vier defaultOpen=true (perfil incompleto), já inicia aberto
+  const [open, setOpen] = useState<boolean>(defaultOpen ?? false);
   const [loadingProfile, setLoadingProfile] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -76,10 +80,13 @@ export function ClientProfileDialog({
   const [phone, setPhone] = useState("");
   const [birthdayInput, setBirthdayInput] = useState(""); // "DD/MM/AAAA"
 
+  const descriptionText = isFirstTime
+    ? "Obrigado por se cadastrar, agora complete seu cadastro."
+    : "Veja e atualize seus dados de contato.";
+
   // Carrega os dados completos do perfil quando o modal abre pela primeira vez
   useEffect(() => {
     if (!open) return;
-    // já carregado antes? evita chamadas desnecessárias se email já veio
     if (email) return;
 
     let cancelled = false;
@@ -93,9 +100,7 @@ export function ClientProfileDialog({
         setName(data.name);
         setEmail(data.email);
         setImage(data.image);
-        // telefone já vem formatado com máscara (se houver)
         setPhone(formatPhoneDisplay(data.phone ?? ""));
-        // data.birthday vem em "YYYY-MM-DD"
         setBirthdayInput(formatIsoToDisplay(data.birthday));
       } catch (error) {
         console.error("Erro ao carregar perfil do cliente", error);
@@ -117,13 +122,9 @@ export function ClientProfileDialog({
   function handleBirthdayChange(e: React.ChangeEvent<HTMLInputElement>) {
     let value = e.target.value;
 
-    // Mantém só números
     value = value.replace(/\D/g, "");
-
-    // Limita a 8 dígitos (ddmmyyyy)
     if (value.length > 8) value = value.slice(0, 8);
 
-    // Aplica máscara DD/MM/AAAA
     if (value.length >= 5) {
       value = value.replace(
         /(\d{2})(\d{2})(\d{0,4})/,
@@ -149,7 +150,6 @@ export function ClientProfileDialog({
     try {
       setSaving(true);
 
-      // se você quiser que sejam de fato obrigatórios:
       if (!phone.trim()) {
         toast.error("Preencha o campo de telefone.");
         setSaving(false);
@@ -212,9 +212,7 @@ export function ClientProfileDialog({
       >
         <DialogHeader>
           <DialogTitle size="modal">Meu perfil</DialogTitle>
-          <DialogDescription size="modal">
-            Veja e atualize seus dados de contato.
-          </DialogDescription>
+          <DialogDescription size="modal">{descriptionText}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6">
@@ -260,7 +258,7 @@ export function ClientProfileDialog({
               />
             </div>
 
-            {/* 🎂 Data de aniversário com estilização semelhante ao date-picker */}
+            {/* 🎂 Data de aniversário com o MESMO estilo do telefone */}
             <div className="space-y-2">
               <label
                 htmlFor="birthday"
@@ -270,9 +268,9 @@ export function ClientProfileDialog({
                 <span className="text-red-500">*</span>
               </label>
 
-              <div className="flex items-center gap-2 rounded-lg border border-border-primary bg-background-tertiary px-3 py-2 focus-within:ring-2 focus-within:ring-brand-primary">
-                <CalendarIcon className="w-4 h-4 text-brand-primary" />
-                <input
+              <div className="relative">
+                <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-border-primary" />
+                <Input
                   id="birthday"
                   name="birthday"
                   type="text"
@@ -281,14 +279,10 @@ export function ClientProfileDialog({
                   value={birthdayInput}
                   onChange={handleBirthdayChange}
                   disabled={loadingProfile || saving}
-                  className="flex-1 bg-transparent outline-none border-0 text-paragraph-small-size text-content-primary placeholder:text-content-tertiary"
+                  // mesmo estilo base do telefone + padding pra não ficar em cima do ícone
+                  className="pl-9 bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
                 />
-                <ChevronDown className="w-4 h-4 text-content-tertiary" />
               </div>
-
-              <p className="text-[11px] text-content-tertiary">
-                Digite no formato DD/MM/AAAA.
-              </p>
             </div>
 
             <div className="flex justify-end">

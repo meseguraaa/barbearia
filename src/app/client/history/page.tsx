@@ -171,10 +171,10 @@ export default async function ClientHistoryPage({
 
         {/* AGENDAMENTOS CONCLUÍDOS */}
         <section className="space-y-4">
-          <p className="text-content-secondary">Serviços já realizados.</p>
+          <p className="text-content-primary">Serviços já realizados.</p>
 
           {doneAppointments.length === 0 ? (
-            <p className="text-content-secondary">
+            <p className="text-content-secondary text-paragraph-small">
               Você ainda não possui agendamentos concluídos neste mês.
             </p>
           ) : (
@@ -235,7 +235,7 @@ export default async function ClientHistoryPage({
 
         {/* AGENDAMENTOS CANCELADOS */}
         <section className="space-y-3">
-          <p className="text-content-secondary">
+          <p className="text-content-primary">
             Horários cancelados, com ou sem taxa.
           </p>
 
@@ -301,7 +301,7 @@ export default async function ClientHistoryPage({
 
         {/* COMPRAS / PEDIDOS DE PRODUTOS */}
         <section className="space-y-4">
-          <p className="text-content-secondary">
+          <p className="text-content-primary">
             Histórico dos seus pedidos de produtos.
           </p>
 

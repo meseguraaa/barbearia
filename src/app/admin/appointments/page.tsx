@@ -71,7 +71,12 @@ async function getAppointments(dateParam?: string) {
       scheduleAt: "asc",
     },
     include: {
-      barber: true,
+      // 🔹 agora traz também o user do barbeiro pra ter a foto
+      barber: {
+        include: {
+          user: true,
+        },
+      },
       service: true,
       client: true,
       // 🔹 trazemos também o plano do cliente para conseguir calcular créditos
@@ -180,14 +185,6 @@ export default async function AdminAppointmentsPage({
 
   /* ------------------------------------------------------------------
    * CÁLCULO DE CRÉDITOS DE PLANO POR AGENDAMENTO
-   *
-   * Para cada clientPlan:
-   *  - agrupamos os agendamentos ligados a ele (excluindo cancelados)
-   *  - ordenamos por horário
-   *  - definimos:
-   *      - isPlanCredit: se está dentro do total de créditos
-   *      - planCreditIndex: posição (1, 2, 3...) dentro do plano
-   *      - planTotalCredits: total de créditos do plano
    * ------------------------------------------------------------------*/
   const planCreditInfoByAppointmentId: Record<
     string,
@@ -252,17 +249,20 @@ export default async function AdminAppointmentsPage({
       {
         barberId: string | null;
         barberName: string;
+        barberImageUrl: string | null;
         appointments: AppointmentWithBarberPrisma[];
       }
     >
   >((acc, appt) => {
     const barberId = appt.barberId ?? "no-barber";
     const barberName = appt.barber?.name ?? "Sem barbeiro";
+    const barberImageUrl = appt.barber?.user?.image ?? null;
 
     if (!acc[barberId]) {
       acc[barberId] = {
         barberId: appt.barberId ?? null,
         barberName,
+        barberImageUrl,
         appointments: [],
       };
     }
@@ -305,7 +305,7 @@ export default async function AdminAppointmentsPage({
           <div className="border-b border-border-primary px-4 py-3 bg-muted/40 flex justify-between items-center">
             <p className="font-medium">Agendamentos e vendas de produto</p>
           </div>
-          <div className="p-6 text-paragraph-small text-content-secondary">
+          <div className="p-6 text-paragraph-small text-content-secondary text-center">
             Nenhum agendamento ou venda de produto encontrada para esta data.
           </div>
         </section>
@@ -323,7 +323,7 @@ export default async function AdminAppointmentsPage({
                 appointmentsForForm={appointmentsForForm}
                 barbersForForm={barbersForForm}
                 services={services}
-                // 🔹 novo: infos de plano por agendamento
+                // 🔹 infos de plano por agendamento
                 planCreditInfoByAppointmentId={planCreditInfoByAppointmentId}
               />
             );
