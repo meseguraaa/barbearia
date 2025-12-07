@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { LayoutDashboard, WalletCards, CalendarCheck } from "lucide-react";
+import {
+  LayoutDashboard,
+  WalletCards,
+  CalendarCheck,
+  Star, // ⭐ Avaliações
+} from "lucide-react";
 
 type BarberLink = {
   href: string;
@@ -26,6 +31,11 @@ const barberLinks: BarberLink[] = [
     href: "/barber/earnings",
     label: "Meus ganhos",
     icon: WalletCards,
+  },
+  {
+    href: "/barber/reviews",
+    label: "Avaliações",
+    icon: Star,
   },
 ];
 

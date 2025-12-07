@@ -10,8 +10,9 @@ import {
   Package,
   Wallet,
   Users,
-  CalendarCheck, // Agendamentos
-  ShoppingCart, // ← Ícone para Checkout
+  CalendarCheck,
+  ShoppingCart,
+  Tag, // ← Ícone para Motivos de Avaliação
 } from "lucide-react";
 
 type AdminLink = {
@@ -31,6 +32,14 @@ const adminLinks: AdminLink[] = [
 
   { href: "/admin/professional", label: "Profissionais", icon: Scissors },
   { href: "/admin/services", label: "Serviços", icon: ListChecks },
+
+  // ⭐ NOVA ENTRADA — MOTIVOS DE AVALIAÇÃO
+  {
+    href: "/admin/review-tags",
+    label: "Avaliação",
+    icon: Tag,
+  },
+
   { href: "/admin/products", label: "Produtos", icon: Package },
   { href: "/admin/clients", label: "Clientes", icon: Users },
   { href: "/admin/finance", label: "Financeiro", icon: Wallet },

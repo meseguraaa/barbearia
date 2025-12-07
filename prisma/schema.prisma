@@ -92,6 +92,9 @@ model User {
   // ⭐ PEDIDOS DO CLIENTE
   orders Order[]
 
+  // ⭐ AVALIAÇÕES FEITAS PELO CLIENTE
+  reviews AppointmentReview[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -168,6 +171,9 @@ model Barber {
 
   // 🔹 Serviços que esse profissional executa
   services ServiceProfessional[]
+
+  // ⭐ AVALIAÇÕES RECEBIDAS PELO PROFISSIONAL
+  reviews AppointmentReview[]
 
   @@map("barbers")
 }
@@ -313,6 +319,12 @@ model Appointment {
   // ⭐ PEDIDO VINCULADO A ESSE ATENDIMENTO (opcional)
   order Order? @relation("AppointmentOrder")
 
+  // ⭐ CONTROLE DO MODAL DE AVALIAÇÃO (já foi mostrado para esse atendimento?)
+  reviewModalShown Boolean @default(false)
+
+  // ⭐ RELAÇÃO 1:1 COM A AVALIAÇÃO, QUANDO EXISTIR
+  review AppointmentReview?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -348,7 +360,7 @@ model Product {
   orderItems OrderItem[]
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  updatedAt DateTime @default(now())
 }
 
 // =======================
@@ -515,4 +527,72 @@ model BarberDailyTimeInterval {
   updatedAt DateTime @updatedAt
 
   @@map("barber_daily_time_intervals")
+}
+
+// =======================
+// ⭐ AVALIAÇÕES DE ATENDIMENTO
+// =======================
+
+model AppointmentReview {
+  id String @id @default(cuid())
+
+  appointmentId String      @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+
+  clientId String
+  client   User   @relation(fields: [clientId], references: [id])
+
+  barberId String
+  barber   Barber @relation(fields: [barberId], references: [id])
+
+  rating  Int
+  comment String?
+
+  // 🔹 se quiser, dá pra esconder o nome do cliente do profissional, mas admin sempre vê
+  isAnonymousForProfessional Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 🔹 tooltips escolhidos pelo cliente
+  tags AppointmentReviewTag[]
+
+  @@index([clientId])
+  @@index([barberId])
+  @@map("appointment_reviews")
+}
+
+model ReviewTag {
+  id       String  @id @default(cuid())
+  label    String
+  isActive Boolean @default(true)
+
+  // 🔹 se true, é um motivo negativo (usado em avaliações 1–2 estrelas)
+  isNegative Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 🔹 avaliações que usaram essa tag
+  reviews AppointmentReviewTag[]
+
+  @@unique([label])
+  @@map("review_tags")
+}
+
+model AppointmentReviewTag {
+  id String @id @default(cuid())
+
+  reviewId String
+  review   AppointmentReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  tagId String
+  tag   ReviewTag @relation(fields: [tagId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([reviewId, tagId])
+  @@index([tagId])
+  @@map("appointment_review_tags")
 }
