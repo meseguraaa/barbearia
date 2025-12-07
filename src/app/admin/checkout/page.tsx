@@ -153,7 +153,7 @@ export default async function AdminCheckoutPage({
     rawMonthLabel.charAt(0).toUpperCase() + rawMonthLabel.slice(1);
 
   return (
-    <div className="space-y-8 max-w-7xl">
+    <div className="space-y-5 max-w-7xl">
       {/* HEADER GERAL */}
       <header className="flex items-center justify-between gap-4">
         <div>
@@ -173,9 +173,11 @@ export default async function AdminCheckoutPage({
         </h2>
 
         {pendingServiceOrders.length === 0 ? (
-          <p className="text-paragraph-small text-content-secondary">
-            Não há atendimentos aguardando pagamento no momento.
-          </p>
+          <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-6">
+            <p className="text-paragraph-small text-content-secondary text-center">
+              Não há atendimentos aguardando pagamento no momento.
+            </p>
+          </div>
         ) : (
           <div className="space-y-3">
             {pendingServiceOrders.map((order) => {
@@ -311,17 +313,12 @@ export default async function AdminCheckoutPage({
           Pedidos de produtos aguardando checkout
         </h2>
 
-        {!hasBarbers && (
-          <p className="text-paragraph-small text-red-500">
-            Nenhum barbeiro ativo encontrado. Cadastre ou ative pelo menos um
-            barbeiro para conseguir finalizar vendas de produtos.
-          </p>
-        )}
-
         {pendingProductOrders.length === 0 ? (
-          <p className="text-paragraph-small text-content-secondary">
-            Não há pedidos de produtos aguardando finalização no momento.
-          </p>
+          <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-6">
+            <p className="text-paragraph-small text-content-secondary text-center">
+              Não há pedidos de produtos aguardando finalização no momento.
+            </p>
+          </div>
         ) : (
           <div className="space-y-3">
             {pendingProductOrders.map((order) => {
@@ -505,9 +502,11 @@ function OrdersSection({
       </div>
 
       {orders.length === 0 ? (
-        <p className="text-paragraph-small text-content-secondary">
-          Nenhum pedido registrado neste mês ainda.
-        </p>
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-6">
+          <p className="text-paragraph-small text-content-secondary text-center">
+            Nenhum pedido registrado neste mês ainda.
+          </p>
+        </div>
       ) : (
         <section className="overflow-x-auto rounded-xl border border-border-primary bg-background-tertiary">
           <table className="min-w-full text-sm">

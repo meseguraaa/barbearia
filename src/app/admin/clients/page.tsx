@@ -4,7 +4,6 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { AdminNewClientDialog } from "@/components/admin-new-client-dialog";
-// ❌ pode remover: import { createClientAction } from "./actions";
 import {
   Accordion,
   AccordionItem,
@@ -74,7 +73,7 @@ export default async function ClientsPage() {
 
   if (users.length === 0) {
     return (
-      <div className="max-w-7xl space-y-6 mx-auto py-4">
+      <div className="max-w-7xl space-y-6 mx-auto">
         <header className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-title text-content-primary">Clientes</h1>
@@ -261,16 +260,15 @@ export default async function ClientsPage() {
 
   return (
     <div className="space-y-5 max-w-7xl">
-      {/* HEADER */}
+      {/* HEADER GERAL */}
       <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-title text-content-primary">Clientes</h1>
-          <p className="text-paragraph-medium-size text-content-secondary">
+          <p className="text-paragraph-medium text-content-secondary">
             Veja seus clientes, sua recorrência e quanto cada um movimenta na
             barbearia.
           </p>
         </div>
-
         <AdminNewClientDialog />
       </header>
 
@@ -283,79 +281,82 @@ export default async function ClientsPage() {
               value={row.id}
               className="border border-border-primary rounded-xl bg-background-tertiary"
             >
-              {/* CABEÇALHO: avatar, nome, email, telefone, último atendimento, ações */}
-              <AccordionTrigger className="flex w-full items-center px-4 py-3 gap-4 hover:no-underline">
-                {/* FOTO + NOME + E-MAIL */}
-                <div className="flex-1 flex items-center gap-3 text-left">
-                  {/* Foto do cliente */}
-                  <div className="h-10 w-10 rounded-full overflow-hidden bg-background-secondary border border-border-primary flex items-center justify-center">
-                    {row.image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={row.image}
-                        alt={row.name}
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-xs font-medium text-content-secondary">
-                        {row.name
-                          .split(" ")
-                          .map((n) => n[0])
-                          .join("")
-                          .slice(0, 2)
-                          .toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Texto */}
-                  <div className="flex flex-col gap-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-paragraph-medium-size font-semibold text-content-primary">
-                        {row.name}
-                      </p>
-
-                      {row.hasActivePlan && (
-                        <Badge
-                          variant="outline"
-                          className="text-xs border-green-600/40 text-green-600"
-                        >
-                          Plano ativo
-                        </Badge>
+              {/* LINHA SUPERIOR: Trigger + Ações, lado a lado */}
+              <div className="flex items-center justify-between gap-4 px-4 py-3">
+                {/* CABEÇALHO CLICÁVEL DO ACCORDION */}
+                <AccordionTrigger className="flex flex-1 items-center gap-4 hover:no-underline px-0 py-0">
+                  {/* FOTO + NOME + E-MAIL */}
+                  <div className="flex-1 flex items-center gap-3 text-left">
+                    {/* Foto do cliente */}
+                    <div className="h-10 w-10 rounded-full overflow-hidden bg-background-secondary border border-border-primary flex items-center justify-center">
+                      {row.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={row.image}
+                          alt={row.name}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-xs font-medium text-content-secondary">
+                          {row.name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")
+                            .slice(0, 2)
+                            .toUpperCase()}
+                        </span>
                       )}
                     </div>
 
-                    <p className="text-xs text-content-secondary truncate max-w-[220px]">
-                      {row.email || "Sem e-mail"}
-                    </p>
+                    {/* Texto */}
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-paragraph-medium-size font-semibold text-content-primary">
+                          {row.name}
+                        </p>
+
+                        {row.hasActivePlan && (
+                          <Badge
+                            variant="outline"
+                            className="text-xs border-green-600/40 text-green-600"
+                          >
+                            Plano ativo
+                          </Badge>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-content-secondary truncate max-w-[220px]">
+                        {row.email || "Sem e-mail"}
+                      </p>
+                    </div>
                   </div>
-                </div>
 
-                {/* TELEFONE */}
-                <div className="hidden md:flex flex-col text-left min-w-40">
-                  <span className="text-[11px] text-content-secondary">
-                    Telefone
-                  </span>
-                  <span className="text-xs text-content-primary">
-                    {row.phone}
-                  </span>
-                </div>
+                  {/* TELEFONE */}
+                  <div className="hidden md:flex flex-col text-left min-w-40">
+                    <span className="text-[11px] text-content-secondary">
+                      Telefone
+                    </span>
+                    <span className="text-xs text-content-primary">
+                      {row.phone}
+                    </span>
+                  </div>
 
-                {/* ÚLTIMO ATENDIMENTO */}
-                <div className="hidden sm:flex flex-col text-left min-w-[180px]">
-                  <span className="text-[11px] text-content-secondary">
-                    Último atendimento
-                  </span>
-                  <span className="text-xs text-content-primary">
-                    {row.lastDoneDate
-                      ? format(row.lastDoneDate, "dd/MM/yyyy HH:mm", {
-                          locale: ptBR,
-                        })
-                      : "Sem atendimento"}
-                  </span>
-                </div>
+                  {/* ÚLTIMO ATENDIMENTO */}
+                  <div className="hidden sm:flex flex-col text-left min-w-[180px]">
+                    <span className="text-[11px] text-content-secondary">
+                      Último atendimento
+                    </span>
+                    <span className="text-xs text-content-primary">
+                      {row.lastDoneDate
+                        ? format(row.lastDoneDate, "dd/MM/yyyy HH:mm", {
+                            locale: ptBR,
+                          })
+                        : "Sem atendimento"}
+                    </span>
+                  </div>
+                </AccordionTrigger>
 
-                {/* AÇÕES: EDITAR + WHATSAPP */}
+                {/* AÇÕES: EDITAR + WHATSAPP (FORA DO TRIGGER, SEM NESTED BUTTON) */}
                 <div className="flex items-center gap-2">
                   <AdminEditClientDialog
                     client={{
@@ -380,7 +381,7 @@ export default async function ClientsPage() {
                     </a>
                   )}
                 </div>
-              </AccordionTrigger>
+              </div>
 
               {/* CONTEÚDO: cards internos */}
               <AccordionContent className="border-t border-border-primary px-4 py-4">
@@ -424,7 +425,7 @@ export default async function ClientsPage() {
                         </span>
                       </p>
                       <p>
-                        <span className="text-content-secondary">
+                        <span className="text-content_secondary">
                           Cadastrado em:{" "}
                         </span>
                         <span className="text-content-primary">

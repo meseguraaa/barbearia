@@ -37,7 +37,7 @@ export default async function ClientProductsPage() {
         <h1 className="text-title text-content-primary">Produtos</h1>
         <p className="text-content-secondary mb-8">
           Veja todos os produtos disponíveis para você deixar reservado e
-          finalizar a compra na barbearia.
+          finalizar a compra no estabelecimento.
         </p>
 
         {products.length === 0 ? (

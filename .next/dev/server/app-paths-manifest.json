@@ -1,7 +1,8 @@
 {
-  "/admin/finance/page": "app/admin/finance/page.js",
-  "/admin/clients/page": "app/admin/clients/page.js",
+  "/barber/availability/page": "app/barber/availability/page.js",
   "/client/schedule/page": "app/client/schedule/page.js",
-  "/barber/earnings/page": "app/barber/earnings/page.js",
-  "/admin/checkout/page": "app/admin/checkout/page.js"
+  "/admin/appointments/page": "app/admin/appointments/page.js",
+  "/admin/professional/page": "app/admin/professional/page.js",
+  "/admin/products/page": "app/admin/products/page.js",
+  "/admin/dashboard/page": "app/admin/dashboard/page.js"
 }
