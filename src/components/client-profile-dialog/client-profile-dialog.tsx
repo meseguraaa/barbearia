@@ -42,6 +42,26 @@ function isValidBirthdayDisplay(display: string): boolean {
   return /^\d{2}\/\d{2}\/\d{4}$/.test(display);
 }
 
+// 🔢 Máscara de telefone: (00) 00000-0000
+function formatPhoneDisplay(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 11); // 2 + 5 + 4 = 11 dígitos
+
+  if (digits.length === 0) return "";
+
+  if (digits.length <= 2) {
+    // "(" + D ou "(" + DD
+    return `(${digits}`;
+  }
+
+  if (digits.length <= 7) {
+    // (00) 0 / (00) 00 / ... / (00) 00000
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  }
+
+  // (00) 00000-0000
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+}
+
 export function ClientProfileDialog({
   userName,
   userImage,
@@ -73,7 +93,8 @@ export function ClientProfileDialog({
         setName(data.name);
         setEmail(data.email);
         setImage(data.image);
-        setPhone(data.phone);
+        // telefone já vem formatado com máscara (se houver)
+        setPhone(formatPhoneDisplay(data.phone ?? ""));
         // data.birthday vem em "YYYY-MM-DD"
         setBirthdayInput(formatIsoToDisplay(data.birthday));
       } catch (error) {
@@ -117,13 +138,31 @@ export function ClientProfileDialog({
     setBirthdayInput(value);
   }
 
+  function handlePhoneChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const formatted = formatPhoneDisplay(e.target.value);
+    setPhone(formatted);
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
 
     try {
       setSaving(true);
 
-      if (birthdayInput && !isValidBirthdayDisplay(birthdayInput)) {
+      // se você quiser que sejam de fato obrigatórios:
+      if (!phone.trim()) {
+        toast.error("Preencha o campo de telefone.");
+        setSaving(false);
+        return;
+      }
+
+      if (!birthdayInput.trim()) {
+        toast.error("Preencha a data de aniversário.");
+        setSaving(false);
+        return;
+      }
+
+      if (!isValidBirthdayDisplay(birthdayInput)) {
         toast.error("Preencha a data de aniversário no formato DD/MM/AAAA.");
         setSaving(false);
         return;
@@ -200,20 +239,22 @@ export function ClientProfileDialog({
 
           {/* Form de telefone + aniversário */}
           <form onSubmit={handleSave} className="space-y-4">
+            {/* 📞 Telefone */}
             <div className="space-y-2">
               <label
                 htmlFor="phone"
-                className="text-label-small-size text-content-secondary"
+                className="text-label-small-size text-content-primary flex items-center gap-1"
               >
                 Telefone
+                <span className="text-red-500">*</span>
               </label>
               <Input
                 id="phone"
                 name="phone"
                 type="tel"
-                placeholder="(99) 99999-9999"
+                placeholder="(00) 00000-0000"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={handlePhoneChange}
                 disabled={loadingProfile || saving}
                 className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
               />
@@ -223,9 +264,10 @@ export function ClientProfileDialog({
             <div className="space-y-2">
               <label
                 htmlFor="birthday"
-                className="text-label-small-size text-content-secondary"
+                className="text-label-small-size text-content-primary flex items-center gap-1"
               >
                 Data de aniversário
+                <span className="text-red-500">*</span>
               </label>
 
               <div className="flex items-center gap-2 rounded-lg border border-border-primary bg-background-tertiary px-3 py-2 focus-within:ring-2 focus-within:ring-brand-primary">

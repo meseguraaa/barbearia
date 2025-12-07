@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 
 import { OrderStatusBadge } from "@/components/order-status-badge";
 import { Button } from "@/components/ui/button";
-import { format } from "date-fns";
+import { format, parse, startOfMonth, endOfMonth } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   finalizeProductOrder,
@@ -12,6 +12,8 @@ import {
   finalizeServiceOrder,
   cancelServiceOrder,
 } from "./actions";
+import { MonthPicker } from "@/components/month-picker";
+import type { OrderStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -19,12 +21,35 @@ export const metadata: Metadata = {
   title: "Admin | Checkout",
 };
 
-export default async function AdminCheckoutPage() {
-  // 🔹 Pedidos de produtos aguardando retirada (fluxo antigo)
+type AdminCheckoutPageProps = {
+  searchParams: Promise<{
+    month?: string; // formato "yyyy-MM"
+  }>;
+};
+
+export default async function AdminCheckoutPage({
+  searchParams,
+}: AdminCheckoutPageProps) {
+  const resolvedSearchParams = await searchParams;
+  const monthParam = resolvedSearchParams.month;
+
+  // Data de referência: se vier ?month=yyyy-MM usa ela, senão hoje
+  const referenceDate = monthParam
+    ? parse(monthParam, "yyyy-MM", new Date())
+    : new Date();
+
+  const monthStart = startOfMonth(referenceDate);
+  const monthEnd = endOfMonth(referenceDate);
+
   const [
+    // 🔹 Pedidos de produtos aguardando retirada (fluxo antigo)
     pendingProductOrders,
+    // 🔹 Pedidos de serviço aguardando checkout
     pendingServiceOrders,
-    barbers, // para selecionar barbeiro na venda de produto
+    // 🔹 Barbeiros para selecionar na venda de produto
+    barbers,
+    // 🔹 Pedidos do mês (serviços + produtos)
+    ordersForMonth,
   ] = await Promise.all([
     prisma.order.findMany({
       where: {
@@ -50,7 +75,6 @@ export default async function AdminCheckoutPage() {
       },
     }),
 
-    // 🔹 NOVO: pedidos de serviço (atendimentos) aguardando checkout
     prisma.order.findMany({
       where: {
         status: "PENDING",
@@ -89,9 +113,44 @@ export default async function AdminCheckoutPage() {
         name: true,
       },
     }),
+
+    // ⭐ Pedidos (serviços + produtos) criados no mês selecionado
+    prisma.order.findMany({
+      where: {
+        createdAt: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+      },
+      include: {
+        client: true,
+        barber: true,
+        items: {
+          include: {
+            service: true,
+            product: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    }),
   ]);
 
   const hasBarbers = barbers.length > 0;
+
+  const currencyFormatter = new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+  });
+
+  const rawMonthLabel = format(referenceDate, "MMMM 'de' yyyy", {
+    locale: ptBR,
+  });
+  const monthLabel =
+    rawMonthLabel.charAt(0).toUpperCase() + rawMonthLabel.slice(1);
 
   return (
     <div className="space-y-8 max-w-7xl">
@@ -392,6 +451,118 @@ export default async function AdminCheckoutPage() {
           </div>
         )}
       </section>
+
+      {/* ================================
+          3) PEDIDOS DO MÊS
+          ================================ */}
+      <OrdersSection
+        orders={ordersForMonth}
+        currencyFormatter={currencyFormatter}
+        monthLabel={monthLabel}
+      />
     </div>
+  );
+}
+
+/* ========= SEÇÃO: PEDIDOS DO MÊS ========= */
+
+function OrdersSection({
+  orders,
+  currencyFormatter,
+  monthLabel,
+}: {
+  orders: Array<{
+    id: string;
+    status: OrderStatus;
+    totalAmount: any;
+    createdAt: Date;
+    client: { name: string | null } | null;
+    barber: { name: string | null } | null;
+    items: Array<{
+      id: string;
+      quantity: number;
+      service: { name: string } | null;
+      product: { name: string } | null;
+    }>;
+  }>;
+  currencyFormatter: Intl.NumberFormat;
+  monthLabel: string;
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-subtitle text-content-primary">Pedidos do mês</h2>
+          <p className="text-paragraph-small text-content-secondary">
+            Lista de todos os pedidos de serviços e produtos registrados neste
+            mês.
+            <br />
+            Mês selecionado: <span className="font-medium">{monthLabel}</span>
+          </p>
+        </div>
+
+        <MonthPicker />
+      </div>
+
+      {orders.length === 0 ? (
+        <p className="text-paragraph-small text-content-secondary">
+          Nenhum pedido registrado neste mês ainda.
+        </p>
+      ) : (
+        <section className="overflow-x-auto rounded-xl border border-border-primary bg-background-tertiary">
+          <table className="min-w-full text-sm">
+            <thead>
+              <tr className="border-b border-border-primary bg-muted/40 text-left text-label-small text-content-secondary">
+                <th className="px-4 py-2">Data</th>
+                <th className="px-4 py-2">Cliente</th>
+                <th className="px-4 py-2">Barbeiro</th>
+                <th className="px-4 py-2">Itens</th>
+                <th className="px-4 py-2 text-right">Total</th>
+                <th className="px-4 py-2 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order) => {
+                const dateStr = format(order.createdAt, "dd/MM/yyyy HH:mm", {
+                  locale: ptBR,
+                });
+
+                const clientName = order.client?.name ?? "—";
+                const barberName = order.barber?.name ?? "—";
+
+                const itemsLabel =
+                  order.items.length === 0
+                    ? "—"
+                    : order.items
+                        .map((item) => {
+                          const baseName =
+                            item.service?.name ?? item.product?.name ?? "Item";
+                          return `${item.quantity}x ${baseName}`;
+                        })
+                        .join(", ");
+
+                return (
+                  <tr
+                    key={order.id}
+                    className="border-t border-border-primary text-paragraph-small text-content-primary"
+                  >
+                    <td className="px-4 py-2 whitespace-nowrap">{dateStr}</td>
+                    <td className="px-4 py-2">{clientName}</td>
+                    <td className="px-4 py-2">{barberName}</td>
+                    <td className="px-4 py-2">{itemsLabel}</td>
+                    <td className="px-4 py-2 text-right">
+                      {currencyFormatter.format(Number(order.totalAmount))}
+                    </td>
+                    <td className="px-4 py-2 text-center">
+                      <OrderStatusBadge status={order.status} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </section>
+      )}
+    </section>
   );
 }

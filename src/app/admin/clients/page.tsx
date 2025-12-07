@@ -4,7 +4,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { AdminNewClientDialog } from "@/components/admin-new-client-dialog";
-import { createClientAction } from "./actions";
+// ❌ pode remover: import { createClientAction } from "./actions";
 import {
   Accordion,
   AccordionItem,
@@ -12,6 +12,7 @@ import {
   AccordionContent,
 } from "@/components/ui/accordion";
 import { WhatsAppLogo } from "@/components/icons/whatsapp-logo";
+import { AdminEditClientDialog } from "@/components/admin-edit-client-dialog/admin-edit-client-dialog";
 
 export const dynamic = "force-dynamic";
 
@@ -354,8 +355,18 @@ export default async function ClientsPage() {
                   </span>
                 </div>
 
-                {/* WHATSAPP */}
+                {/* AÇÕES: EDITAR + WHATSAPP */}
                 <div className="flex items-center gap-2">
+                  <AdminEditClientDialog
+                    client={{
+                      id: row.id,
+                      name: row.name,
+                      email: row.email,
+                      phone: row.phone === "—" ? "" : row.phone,
+                      birthday: row.birthday,
+                    }}
+                  />
+
                   {row.whatsappUrl && (
                     <a
                       href={row.whatsappUrl}
@@ -376,7 +387,7 @@ export default async function ClientsPage() {
                 <div className="grid gap-4 md:grid-cols-3">
                   {/* Dados do cliente */}
                   <div className="rounded-xl border border-border-primary bg-background-secondary p-4 space-y-2">
-                    <p className="text-label-small text-content-secondary">
+                    <p className="text-label-small text-content-primary">
                       Dados do cliente
                     </p>
                     <div className="space-y-1 text-paragraph-small">
@@ -427,7 +438,7 @@ export default async function ClientsPage() {
 
                   {/* Atendimentos */}
                   <div className="rounded-xl border border-border-primary bg-background-secondary p-4 space-y-2">
-                    <p className="text-label-small text-content-secondary">
+                    <p className="text-label-small text-content-primary">
                       Atendimentos
                     </p>
                     <div className="space-y-1 text-paragraph-small">
@@ -480,7 +491,7 @@ export default async function ClientsPage() {
 
                   {/* Financeiro / Planos */}
                   <div className="rounded-xl border border-border-primary bg-background-secondary p-4 space-y-3">
-                    <p className="text-label-small text-content-secondary">
+                    <p className="text-label-small text-content-primary">
                       Financeiro
                     </p>
 
