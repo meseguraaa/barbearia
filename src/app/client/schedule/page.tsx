@@ -89,7 +89,12 @@ export default async function Home({ searchParams }: HomeProps) {
     },
     include: {
       // agora é o model Barber, não mais User
-      barber: true,
+      // 🔹 e incluímos também o user pra ter a foto (user.image)
+      barber: {
+        include: {
+          user: true,
+        },
+      },
     },
   });
 
@@ -161,6 +166,13 @@ export default async function Home({ searchParams }: HomeProps) {
             phone: barberData?.phone ?? null,
             isActive: barberData?.isActive ?? true,
             role: "BARBER",
+            // 🔹 extra: foto do barbeiro vinda do user.image,
+            // que o AppointmentCard consegue ler via "as any"
+            user: apt.barber.user
+              ? {
+                  image: apt.barber.user.image,
+                }
+              : undefined,
           }
         : undefined,
       time,
