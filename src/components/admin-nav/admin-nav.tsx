@@ -49,32 +49,57 @@ export function AdminNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="flex items-center gap-2">
-      {adminLinks.map((link) => {
-        const isActive = pathname?.startsWith(link.href);
-        const Icon = link.icon;
+    <nav
+      className={cn(
+        "group fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border-primary bg-background-primary",
+        "w-14 hover:w-56 transition-[width] duration-200 ease-in-out",
+        "pt-6", // 👉 desce o menu para alinhar com os títulos
+      )}
+    >
+      {/* Espaço para logo / topo se quiser depois */}
+      <div className="flex h-14 items-center px-2">
+        {/* se quiser colocar logo depois, é aqui */}
+      </div>
 
-        return (
-          <Link
-            key={link.href}
-            href={link.href}
-            className={cn(
-              "flex items-center justify-center gap-2 px-4 py-2 text-label-small transition-colors",
-              "text-content-secondary hover:bg-background-tertiary/50 rounded-lg",
-              isActive &&
-                "text-content-brand font-medium bg-background-tertiary/50",
-            )}
-          >
-            <Icon
+      <div className="flex-1 space-y-1 px-2 pb-4">
+        {adminLinks.map((link) => {
+          const isActive = pathname?.startsWith(link.href);
+          const Icon = link.icon;
+
+          return (
+            <Link
+              key={link.href}
+              href={link.href}
               className={cn(
-                "h-4 w-4",
-                isActive ? "text-content-brand" : "text-content-secondary",
+                // alinhado horizontal, ocupa largura toda
+                "flex items-center gap-2 px-3 py-2 rounded-lg text-label-small transition-colors",
+                // cores originais
+                "text-content-secondary hover:bg-background-tertiary/50",
+                isActive &&
+                  "text-content-brand font-medium bg-background-tertiary/50",
               )}
-            />
-            <span>{link.label}</span>
-          </Link>
-        );
-      })}
+            >
+              <Icon
+                className={cn(
+                  "h-4 w-4 shrink-0",
+                  isActive ? "text-content-brand" : "text-content-secondary",
+                )}
+              />
+              {/* Label aparece só quando o sidebar está expandido */}
+              <span
+                className={cn(
+                  "whitespace-nowrap",
+                  "opacity-0 -translate-x-1",
+                  "transition-all duration-200",
+                  "group-hover:opacity-100 group-hover:translate-x-0",
+                )}
+              >
+                {link.label}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }
