@@ -14,6 +14,7 @@ import {
 } from "./actions";
 import { MonthPicker } from "@/components/month-picker";
 import type { OrderStatus } from "@prisma/client";
+import { requireAdminPermission } from "@/lib/admin-permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +31,9 @@ type AdminCheckoutPageProps = {
 export default async function AdminCheckoutPage({
   searchParams,
 }: AdminCheckoutPageProps) {
+  // 🔐 Permissão: apenas quem tem "Checkout" liberado (ou Dono)
+  await requireAdminPermission("canAccessCheckout");
+
   const resolvedSearchParams = await searchParams;
   const monthParam = resolvedSearchParams.month;
 
@@ -226,7 +230,7 @@ export default async function AdminCheckoutPage({
                   className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3"
                 >
                   {/* LINHA 1: ID + CLIENTE + STATUS */}
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap.items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-paragraph-small text-content-primary truncate">
                         Pedido (atendimento) #{order.id.slice(0, 8)}
@@ -266,7 +270,7 @@ export default async function AdminCheckoutPage({
                   )}
 
                   {/* LINHA 3: BARBEIRO + AÇÕES */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border-primary">
+                  <div className="flex flex-wrap items-center justify-between.gap-3 pt-2 border-t border-border-primary">
                     <div className="flex-1 min-w-0">
                       <p className="text-label-small text-content-secondary mb-1">
                         Barbeiro responsável pelo atendimento
@@ -488,7 +492,7 @@ function OrdersSection({
 }) {
   return (
     <section className="space-y-3">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+      <div className="flex flex-col.gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-subtitle text-content-primary">Pedidos do mês</h2>
           <p className="text-paragraph-small text-content-secondary">

@@ -12,7 +12,8 @@ import {
   Users,
   CalendarCheck,
   ShoppingCart,
-  Tag, // ← Ícone para Motivos de Avaliação
+  Tag,
+  Settings,
 } from "lucide-react";
 
 type AdminLink = {
@@ -21,31 +22,23 @@ type AdminLink = {
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
 };
 
+type AdminNavProps = {
+  isOwner?: boolean;
+};
+
 const adminLinks: AdminLink[] = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
-
-  // 🔥 AGENDAMENTOS
   { href: "/admin/appointments", label: "Agendamentos", icon: CalendarCheck },
-
-  // 🔥 NOVO CHECKOUT
   { href: "/admin/checkout", label: "Checkout", icon: ShoppingCart },
-
   { href: "/admin/professional", label: "Profissionais", icon: Scissors },
   { href: "/admin/services", label: "Serviços", icon: ListChecks },
-
-  // ⭐ NOVA ENTRADA — MOTIVOS DE AVALIAÇÃO
-  {
-    href: "/admin/review-tags",
-    label: "Avaliação",
-    icon: Tag,
-  },
-
+  { href: "/admin/review-tags", label: "Avaliação", icon: Tag },
   { href: "/admin/products", label: "Produtos", icon: Package },
   { href: "/admin/clients", label: "Clientes", icon: Users },
   { href: "/admin/finance", label: "Financeiro", icon: Wallet },
 ];
 
-export function AdminNav() {
+export function AdminNav({ isOwner }: AdminNavProps) {
   const pathname = usePathname();
 
   return (
@@ -53,15 +46,10 @@ export function AdminNav() {
       className={cn(
         "group fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border-primary bg-background-primary",
         "w-14 hover:w-56 transition-[width] duration-200 ease-in-out",
-        "pt-6", // 👉 desce o menu para alinhar com os títulos
+        "pt-6",
       )}
     >
-      {/* Espaço para logo / topo se quiser depois */}
-      <div className="flex h-14 items-center px-2">
-        {/* se quiser colocar logo depois, é aqui */}
-      </div>
-
-      <div className="flex-1 space-y-1 px-2 pb-4">
+      <div className="flex-1 space-y-1 px-2 pb-4 pt-14">
         {adminLinks.map((link) => {
           const isActive = pathname?.startsWith(link.href);
           const Icon = link.icon;
@@ -71,9 +59,7 @@ export function AdminNav() {
               key={link.href}
               href={link.href}
               className={cn(
-                // alinhado horizontal, ocupa largura toda
                 "flex items-center gap-2 px-3 py-2 rounded-lg text-label-small transition-colors",
-                // cores originais
                 "text-content-secondary hover:bg-background-tertiary/50",
                 isActive &&
                   "text-content-brand font-medium bg-background-tertiary/50",
@@ -85,7 +71,6 @@ export function AdminNav() {
                   isActive ? "text-content-brand" : "text-content-secondary",
                 )}
               />
-              {/* Label aparece só quando o sidebar está expandido */}
               <span
                 className={cn(
                   "whitespace-nowrap",
@@ -99,6 +84,36 @@ export function AdminNav() {
             </Link>
           );
         })}
+
+        <Link
+          href="/admin/settings"
+          className={cn(
+            // 👇 removido o mt-4
+            "flex items-center gap-2 px-3 py-2 rounded-lg text-label-small transition-colors",
+            "text-content-secondary hover:bg-background-tertiary/50",
+            pathname?.startsWith("/admin/settings") &&
+              "text-content-brand font-medium bg-background-tertiary/50",
+          )}
+        >
+          <Settings
+            className={cn(
+              "h-4 w-4 shrink-0",
+              pathname?.startsWith("/admin/settings")
+                ? "text-content-brand"
+                : "text-content-secondary",
+            )}
+          />
+          <span
+            className={cn(
+              "whitespace-nowrap",
+              "opacity-0 -translate-x-1",
+              "transition-all duration-200",
+              "group-hover:opacity-100 group-hover:translate-x-0",
+            )}
+          >
+            Configurações
+          </span>
+        </Link>
       </div>
     </nav>
   );

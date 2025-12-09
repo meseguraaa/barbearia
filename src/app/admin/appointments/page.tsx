@@ -7,6 +7,7 @@ import { DatePicker } from "@/components/date-picker";
 import type { Appointment as AppointmentType } from "@/types/appointment";
 import type { Service } from "@/types/service";
 import { AdminAppointmentsByBarber } from "@/components/admin-appointments-by-barber";
+import { requireAdminPermission } from "@/lib/admin-permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -144,6 +145,9 @@ function mapToAppointmentType(prismaAppt: any): AppointmentType {
 export default async function AdminAppointmentsPage({
   searchParams,
 }: AdminAppointmentsPageProps) {
+  // 🔐 Permissão: apenas quem tem "Agendamentos" liberado (ou Dono)
+  await requireAdminPermission("canAccessAppointments");
+
   const resolvedSearchParams = await searchParams;
   const dateParam = resolvedSearchParams.date;
 

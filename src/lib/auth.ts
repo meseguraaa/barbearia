@@ -18,6 +18,10 @@ export class AuthError extends Error {
   }
 }
 
+/**
+ * Só valida e-mail/senha e retorna o usuário.
+ * A permissão de acessar o painel fica no loginPainel.
+ */
 export async function loginWithCredentials(
   email: string,
   password: string,
@@ -29,11 +33,6 @@ export async function loginWithCredentials(
   });
 
   if (!user || !user.passwordHash) {
-    throw new AuthError();
-  }
-
-  // Apenas BARBER e ADMIN podem usar esse login
-  if (user.role !== "BARBER" && user.role !== "ADMIN") {
     throw new AuthError();
   }
 

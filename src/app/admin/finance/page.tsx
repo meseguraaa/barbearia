@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { createExpense } from "./actions";
 import { ExpenseDueDatePicker } from "@/components/expense-due-date-picker";
 import { AdminExpenseRow } from "@/components/admin-expense-row";
+import { requireAdminPermission } from "@/lib/admin-permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -101,6 +102,9 @@ async function seedRecurringExpensesForMonth(monthStart: Date, monthEnd: Date) {
 export default async function AdminFinancePage({
   searchParams,
 }: AdminFinancePageProps) {
+  // 🔐 Permissão: apenas quem tem "Financeiro" liberado (ou Dono)
+  await requireAdminPermission("canAccessFinance");
+
   const resolvedSearchParams = await searchParams;
   const monthParam = resolvedSearchParams.month;
 

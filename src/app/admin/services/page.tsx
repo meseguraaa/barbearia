@@ -15,6 +15,7 @@ import { ServiceNewDialog } from "@/components/service-new-dialog";
 import { ServiceRow } from "@/components/service-row";
 import { PlanRow } from "@/components/plan-row";
 import { ClientPlanRow } from "@/components/client-plan-row";
+import { requireAdminPermission } from "@/lib/admin-permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +33,9 @@ type ClientPlanWithRelations = ClientPlan & {
 };
 
 export default async function ServicesPage() {
+  // 🔐 Permissão: precisa ter acesso a Serviços (ou ser Dono)
+  await requireAdminPermission("canAccessServices");
+
   // 🔹 Serviços em ordem alfabética pelo nome
   const services = await prisma.service.findMany({
     orderBy: { name: "asc" },
