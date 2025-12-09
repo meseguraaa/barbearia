@@ -6,6 +6,7 @@ import type { Metadata } from "next";
 import { DatePicker } from "@/components/date-picker";
 import { DashboardDailySummary } from "@/components/dashboard-daily-summary";
 import { DashboardMonthlySummary } from "@/components/dashboard-monthly-summary";
+import { requireAdminPermission } from "@/lib/admin-permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,9 @@ async function getAppointments(dateParam?: string) {
 export default async function AdminDashboardPage({
   searchParams,
 }: AdminDashboardPageProps) {
+  // 🔐 Permissão: apenas quem tem "Dashboard" liberado (ou Dono)
+  await requireAdminPermission("canAccessDashboard");
+
   const resolvedSearchParams = await searchParams;
   const dateParam = resolvedSearchParams.date;
 

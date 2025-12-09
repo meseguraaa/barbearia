@@ -19,7 +19,8 @@ export function PainelLoginPageComponent({
   const router = useRouter();
   const { data: session, status } = useSession();
 
-  // Se já estiver logado, redireciona conforme o role
+  // Se já estiver logado (via NextAuth), redireciona conforme o role
+  // Isso vale principalmente para CLIENT (Google/Facebook/Apple).
   useEffect(() => {
     if (status !== "authenticated" || !session?.user) return;
 
@@ -28,7 +29,8 @@ export function PainelLoginPageComponent({
     if (role === "ADMIN") {
       router.replace("/admin/dashboard");
     } else if (role === "BARBER") {
-      router.replace("/painel");
+      // 🔹 Ajuste: mantém padrão do painel de barbeiro
+      router.replace("/barber/dashboard");
     } else if (role === "CLIENT") {
       router.replace("/client/schedule");
     } else {

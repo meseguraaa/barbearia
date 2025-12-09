@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/accordion";
 import { WhatsAppLogo } from "@/components/icons/whatsapp-logo";
 import { AdminEditClientDialog } from "@/components/admin-edit-client-dialog/admin-edit-client-dialog";
+import { requireAdminPermission } from "@/lib/admin-permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +66,9 @@ type ClientRow = {
 };
 
 export default async function ClientsPage() {
+  // 🔐 Permissão: apenas admins com "Clientes" liberado (ou Dono) acessam
+  await requireAdminPermission("canAccessClients");
+
   // 🔹 Todos os clientes
   const users = await prisma.user.findMany({
     where: { role: "CLIENT" },
@@ -74,7 +78,7 @@ export default async function ClientsPage() {
   if (users.length === 0) {
     return (
       <div className="max-w-7xl space-y-6 mx-auto">
-        <header className="flex items-center justify-between gap-4">
+        <header className="flex items-center justify-between.gap-4">
           <div>
             <h1 className="text-title text-content-primary">Clientes</h1>
             <p className="text-paragraph-medium-size text-content-secondary">
@@ -374,7 +378,7 @@ export default async function ClientsPage() {
                       target="_blank"
                       rel="noreferrer"
                       title="Enviar mensagem no WhatsApp"
-                      className="inline-flex items-center justify-center size-9"
+                      className="inline-flex items-center.justify-center size-9"
                     >
                       <WhatsAppLogo className="h-7 w-7" />
                       <span className="sr-only">WhatsApp</span>

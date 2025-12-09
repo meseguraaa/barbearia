@@ -16,6 +16,7 @@ import {
   AccordionTrigger,
   AccordionContent,
 } from "@/components/ui/accordion";
+import { requireAdminPermission } from "@/lib/admin-permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -121,6 +122,9 @@ function buildExceptionsSummaryLabel(daily: DailyAvailabilityRow[]) {
 }
 
 export default async function ProfessionalsPage() {
+  // 🔐 Permissão: precisa ter acesso a Profissionais (ou ser Dono)
+  await requireAdminPermission("canAccessProfessionals");
+
   const barbers = await prisma.barber.findMany({
     orderBy: { name: "asc" },
     include: {

@@ -24,7 +24,7 @@ async function main() {
   );
 
   // ================================================================
-  // ADMIN
+  // ADMIN (DONO)
   // ================================================================
   const adminUser = await prisma.user.upsert({
     where: { email: adminEmail },
@@ -32,16 +32,48 @@ async function main() {
       name: "Administrador",
       role: "ADMIN",
       passwordHash: adminPasswordHash,
+      isOwner: true, // 🔹 marca como DONO
     },
     create: {
       name: "Administrador",
       email: adminEmail,
       role: "ADMIN",
       passwordHash: adminPasswordHash,
+      isOwner: true, // 🔹 marca como DONO
     },
   });
 
   console.log("✅ Admin criado/atualizado:", adminUser.email);
+
+  // 🔹 Permissões completas para o DONO no AdminAccess
+  await prisma.adminAccess.upsert({
+    where: { userId: adminUser.id },
+    update: {
+      canAccessDashboard: true,
+      canAccessCheckout: true,
+      canAccessAppointments: true,
+      canAccessProfessionals: true,
+      canAccessServices: true,
+      canAccessReviews: true,
+      canAccessProducts: true,
+      canAccessClients: true,
+      canAccessFinance: true,
+    },
+    create: {
+      userId: adminUser.id,
+      canAccessDashboard: true,
+      canAccessCheckout: true,
+      canAccessAppointments: true,
+      canAccessProfessionals: true,
+      canAccessServices: true,
+      canAccessReviews: true,
+      canAccessProducts: true,
+      canAccessClients: true,
+      canAccessFinance: true,
+    },
+  });
+
+  console.log("🔐 Permissões completas atribuídas ao admin/dono.");
 
   // ================================================================
   // PROFISSIONAIS (BARBERS) + USERS

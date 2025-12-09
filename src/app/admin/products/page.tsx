@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 
 import { ProductRow } from "@/components/product-row";
 import { ProductNewDialog } from "@/components/product-new-dialog";
+import { requireAdminPermission } from "@/lib/admin-permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,9 @@ export type ProductForRow = {
 };
 
 export default async function ProductsPage() {
+  // 🔐 Permissão: precisa ter acesso a Produtos (ou ser Dono)
+  await requireAdminPermission("canAccessProducts");
+
   const productsPrisma: ProductFromPrisma[] = await prisma.product.findMany({
     orderBy: { createdAt: "desc" },
   });

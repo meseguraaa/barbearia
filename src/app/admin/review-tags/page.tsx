@@ -1,3 +1,4 @@
+// app/admin/review-tags/page.tsx
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 
@@ -9,6 +10,7 @@ import {
   toggleReviewTagStatusAction,
   updateReviewTagLabelAction,
 } from "./actions";
+import { requireAdminPermission } from "@/lib/admin-permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +19,9 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminReviewTagsPage() {
+  // 🔐 Permissão: precisa ter acesso a Avaliação (ou ser Dono)
+  await requireAdminPermission("canAccessReviews");
+
   const tags = await prisma.reviewTag.findMany({
     orderBy: {
       label: "asc",
