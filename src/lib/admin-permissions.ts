@@ -55,6 +55,18 @@ export const ALL_ADMIN_MODULES: AdminModule[] = [
   "SETTINGS",
 ];
 
+// 🔹 Tipo das chaves de permissão usadas no sistema (para o login, settings etc.)
+export type AdminPermissionKey =
+  | "canAccessDashboard"
+  | "canAccessAppointments"
+  | "canAccessCheckout"
+  | "canAccessClients"
+  | "canAccessProfessionals"
+  | "canAccessServices"
+  | "canAccessPlans"
+  | "canAccessFinance"
+  | "canAccessSettings";
+
 // estrutura esperada do adminAccess (ajusta se tiver algum campo a mais)
 type AdminAccess = {
   isActive: boolean;
