@@ -39,42 +39,85 @@ if (hasAppleEnv) {
 
 export const nextAuthOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
+
+  // 👉 usamos JWT em vez de session em banco
   session: {
-    strategy: "database",
+    strategy: "jwt",
   },
+
+  debug: process.env.NODE_ENV === "development",
+
   providers,
   secret: requiredEnv("NEXTAUTH_SECRET"),
+
   callbacks: {
-    async session({ session, user }) {
-      if (!session.user) return session;
+    /**
+     * JWT: roda sempre que o token é criado/atualizado.
+     * Aqui é onde carregamos os dados do usuário do banco
+     * e salvamos dentro do `token`.
+     */
+    async jwt({ token, user }) {
+      // Quando o usuário acabou de logar, `user` vem preenchido
+      if (user) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: (user as any).id },
+          include: {
+            adminAccess: true,
+          },
+        });
 
-      const dbUser = await prisma.user.findUnique({
-        where: { id: user.id },
-        include: {
-          adminAccess: true,
-        },
-      });
+        const baseUser = dbUser ?? (user as any);
 
-      if (!dbUser) {
-        (session.user as any).id = user.id;
-        (session.user as any).role = (user as any).role;
-        (session.user as any).phone = (user as any).phone ?? null;
-        return session;
+        (token as any).id = baseUser.id;
+        (token as any).role = baseUser.role;
+        (token as any).phone = baseUser.phone ?? null;
+        (token as any).isOwner = !!baseUser.isOwner;
+        (token as any).adminAccess = baseUser.adminAccess ?? null;
+
+        return token;
       }
 
-      const isOwner = !!(dbUser as any).isOwner;
+      // Se já existe token (sessão antiga), garantimos que tem id/role
+      if (!(token as any).id && token.email) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: token.email as string },
+          include: {
+            adminAccess: true,
+          },
+        });
 
-      const access = dbUser.adminAccess;
+        if (dbUser) {
+          (token as any).id = dbUser.id;
+          (token as any).role = dbUser.role;
+          (token as any).phone = dbUser.phone ?? null;
+          (token as any).isOwner = !!dbUser.isOwner;
+          (token as any).adminAccess = dbUser.adminAccess ?? null;
+        }
+      }
 
-      (session.user as any).id = dbUser.id;
-      (session.user as any).role = dbUser.role;
-      (session.user as any).phone = dbUser.phone ?? null;
-      (session.user as any).isOwner = isOwner;
-      (session.user as any).adminAccess = access ?? null;
+      return token;
+    },
+
+    /**
+     * SESSION: copia os dados do token para `session.user`,
+     * que é o que a gente usa lá no `requireAdminWithPermissions`.
+     */
+    async session({ session, token }) {
+      if (!session.user) return session;
+
+      (session.user as any).id = (token as any).id;
+      (session.user as any).role = (token as any).role;
+      (session.user as any).phone = (token as any).phone ?? null;
+      (session.user as any).isOwner = (token as any).isOwner ?? false;
+      (session.user as any).adminAccess = (token as any).adminAccess ?? null;
 
       return session;
     },
+
     async signIn() {
+      // aqui você poderia colocar alguma regra extra
+      // (ex: bloquear login de user inativo),
+      // por enquanto mantive do jeito que já estava
       return true;
     },
   },

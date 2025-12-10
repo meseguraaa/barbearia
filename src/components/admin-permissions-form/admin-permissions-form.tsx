@@ -35,7 +35,6 @@ export function AdminPermissionsForm({
   function handleToggle(key: keyof Permissions) {
     setPermissions((prev) => {
       const next = { ...prev, [key]: !prev[key] };
-      // qualquer mudança ativa o botão
       if (!dirty) setDirty(true);
       return next;
     });
@@ -81,7 +80,6 @@ export function AdminPermissionsForm({
       await updateAdminPermissions(formData);
 
       toast.success("Permissões atualizadas com sucesso!");
-      // esconde o botão novamente
       setDirty(false);
     } catch (error) {
       console.error("Erro ao atualizar permissões", error);
@@ -93,7 +91,9 @@ export function AdminPermissionsForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="grid grid-cols-2 gap-2 text-paragraph-small">
+      {/* 3 colunas no desktop, 1 no mobile */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-paragraph-small">
+        {/* 1. DASHBOARD */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -105,17 +105,7 @@ export function AdminPermissionsForm({
           <span>Dashboard</span>
         </label>
 
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="canAccessCheckout"
-            checked={permissions.canAccessCheckout}
-            onChange={() => handleToggle("canAccessCheckout")}
-            className="h-4 w-4 rounded border-border-primary bg-background-primary accent-brand-primary"
-          />
-          <span>Checkout</span>
-        </label>
-
+        {/* 2. AGENDAMENTOS */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -127,6 +117,19 @@ export function AdminPermissionsForm({
           <span>Agendamentos</span>
         </label>
 
+        {/* 3. CHECKOUT */}
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="canAccessCheckout"
+            checked={permissions.canAccessCheckout}
+            onChange={() => handleToggle("canAccessCheckout")}
+            className="h-4 w-4 rounded border-border-primary bg-background-primary accent-brand-primary"
+          />
+          <span>Checkout</span>
+        </label>
+
+        {/* 4. PROFISSIONAIS */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -138,6 +141,7 @@ export function AdminPermissionsForm({
           <span>Profissionais</span>
         </label>
 
+        {/* 5. SERVIÇOS */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -149,6 +153,7 @@ export function AdminPermissionsForm({
           <span>Serviços</span>
         </label>
 
+        {/* 6. AVALIAÇÃO */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -160,6 +165,7 @@ export function AdminPermissionsForm({
           <span>Avaliação</span>
         </label>
 
+        {/* 7. PRODUTOS */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -171,6 +177,7 @@ export function AdminPermissionsForm({
           <span>Produtos</span>
         </label>
 
+        {/* 8. CLIENTES */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -182,6 +189,7 @@ export function AdminPermissionsForm({
           <span>Clientes</span>
         </label>
 
+        {/* 9. FINANCEIRO */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -194,7 +202,6 @@ export function AdminPermissionsForm({
         </label>
       </div>
 
-      {/* botão só aparece se alguma permissão foi alterada */}
       {dirty && (
         <div className="pt-2">
           <Button type="submit" size="sm" variant="edit2" disabled={saving}>
