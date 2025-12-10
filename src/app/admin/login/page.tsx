@@ -7,13 +7,16 @@ export const metadata: Metadata = {
 };
 
 type AdminLoginPageProps = {
-  searchParams?: {
+  searchParams?: Promise<{
     error?: string;
-  };
+  }>;
 };
 
-export default function AdminLoginPage({ searchParams }: AdminLoginPageProps) {
-  const errorCode = searchParams?.error;
+export default async function AdminLoginPage({
+  searchParams,
+}: AdminLoginPageProps) {
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const errorCode = resolvedSearchParams.error;
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
@@ -21,7 +24,6 @@ export default function AdminLoginPage({ searchParams }: AdminLoginPageProps) {
         {/* Título */}
         <header className="space-y-2">
           <h1 className="text-title text-content-primary">Acesso do admin</h1>
-          <p className="text-red-500">Login inativo.</p>
         </header>
 
         <AdminLoginForm initialErrorCode={errorCode} />

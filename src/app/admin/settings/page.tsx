@@ -100,7 +100,7 @@ export default async function SettingsPage() {
   });
 
   return (
-    <div className="space-y-5 max-w-7xl">
+    <div className="max-w-7xl mx-auto space-y-5">
       {/* HEADER GERAL */}
       <header className="flex items-center justify-between gap-4">
         <div>
@@ -125,8 +125,8 @@ export default async function SettingsPage() {
               <div className="flex items-center justify-between gap-4 px-4 py-3">
                 <AccordionTrigger className="flex flex-1 items-center gap-6 hover:no-underline px-0 py-0">
                   {/* COLUNA: Nome + Email */}
-                  <div className="flex flex-col text-left.min-w-60 flex-1">
-                    <p className="text-paragraph-medium-size font-semibold text-content-primary">
+                  <div className="flex flex-col text-left min-w-60 flex-1">
+                    <p className="text-paragraph-medium font-semibold text-content-primary">
                       {row.name}
                     </p>
 
