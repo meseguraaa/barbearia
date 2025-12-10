@@ -1,5 +1,9 @@
 {
   "/admin/settings/page": "app/admin/settings/page.js",
   "/admin/login/page": "app/admin/login/page.js",
-  "/admin/checkout/page": "app/admin/checkout/page.js"
+  "/admin/checkout/page": "app/admin/checkout/page.js",
+  "/admin/finance/page": "app/admin/finance/page.js",
+  "/admin/appointments/page": "app/admin/appointments/page.js",
+  "/admin/services/page": "app/admin/services/page.js",
+  "/admin/products/page": "app/admin/products/page.js"
 }
