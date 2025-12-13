@@ -16,7 +16,6 @@ type AppointmentWithBarberPrisma = any;
 type BarberGroup = {
   barberId: string | null;
   barberName: string;
-  // 🔹 nova info: foto do barbeiro (pode ser null)
   barberImageUrl?: string | null;
   appointments: AppointmentWithBarberPrisma[];
 };
@@ -33,8 +32,6 @@ type AdminAppointmentsByBarberProps = {
   appointmentsForForm: AppointmentType[];
   barbersForForm: BarberForForm[];
   services: Service[];
-
-  // 🔹 infos de plano por agendamento (opcional)
   planCreditInfoByAppointmentId?: Record<string, PlanCreditInfo>;
 };
 
@@ -55,10 +52,8 @@ export function AdminAppointmentsByBarber({
 
   return (
     <div className="border border-border-primary rounded-xl overflow-hidden bg-background-tertiary">
-      {/* Cabeçalho do barbeiro */}
       <div className="border-b border-border-primary px-4 py-3 bg-muted/40 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
         <div className="flex items-center gap-3">
-          {/* Avatar do barbeiro */}
           <div className="h-9 w-9 rounded-full bg-background-secondary border border-border-primary overflow-hidden flex items-center justify-center text-[11px] font-medium text-content-secondary shrink-0">
             {group.barberImageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -84,7 +79,6 @@ export function AdminAppointmentsByBarber({
         </div>
       </div>
 
-      {/* Tabela de agendamentos */}
       <div className="overflow-x-auto">
         <table className="min-w-full text-sm">
           <tbody>
@@ -98,7 +92,6 @@ export function AdminAppointmentsByBarber({
                   appointmentsForForm={appointmentsForForm}
                   barbersForForm={barbersForForm}
                   services={services}
-                  // 🔹 passando infos de plano para a linha
                   isPlanCredit={planInfo?.isPlanCredit ?? false}
                   planCreditIndex={planInfo?.planCreditIndex ?? null}
                   planTotalCredits={planInfo?.planTotalCredits ?? null}

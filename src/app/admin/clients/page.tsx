@@ -298,9 +298,6 @@ export default async function ClientsPage({
   }
 
   const clientIds = users.map((u) => u.id);
-  const clientPhones = users
-    .map((u) => u.phone)
-    .filter((p): p is string => !!p);
 
   // 🔹 Serviços (para fallback de preço quando não houver snapshot)
   const services = await prisma.service.findMany();
@@ -308,10 +305,10 @@ export default async function ClientsPage({
     services.map((s) => [s.id, Number(s.price)]),
   );
 
-  // 🔹 Agendamentos dos clientes (via telefone)
+  // 🔹 Agendamentos dos clientes (✅ por clientId, não por telefone)
   const appointments = await prisma.appointment.findMany({
     where: {
-      phone: { in: clientPhones },
+      clientId: { in: clientIds },
     },
     orderBy: { scheduleAt: "asc" },
   });
@@ -344,11 +341,9 @@ export default async function ClientsPage({
   const today = new Date();
 
   const rows: ClientRow[] = users.map((user) => {
-    const userPhone = user.phone;
-
-    const userAppointments = userPhone
-      ? appointments.filter((apt) => apt.phone === userPhone)
-      : [];
+    const userAppointments = appointments.filter(
+      (apt) => apt.clientId === user.id,
+    );
 
     const totalAppointments = userAppointments.length;
 
@@ -424,8 +419,8 @@ export default async function ClientsPage({
     const totalSpent =
       totalFromAppointments + totalFromPlans + totalFromProducts;
 
-    // WhatsApp
-    const rawPhone = userPhone ?? "";
+    // WhatsApp (telefone do cadastro)
+    const rawPhone = user.phone ?? "";
     const phoneDigits = rawPhone.replace(/\D/g, "");
 
     const baseName = user.name ?? "cliente";

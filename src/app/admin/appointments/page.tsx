@@ -1,4 +1,4 @@
-// app/admin/appointments/page.tsx
+// src/app/admin/appointments/page.tsx
 import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay } from "date-fns";
 import type { Metadata } from "next";
@@ -7,7 +7,11 @@ import { DatePicker } from "@/components/date-picker";
 import type { Appointment as AppointmentType } from "@/types/appointment";
 import type { Service } from "@/types/service";
 import { AdminAppointmentsByBarber } from "@/components/admin-appointments-by-barber";
+
 import { requireAdminPermission } from "@/lib/admin-permissions";
+
+import type { AppointmentClientOption } from "@/components/appointment-form";
+import { AdminNewAppointmentButton } from "@/components/admin-new-appointment-button";
 
 export const dynamic = "force-dynamic";
 
@@ -72,7 +76,6 @@ async function getAppointments(dateParam?: string) {
       scheduleAt: "asc",
     },
     include: {
-      // 🔹 agora traz também o user do barbeiro pra ter a foto
       barber: {
         include: {
           user: true,
@@ -80,7 +83,6 @@ async function getAppointments(dateParam?: string) {
       },
       service: true,
       client: true,
-      // 🔹 trazemos também o plano do cliente para conseguir calcular créditos
       clientPlan: {
         include: {
           plan: true,
@@ -119,6 +121,30 @@ async function getServices(): Promise<Service[]> {
   })) as Service[];
 }
 
+// Clientes = Users com role CLIENT (porque prisma.client não existe no seu schema)
+async function getClientsForAdminAppointments(): Promise<
+  AppointmentClientOption[]
+> {
+  const clients = await prisma.user.findMany({
+    where: { role: "CLIENT" },
+    orderBy: { name: "asc" },
+    take: 500,
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+    },
+  });
+
+  return clients.map(
+    (c: { id: string; name: string | null; phone: string | null }) => ({
+      id: c.id,
+      name: c.name ?? "",
+      phone: c.phone ?? "",
+    }),
+  );
+}
+
 function mapToAppointmentType(prismaAppt: any): AppointmentType {
   return {
     id: prismaAppt.id,
@@ -145,7 +171,6 @@ function mapToAppointmentType(prismaAppt: any): AppointmentType {
 export default async function AdminAppointmentsPage({
   searchParams,
 }: AdminAppointmentsPageProps) {
-  // 🔐 Permissão: apenas quem tem "Agendamentos" liberado (ou Dono)
   await requireAdminPermission("canAccessAppointments");
 
   const resolvedSearchParams = await searchParams;
@@ -160,18 +185,24 @@ export default async function AdminAppointmentsPage({
   const dayStart = startOfDay(selectedDate);
   const dayEnd = endOfDay(selectedDate);
 
-  const [appointmentsPrisma, barbersPrisma, services, dayProductSalesPrisma] =
-    await Promise.all([
-      getAppointments(dateParam),
-      getBarbers(),
-      getServices(),
-      prisma.productSale.findMany({
-        where: {
-          soldAt: { gte: dayStart, lte: dayEnd },
-        },
-        include: { product: true, barber: true },
-      }),
-    ]);
+  const [
+    appointmentsPrisma,
+    barbersPrisma,
+    services,
+    dayProductSalesPrisma,
+    clientsForAdmin,
+  ] = await Promise.all([
+    getAppointments(dateParam),
+    getBarbers(),
+    getServices(),
+    prisma.productSale.findMany({
+      where: {
+        soldAt: { gte: dayStart, lte: dayEnd },
+      },
+      include: { product: true, barber: true },
+    }),
+    getClientsForAdminAppointments(),
+  ]);
 
   const appointmentsForForm = appointmentsPrisma.map(mapToAppointmentType);
 
@@ -199,7 +230,6 @@ export default async function AdminAppointmentsPage({
     }
   > = {};
 
-  // agrupa por clientPlanId (apenas quem tem clientPlan + plan)
   const appointmentsByClientPlan = appointmentsPrisma.reduce<
     Record<string, AppointmentWithBarberPrisma[]>
   >((acc, appt) => {
@@ -208,29 +238,22 @@ export default async function AdminAppointmentsPage({
     }
 
     const key = appt.clientPlanId;
-    if (!acc[key]) {
-      acc[key] = [];
-    }
+    if (!acc[key]) acc[key] = [];
     acc[key].push(appt);
     return acc;
   }, {});
 
-  // para cada plano, calcula o índice de crédito
   Object.values(appointmentsByClientPlan).forEach((apptsForPlan) => {
     if (apptsForPlan.length === 0) return;
 
-    // desconsidera cancelados
     const validAppts = apptsForPlan.filter(
       (appt) => appt.status !== "CANCELED",
     );
-
     if (validAppts.length === 0) return;
 
-    // todos compartilham o mesmo plano
     const first = validAppts[0];
     const totalCredits = first.clientPlan!.plan.totalBookings;
 
-    // ordena por horário
     validAppts.sort((a, b) => a.scheduleAt.getTime() - b.scheduleAt.getTime());
 
     validAppts.forEach((appt, index) => {
@@ -244,8 +267,6 @@ export default async function AdminAppointmentsPage({
       };
     });
   });
-
-  /* ------------------------------------------------------------------ */
 
   const groupedByBarber = appointmentsPrisma.reduce<
     Record<
@@ -272,7 +293,6 @@ export default async function AdminAppointmentsPage({
     }
 
     acc[barberId].appointments.push(appt);
-
     return acc;
   }, {});
 
@@ -280,9 +300,7 @@ export default async function AdminAppointmentsPage({
     Record<string, DayProductSale[]>
   >((acc, sale) => {
     const barberId = sale.barberId ?? "no-barber";
-    if (!acc[barberId]) {
-      acc[barberId] = [];
-    }
+    if (!acc[barberId]) acc[barberId] = [];
     acc[barberId].push(sale);
     return acc;
   }, {});
@@ -291,7 +309,7 @@ export default async function AdminAppointmentsPage({
 
   return (
     <div className="space-y-6">
-      {/* HEADER + DATA */}
+      {/* HEADER + DATA + BOTÃO */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-title text-content-primary">Agendamentos</h1>
@@ -301,7 +319,17 @@ export default async function AdminAppointmentsPage({
           </p>
         </div>
 
-        <DatePicker />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {/* ✅ Botão SEMPRE renderiza (não depende do DatePicker nem de hidratação frágil) */}
+          <AdminNewAppointmentButton
+            clients={clientsForAdmin}
+            appointments={appointmentsForForm}
+            barbers={barbersForForm}
+            services={services}
+          />
+
+          <DatePicker />
+        </div>
       </div>
 
       {appointmentsPrisma.length === 0 && dayProductSalesPrisma.length === 0 ? (
@@ -327,7 +355,6 @@ export default async function AdminAppointmentsPage({
                 appointmentsForForm={appointmentsForForm}
                 barbersForForm={barbersForForm}
                 services={services}
-                // 🔹 infos de plano por agendamento
                 planCreditInfoByAppointmentId={planCreditInfoByAppointmentId}
               />
             );

@@ -48,7 +48,8 @@ export async function finalizeClientOpenOrders(formData: FormData) {
           status: "PENDING",
           items: { some: { serviceId: { not: null } } },
         },
-        select: { id: true, status: true },
+        // ✅ precisamos do appointmentId pra refletir no Appointment
+        select: { id: true, status: true, appointmentId: true },
       }),
 
       prisma.order.findMany({
@@ -78,15 +79,34 @@ export async function finalizeClientOpenOrders(formData: FormData) {
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1) Finaliza serviços (só muda status)
+      // 1) Finaliza serviços (status do pedido + reflete no appointment)
       for (const order of serviceOrders) {
         // dupla checagem de status (evita corrida)
         if (order.status !== "PENDING") continue;
 
         await tx.order.update({
           where: { id: order.id },
-          data: { status: "COMPLETED" },
+          data: {
+            status: "COMPLETED",
+            // ✅ opcional: ajuda relatórios/financeiro quando o admin escolhe barbeiro
+            ...(barberId ? { barberId } : {}),
+          },
         });
+
+        // ✅ Se esse pedido é de um atendimento, marque o atendimento como DONE
+        if (order.appointmentId) {
+          // Só finaliza se ainda não estiver concluído/cancelado (idempotência)
+          await tx.appointment.updateMany({
+            where: {
+              id: order.appointmentId,
+              status: "PENDING",
+            },
+            data: {
+              status: "DONE",
+              concludedByRole: "ADMIN",
+            },
+          });
+        }
       }
 
       // 2) Finaliza produtos (baixa estoque + cria productSale + status completed)
@@ -153,6 +173,12 @@ export async function cancelClientOpenOrders(formData: FormData) {
         status: "CANCELED",
       },
     });
+
+    // ⚠️ Observação:
+    // Não mexo automaticamente em Appointment aqui porque:
+    // - "cancelar conta" pode significar só cancelar o checkout/pedido, não o agendamento.
+    // Se você quiser que isso cancele o atendimento também, eu ajusto depois
+    // (mas aí preciso alinhar regra de negócio).
   });
 
   redirect(getRedirectTo(formData));
@@ -274,7 +300,8 @@ export async function finalizeServiceOrder(formData: FormData) {
   await withRevalidate(async () => {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, status: true },
+      // ✅ precisamos do appointmentId pra refletir no Appointment
+      select: { id: true, status: true, appointmentId: true },
     });
 
     if (!order) {
@@ -285,11 +312,27 @@ export async function finalizeServiceOrder(formData: FormData) {
       return;
     }
 
-    await prisma.order.update({
-      where: { id: orderId },
-      data: {
-        status: "COMPLETED",
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          status: "COMPLETED",
+        },
+      });
+
+      // ✅ Se for um pedido ligado a atendimento, conclui o atendimento também
+      if (order.appointmentId) {
+        await tx.appointment.updateMany({
+          where: {
+            id: order.appointmentId,
+            status: "PENDING",
+          },
+          data: {
+            status: "DONE",
+            concludedByRole: "ADMIN",
+          },
+        });
+      }
     });
   });
 
@@ -306,7 +349,8 @@ export async function cancelServiceOrder(formData: FormData) {
   await withRevalidate(async () => {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      select: { id: true, status: true },
+      // ✅ precisamos do appointmentId pra refletir no Appointment
+      select: { id: true, status: true, appointmentId: true },
     });
 
     if (!order) {
@@ -317,11 +361,27 @@ export async function cancelServiceOrder(formData: FormData) {
       return;
     }
 
-    await prisma.order.update({
-      where: { id: orderId },
-      data: {
-        status: "CANCELED",
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          status: "CANCELED",
+        },
+      });
+
+      // ✅ Se era um atendimento e ele ainda estava pendente, marca como cancelado
+      if (order.appointmentId) {
+        await tx.appointment.updateMany({
+          where: {
+            id: order.appointmentId,
+            status: "PENDING",
+          },
+          data: {
+            status: "CANCELED",
+            cancelledByRole: "ADMIN",
+          },
+        });
+      }
     });
   });
 

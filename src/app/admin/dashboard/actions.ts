@@ -28,6 +28,9 @@ function isValidPhoneDigits(phoneDigits: string): boolean {
  * Schema
  * ---------------------------------------------------------*/
 const appointmentSchema = z.object({
+  // ✅ NOVO: no admin podemos mandar o clientId explícito (mais seguro que telefone)
+  clientId: z.string().min(1).optional(),
+
   clientName: z.string().min(1, "Nome do cliente é obrigatório"),
   phone: z
     .string()
@@ -146,17 +149,40 @@ async function getDefaultClientId(): Promise<string> {
 
 /* ---------------------------------------------------------
  * NOVO: descobrir clientId
- * 1) Tenta achar pelo telefone informado no agendamento (NORMALIZADO)
- * 2) Se não achar → tenta sessão NextAuth
+ * 0) Se vier clientId explícito (ADMIN), usa ele (valida role CLIENT)
+ * 1) Tenta achar CLIENTE pelo telefone informado no agendamento (NORMALIZADO)
+ * 2) Se não achar → tenta sessão NextAuth (SÓ se for CLIENT)
  * 3) Se ainda não tiver → cai no cliente padrão
  * ---------------------------------------------------------*/
-async function getClientIdForAppointment(phoneDigits: string): Promise<string> {
+async function getClientIdForAppointment(
+  phoneDigits: string,
+  explicitClientId?: string,
+): Promise<string> {
+  // 0) admin mandou clientId? valida e usa
+  if (explicitClientId) {
+    const client = await prisma.user.findUnique({
+      where: { id: explicitClientId },
+      select: { id: true, role: true, isActive: true },
+    });
+
+    if (client && client.role === "CLIENT" && client.isActive !== false) {
+      return client.id;
+    }
+
+    // se veio id inválido ou não CLIENT, não explode o sistema:
+    // cai para os próximos passos
+  }
+
   const normalized = normalizePhone(phoneDigits);
 
-  // 1) tenta achar usuário pelo telefone normalizado
+  // 1) tenta achar USUÁRIO CLIENT pelo telefone normalizado
   if (normalized) {
     const clientByPhone = await prisma.user.findFirst({
-      where: { phone: normalized },
+      where: {
+        phone: normalized,
+        role: "CLIENT", // ✅ CRÍTICO: impede pegar BARBER/ADMIN pelo mesmo telefone
+      },
+      select: { id: true },
     });
 
     if (clientByPhone) {
@@ -164,12 +190,13 @@ async function getClientIdForAppointment(phoneDigits: string): Promise<string> {
     }
   }
 
-  // 2) se não achar pelo telefone, tenta sessão
+  // 2) se não achar pelo telefone, tenta sessão (SÓ CLIENT)
   try {
     const session = await getServerSession(nextAuthOptions);
     const userId = (session?.user as any)?.id as string | undefined;
+    const role = (session?.user as any)?.role as string | undefined;
 
-    if (userId) {
+    if (userId && role === "CLIENT") {
       return userId;
     }
   } catch (error) {
@@ -179,7 +206,7 @@ async function getClientIdForAppointment(phoneDigits: string): Promise<string> {
     );
   }
 
-  // 3) fallback seguro (admin / barbeiro criando agendamento manual)
+  // 3) fallback seguro
   return getDefaultClientId();
 }
 
@@ -238,8 +265,12 @@ export async function createAppointment(data: AppointmentData) {
     return { error: "Serviço não encontrado" };
   }
 
-  // 🔹 Descobre o clientId deste agendamento (telefone já está normalizado pelo schema)
-  const clientId = await getClientIdForAppointment(parsed.phone);
+  // 🔹 Descobre o clientId deste agendamento
+  // ✅ prioridade: parsed.clientId (ADMIN), senão telefone/sessão/fallback
+  const clientId = await getClientIdForAppointment(
+    parsed.phone,
+    parsed.clientId,
+  );
 
   // Snapshots default (sem plano)
   let servicePriceAtTheTime = service.price; // Decimal
@@ -278,8 +309,6 @@ export async function createAppointment(data: AppointmentData) {
           },
         });
 
-        // Se já existe a quantidade máxima de agendamentos usando esse plano,
-        // este novo agendamento fica como avulso (valor original do serviço).
         if (appointmentsUsingPlanCount < totalBookings) {
           // Verifica se o serviço faz parte do plano
           const planHasService = await prisma.planService.findFirst({
@@ -292,14 +321,10 @@ export async function createAppointment(data: AppointmentData) {
           if (planHasService) {
             clientPlanId = clientPlan.id;
 
-            // ⚠️ commissionPercent é number → convertemos pra Decimal
             const commissionPercentDecimal = new Prisma.Decimal(
               clientPlan.plan.commissionPercent,
             );
 
-            // RN4 — comissão vem do plano:
-            // total da comissão = price * (commissionPercent / 100)
-            // o barbeiro recebe esse total dividido pelos agendamentos do plano
             const totalCommissionValue = clientPlan.plan.price
               .mul(commissionPercentDecimal)
               .div(new Prisma.Decimal(100));
@@ -308,8 +333,6 @@ export async function createAppointment(data: AppointmentData) {
               new Prisma.Decimal(totalBookings),
             );
 
-            // snapshots base; o ajuste de cobrança (1º crédito x restantes)
-            // será feito na conclusão (DONE)
             servicePriceAtTheTime = clientPlan.plan.price;
             barberPercentageAtTheTime = commissionPercentDecimal;
             barberEarningValue = perBooking;
@@ -323,7 +346,15 @@ export async function createAppointment(data: AppointmentData) {
   return withAppointmentMutation(async () => {
     await prisma.appointment.create({
       data: {
-        ...parsed, // phone já vem normalizado
+        // ⚠️ não espalha clientId do parsed pra dentro do create
+        // porque o Prisma precisa do clientId calculado acima
+        clientName: parsed.clientName,
+        phone: parsed.phone,
+        description: parsed.description,
+        scheduleAt: parsed.scheduleAt,
+        serviceId: parsed.serviceId,
+        barberId: parsed.barberId,
+
         clientId,
         clientPlanId,
         servicePriceAtTheTime,
@@ -395,7 +426,13 @@ export async function updateAppointment(id: string, data: AppointmentData) {
       // aqui não mudamos o clientId nem o clientPlanId,
       // só os campos do formulário e os snapshots calculados acima
       data: {
-        ...parsed, // phone já vem normalizado
+        clientName: parsed.clientName,
+        phone: parsed.phone,
+        description: parsed.description,
+        scheduleAt: parsed.scheduleAt,
+        serviceId: parsed.serviceId,
+        barberId: parsed.barberId,
+
         servicePriceAtTheTime,
         barberPercentageAtTheTime,
         barberEarningValue,
