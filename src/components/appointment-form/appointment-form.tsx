@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +29,7 @@ import {
   Scissors,
   User,
   UserCircle,
+  Users,
 } from "lucide-react";
 import { IMaskInput } from "react-imask";
 import { addMinutes, format, isSameDay, startOfToday } from "date-fns";
@@ -48,7 +50,7 @@ import {
   getAvailabilityWindowsForBarberOnDateAction,
   getAvailableBarbersForDateAction,
 } from "@/app/admin/dashboard/actions";
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Appointment } from "@/types/appointment";
 import {
   appointmentFormSchema,
@@ -63,19 +65,16 @@ type AvailabilityWindow = {
   endTime: string;
 };
 
-// Tipo normalizado de profissional só para o formulário
-// Agora pode carregar também os serviços que ele realiza
 type AppointmentBarber = {
   id: string;
-  name: string; // sempre string pra exibir direitinho
+  name: string;
   email: string;
   phone: string;
   isActive: boolean;
   role: "BARBER";
-  serviceIds?: string[]; // IDs de serviços que este profissional realiza
+  serviceIds?: string[];
 };
 
-// 🔹 Resumo do plano do cliente para o formulário
 type ClientPlanSummary = {
   planId: string;
   planName: string;
@@ -83,7 +82,13 @@ type ClientPlanSummary = {
   usedBookings: number;
   totalBookings: number;
   endDate: string | Date;
-  serviceIds: string[]; // serviços cobertos pelo plano
+  serviceIds: string[];
+};
+
+export type AppointmentClientOption = {
+  id: string;
+  name: string;
+  phone: string;
 };
 
 /* ------------------------------------------------------------------
@@ -237,15 +242,38 @@ function filterProfessionalsByService(
 type AppointmentFormProps = {
   appointment?: Appointment;
   appointments?: Appointment[];
+
   /**
    * Lista de profissionais ativos já normalizados.
    * Idealmente incluindo serviceIds (serviços que cada profissional executa).
    */
   barbers: AppointmentBarber[];
   services?: Service[];
+
+  /**
+   * Se vier children, usamos como trigger do Dialog (ex: botão "Novo agendamento").
+   * Se não vier, usamos o botão padrão (Agendar/Editar).
+   */
   children?: ReactNode;
+
   defaultClientName?: string;
   clientPlan?: ClientPlanSummary | null;
+
+  /**
+   * Modo do formulário.
+   * - "client": mantém comportamento atual.
+   * - "admin": exige escolher um cliente existente na base.
+   */
+  mode?: "client" | "admin";
+
+  /**
+   * Lista de clientes para o modo ADMIN.
+   */
+  clients?: AppointmentClientOption[];
+
+  // ✅ controle externo opcional (para o botão do admin sempre aparecer)
+  open?: boolean;
+  onOpenChange?: (v: boolean) => void;
 };
 
 export const AppointmentForm = ({
@@ -256,9 +284,12 @@ export const AppointmentForm = ({
   children,
   defaultClientName,
   clientPlan,
+  mode = "client",
+  clients = [],
+  open,
+  onOpenChange,
 }: AppointmentFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
-
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
   const isEdit = !!appointment?.id;
@@ -266,18 +297,31 @@ export const AppointmentForm = ({
 
   const { data: session } = useSession();
   const role = (session?.user as any)?.role;
+
   const sessionClientName =
     role === "CLIENT" ? ((session?.user as any)?.name ?? "") : "";
   const sessionPhone =
     role === "CLIENT" ? ((session?.user as any)?.phone ?? "") : "";
 
-  const initialClientName = defaultClientName ?? sessionClientName ?? "";
+  // ✅ no admin: não usa sessão como default
+  const initialClientName =
+    mode === "admin" ? "" : (defaultClientName ?? sessionClientName ?? "");
+  const initialPhone = mode === "admin" ? "" : sessionPhone || "";
+
+  // ✅ no admin, a escolha do cliente controla clientName/phone por baixo
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+
+  const selectedClient = useMemo(() => {
+    if (mode !== "admin") return null;
+    if (!selectedClientId) return null;
+    return clients.find((c) => c.id === selectedClientId) ?? null;
+  }, [mode, selectedClientId, clients]);
 
   const form = useForm<AppointFormValues>({
     resolver: zodResolver(appointmentFormSchema),
     defaultValues: {
       clientName: initialClientName,
-      phone: sessionPhone || "",
+      phone: initialPhone,
       serviceId: "",
       description: "",
       scheduleAt: undefined,
@@ -286,12 +330,42 @@ export const AppointmentForm = ({
     },
   });
 
+  // ✅ open real (interno ou externo)
+  const dialogOpen = open ?? isOpen;
+
+  const handleOpenChange = (v: boolean) => {
+    onOpenChange?.(v);
+    if (open == null) setIsOpen(v);
+  };
+
+  // Quando selecionar cliente no ADMIN, preenche clientName/phone (sem editar manualmente)
+  useEffect(() => {
+    if (mode !== "admin") return;
+
+    if (!selectedClient) {
+      form.setValue("clientName", "");
+      form.setValue("phone", "");
+      return;
+    }
+
+    form.setValue("clientName", selectedClient.name ?? "");
+    form.setValue("phone", selectedClient.phone ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, selectedClientId]);
+
   const onSubmit = async (data: AppointFormValues) => {
+    if (mode === "admin" && !selectedClientId) {
+      toast.error("Selecione um cliente para continuar.");
+      return;
+    }
+
     const [hour, minute] = data.time.split(":");
     const scheduleAt = new Date(data.scheduleAt);
     scheduleAt.setHours(Number(hour), Number(minute), 0, 0);
 
+    // ✅ payload inclui clientId quando admin
     const payload = {
+      clientId: mode === "admin" ? selectedClientId : undefined,
       clientName: data.clientName,
       phone: data.phone,
       description: data.description,
@@ -301,11 +375,11 @@ export const AppointmentForm = ({
     };
 
     const result = isEdit
-      ? await updateAppointment(appointment!.id, payload)
-      : await createAppointment(payload);
+      ? await updateAppointment(appointment!.id, payload as any)
+      : await createAppointment(payload as any);
 
-    if (result?.error) {
-      toast.error(result.error);
+    if ((result as any)?.error) {
+      toast.error((result as any).error);
       return;
     }
 
@@ -313,16 +387,23 @@ export const AppointmentForm = ({
       `Agendamento ${isEdit ? "atualizado" : "criado"} com sucesso!`,
     );
 
-    setIsOpen(false);
+    handleOpenChange(false);
+
+    // reset do form
     form.reset({
       clientName: initialClientName,
-      phone: sessionPhone || "",
+      phone: initialPhone,
       serviceId: "",
       description: "",
       scheduleAt: undefined,
       time: "",
       barberId: "",
     });
+
+    // reset do cliente no modo admin
+    if (mode === "admin") {
+      setSelectedClientId("");
+    }
   };
 
   const handleSubmit = form.handleSubmit(onSubmit, (errors) => {
@@ -330,7 +411,7 @@ export const AppointmentForm = ({
 
     if (!firstError) return;
 
-    const message = firstError?.message;
+    const message = (firstError as any)?.message;
 
     if (message) {
       toast.error(String(message));
@@ -340,10 +421,20 @@ export const AppointmentForm = ({
   });
 
   useEffect(() => {
+    // ao abrir/fechar, garante estado limpinho pro ADMIN
+    if (!dialogOpen) {
+      if (mode === "admin" && !isEdit) {
+        setSelectedClientId("");
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialogOpen]);
+
+  useEffect(() => {
     if (!appointment) {
       form.reset({
         clientName: initialClientName,
-        phone: sessionPhone || "",
+        phone: initialPhone,
         serviceId: "",
         description: "",
         scheduleAt: undefined,
@@ -376,20 +467,10 @@ export const AppointmentForm = ({
       barberId: appointment.barberId,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appointment, servicesList.length, initialClientName, sessionPhone]);
-
-  useEffect(() => {
-    if (appointment?.id) {
-      console.log("AppointmentForm ▶ render para agendamento", {
-        id: appointment.id,
-        clientName: appointment.clientName,
-      });
-    }
-  }, [appointment?.id, appointment?.clientName]);
+  }, [appointment, servicesList.length, initialClientName, initialPhone]);
 
   const selectedServiceId = form.watch("serviceId");
   const selectedDate = form.watch("scheduleAt");
-  const selectedTime = form.watch("time");
   const selectedBarberId = form.watch("barberId");
 
   const selectedServiceData = servicesList.find(
@@ -434,8 +515,6 @@ export const AppointmentForm = ({
 
         result = Array.isArray(result) ? result : [];
 
-        // Garantir que o barbeiro do agendamento em edição apareça,
-        // mesmo que não esteja na lista de disponibilidade retornada
         if (isEdit && appointment?.barberId) {
           const existsInResult = result.some(
             (b) => b.id === appointment.barberId,
@@ -555,12 +634,19 @@ export const AppointmentForm = ({
     availableTimes = [];
   }
 
+  const isAdminMode = mode === "admin";
+  const canProceedAdmin = !isAdminMode || !!selectedClientId;
+
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant={isEdit ? "edit2" : "brand"} size="sm">
-          {isEdit ? "Editar" : "Agendar"}
-        </Button>
+        {children ? (
+          children
+        ) : (
+          <Button variant={isEdit ? "edit2" : "brand"} size="sm">
+            {isEdit ? "Editar" : "Agendar"}
+          </Button>
+        )}
       </DialogTrigger>
 
       <DialogContent
@@ -570,69 +656,150 @@ export const AppointmentForm = ({
       >
         <DialogHeader>
           <DialogTitle size="modal">
-            {isEdit ? "Editar agendamento" : "Agende um atendimento"}
+            {isEdit
+              ? "Editar agendamento"
+              : isAdminMode
+                ? "Novo agendamento"
+                : "Agende um atendimento"}
           </DialogTitle>
           <DialogDescription size="modal">
             {isEdit
               ? "Atualize os dados deste atendimento:"
-              : "Preencha os dados do cliente para realizar o agendamento:"}
+              : isAdminMode
+                ? "Selecione um cliente e preencha os dados para realizar o agendamento:"
+                : "Preencha os dados do cliente para realizar o agendamento:"}
           </DialogDescription>
         </DialogHeader>
 
         <Form {...form}>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* SEU NOME */}
-            <FormField
-              control={form.control}
-              name="clientName"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-label-medium-size text-content-primary">
-                    Seu nome
-                  </FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <User
-                        className="absolute left-3 top-1/2 -translate-y-1/2 transform text-content-brand"
-                        size={20}
-                      />
-                      <Input
-                        placeholder="Seu nome"
-                        className="pl-10"
-                        {...field}
-                      />
-                    </div>
-                  </FormControl>
-                </FormItem>
-              )}
-            />
+            {/* ===========================
+             *  MODO ADMIN: SELECIONAR CLIENTE
+             * =========================== */}
+            {isAdminMode && !isEdit && (
+              <div className="space-y-2">
+                <FormLabel className="text-label-medium-size text-content-primary">
+                  Cliente
+                </FormLabel>
 
-            {/* TELEFONE */}
-            <FormField
-              control={form.control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-label-medium-size text-content-primary">
-                    Telefone
-                  </FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <Phone
-                        className="absolute left-3 top-1/2 -translate-y-1/2 transform text-content-brand"
-                        size={20}
-                      />
-                      <IMaskInput
-                        placeholder="(99) 99999-9999"
-                        mask="(00) 00000-0000"
-                        className="pl-10 flex h-12 w-full rounded-md border border-border-primary bg-background-tertiary px-3 py-2 text-sm text-content-primary ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-content-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-offset-0 focus-visible:ring-border-brand disabled:cursor-not-allowed disabled:opacity-50 hover:border-border-secondary focus:border-border-brand focus-visible:border-border-brand aria-invalid:ring-destructive/20 aria-invalid:border-destructive"
-                        {...field}
-                      />
+                <Select
+                  value={selectedClientId}
+                  onValueChange={(value) => {
+                    setSelectedClientId(value);
+
+                    // Reset do fluxo quando troca cliente (deixa tudo limpinho)
+                    form.setValue("serviceId", "");
+                    form.setValue("description", "");
+                    form.setValue("scheduleAt", undefined as any);
+                    form.setValue("time", "");
+                    form.setValue("barberId", "");
+                  }}
+                >
+                  <SelectTrigger>
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-content-brand" />
+                      <SelectValue placeholder="Selecione um cliente" />
                     </div>
-                  </FormControl>
-                </FormItem>
-              )}
-            />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    {clients.length === 0 ? (
+                      <SelectItem disabled value="no-clients">
+                        Nenhum cliente cadastrado
+                      </SelectItem>
+                    ) : (
+                      clients.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name} {c.phone ? `• ${c.phone}` : ""}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs text-content-secondary">
+                    Não encontrou? Cadastre em <b>Clientes</b> e volte para
+                    concluir.
+                  </p>
+
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/admin/clients">Cadastrar cliente</Link>
+                  </Button>
+                </div>
+
+                {!!selectedClient && (
+                  <div className="rounded-lg border border-border-primary bg-background-tertiary p-3">
+                    <p className="text-sm text-content-primary font-medium">
+                      {selectedClient.name}
+                    </p>
+                    <p className="text-xs text-content-secondary">
+                      {selectedClient.phone}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ===========================
+             *  MODO CLIENT: CAMPOS DE NOME/TELEFONE (como já era)
+             * =========================== */}
+            {!isAdminMode && (
+              <>
+                {/* SEU NOME */}
+                <FormField
+                  control={form.control}
+                  name="clientName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-label-medium-size text-content-primary">
+                        Seu nome
+                      </FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <User
+                            className="absolute left-3 top-1/2 -translate-y-1/2 transform text-content-brand"
+                            size={20}
+                          />
+                          <Input
+                            placeholder="Seu nome"
+                            className="pl-10"
+                            {...field}
+                          />
+                        </div>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                {/* TELEFONE */}
+                <FormField
+                  control={form.control}
+                  name="phone"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-label-medium-size text-content-primary">
+                        Telefone
+                      </FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Phone
+                            className="absolute left-3 top-1/2 -translate-y-1/2 transform text-content-brand"
+                            size={20}
+                          />
+                          <IMaskInput
+                            placeholder="(99) 99999-9999"
+                            mask="(00) 00000-0000"
+                            className="pl-10 flex h-12 w-full rounded-md border border-border-primary bg-background-tertiary px-3 py-2 text-sm text-content-primary ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-content-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-offset-0 focus-visible:ring-border-brand disabled:cursor-not-allowed disabled:opacity-50 hover:border-border-secondary focus:border-border-brand focus-visible:border-border-brand aria-invalid:ring-destructive/20 aria-invalid:border-destructive"
+                            {...field}
+                          />
+                        </div>
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </>
+            )}
 
             {/* SERVIÇO */}
             <FormField
@@ -658,11 +825,18 @@ export const AppointmentForm = ({
                         form.setValue("barberId", "");
                       }}
                       value={field.value}
+                      disabled={!canProceedAdmin}
                     >
                       <SelectTrigger>
                         <div className="flex items-center gap-2">
                           <Scissors className="h-4 w-4 text-content-brand" />
-                          <SelectValue placeholder="Selecione o serviço" />
+                          <SelectValue
+                            placeholder={
+                              !canProceedAdmin
+                                ? "Selecione um cliente"
+                                : "Selecione o serviço"
+                            }
+                          />
                         </div>
                       </SelectTrigger>
                       <SelectContent>
@@ -752,7 +926,7 @@ export const AppointmentForm = ({
                       <FormControl>
                         <Button
                           variant="outline"
-                          disabled={!selectedServiceId}
+                          disabled={!selectedServiceId || !canProceedAdmin}
                           className={cn(
                             "w-full justify-between text-left font-normal bg-background-tertiary border-border-primary text-content-primary hover:bg-background-tertiary hover:border-border-secondary hover:text-content-primary focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand focus:border-border-brand focus-visible:border-border-brand disabled:opacity-60 disabled:cursor-not-allowed",
                             !field.value && "text-content-secondary",
@@ -771,9 +945,11 @@ export const AppointmentForm = ({
                               format(field.value, "dd/MM/yyyy")
                             ) : (
                               <span>
-                                {!selectedServiceId
-                                  ? "Selecione um serviço"
-                                  : "Selecione uma data"}
+                                {!canProceedAdmin
+                                  ? "Selecione um cliente"
+                                  : !selectedServiceId
+                                    ? "Selecione um serviço"
+                                    : "Selecione uma data"}
                               </span>
                             )}
                           </div>
@@ -790,7 +966,6 @@ export const AppointmentForm = ({
                           form.setValue("time", "");
                           form.setValue("barberId", "");
 
-                          // 👇 SÓ FECHA QUANDO UM DIA É SELECIONADO
                           if (date) {
                             setIsDatePickerOpen(false);
                           }
@@ -821,26 +996,30 @@ export const AppointmentForm = ({
                         form.setValue("time", "");
                       }}
                       value={field.value}
-                      disabled={!selectedServiceId || !selectedDate}
+                      disabled={
+                        !selectedServiceId || !selectedDate || !canProceedAdmin
+                      }
                     >
                       <SelectTrigger
                         className="
-    w-full justify-between text-left font-normal
-    bg-background-tertiary border-border-primary text-content-primary
-    focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
-    focus:border-border-brand focus-visible:border-border-brand
-    disabled:opacity-100 disabled:cursor-not-allowed disabled:pointer-events-none
-  "
+                          w-full justify-between text-left font-normal
+                          bg-background-tertiary border-border-primary text-content-primary
+                          focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
+                          focus:border-border-brand focus-visible:border-border-brand
+                          disabled:opacity-100 disabled:cursor-not-allowed disabled:pointer-events-none
+                        "
                       >
                         <div className="flex items-center gap-2">
                           <UserCircle className="h-4 w-4 text-content-brand" />
                           <SelectValue
                             placeholder={
-                              !selectedServiceId
-                                ? "Selecione um serviço"
-                                : !selectedDate
-                                  ? "Selecione uma data"
-                                  : "Selecione o profissional"
+                              !canProceedAdmin
+                                ? "Selecione um cliente"
+                                : !selectedServiceId
+                                  ? "Selecione um serviço"
+                                  : !selectedDate
+                                    ? "Selecione uma data"
+                                    : "Selecione o profissional"
                             }
                           />
                         </div>
@@ -890,29 +1069,34 @@ export const AppointmentForm = ({
                       }}
                       value={field.value}
                       disabled={
-                        !selectedServiceId || !selectedDate || !selectedBarberId
+                        !selectedServiceId ||
+                        !selectedDate ||
+                        !selectedBarberId ||
+                        !canProceedAdmin
                       }
                     >
                       <SelectTrigger
                         className="
-    w-full justify-between text-left font-normal
-    bg-background-tertiary border-border-primary text-content-primary
-    focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
-    focus:border-border-brand focus-visible:border-border-brand
-    disabled:opacity-60 disabled:cursor-not-allowed disabled:pointer-events-none
-  "
+                          w-full justify-between text-left font-normal
+                          bg-background-tertiary border-border-primary text-content-primary
+                          focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand
+                          focus:border-border-brand focus-visible:border-border-brand
+                          disabled:opacity-60 disabled:cursor-not-allowed disabled:pointer-events-none
+                        "
                       >
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-content-brand" />
                           <SelectValue
                             placeholder={
-                              !selectedServiceId
-                                ? "Selecione um serviço"
-                                : !selectedDate
-                                  ? "Selecione uma data"
-                                  : !selectedBarberId
-                                    ? "Selecione o profissional"
-                                    : "Selecione um horário"
+                              !canProceedAdmin
+                                ? "Selecione um cliente"
+                                : !selectedServiceId
+                                  ? "Selecione um serviço"
+                                  : !selectedDate
+                                    ? "Selecione uma data"
+                                    : !selectedBarberId
+                                      ? "Selecione o profissional"
+                                      : "Selecione um horário"
                             }
                           />
                         </div>
@@ -947,7 +1131,10 @@ export const AppointmentForm = ({
               <Button
                 type="submit"
                 variant="brand"
-                disabled={form.formState.isSubmitting}
+                disabled={
+                  form.formState.isSubmitting ||
+                  (isAdminMode && !selectedClientId)
+                }
               >
                 {form.formState.isSubmitting && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

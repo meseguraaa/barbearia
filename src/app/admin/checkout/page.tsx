@@ -52,6 +52,32 @@ function parsePositiveInt(value: string | undefined, fallback: number) {
   return n;
 }
 
+// ✅ helper: label do cliente com prioridade correta
+function getOrderClientLabel(order: {
+  client?: { name?: string | null; email?: string | null } | null;
+  appointment?: {
+    client?: { name?: string | null; email?: string | null } | null;
+    clientName?: string | null;
+  } | null;
+}) {
+  return (
+    order.appointment?.client?.name ||
+    order.appointment?.client?.email ||
+    order.appointment?.clientName ||
+    order.client?.name ||
+    order.client?.email ||
+    "Cliente não identificado"
+  );
+}
+
+// ✅ helper: chave correta p/ agrupar cliente (serviço prioriza appointment.clientId)
+function getOrderClientKey(order: {
+  clientId?: string | null;
+  appointment?: { clientId?: string | null } | null;
+}) {
+  return order.appointment?.clientId ?? order.clientId ?? null;
+}
+
 export default async function AdminCheckoutPage({
   searchParams,
 }: AdminCheckoutPageProps) {
@@ -134,10 +160,12 @@ export default async function AdminCheckoutPage({
             service: true,
           },
         },
+        // ✅ IMPORTANTE: inclui o cliente do appointment e o snapshot clientName
         appointment: {
           include: {
             barber: true,
             service: true,
+            client: true,
           },
         },
       },
@@ -175,10 +203,12 @@ export default async function AdminCheckoutPage({
           product: true,
         },
       },
+      // ✅ inclui client no appointment também
       appointment: {
         include: {
           barber: true,
           service: true,
+          client: true,
         },
       },
     },
@@ -230,21 +260,15 @@ export default async function AdminCheckoutPage({
   const orphanServiceOrders: PendingServiceOrder[] = [];
   const orphanProductOrders: PendingProductOrder[] = [];
 
-  function getClientLabel(orderClient: any) {
-    return (
-      orderClient?.name || orderClient?.email || "Cliente não identificado"
-    );
-  }
-
   for (const order of pendingServiceOrders) {
-    const clientId = (order as any).clientId as string | null | undefined;
+    const clientId = getOrderClientKey(order);
     if (!clientId) {
       orphanServiceOrders.push(order);
       continue;
     }
 
     const existing = accountsMap.get(clientId);
-    const label = getClientLabel(order.client);
+    const label = getOrderClientLabel(order);
     const orderTotal = Number(order.totalAmount ?? 0);
 
     if (!existing) {
@@ -274,14 +298,15 @@ export default async function AdminCheckoutPage({
   }
 
   for (const order of pendingProductOrders) {
-    const clientId = (order as any).clientId as string | null | undefined;
+    const clientId = getOrderClientKey(order);
     if (!clientId) {
       orphanProductOrders.push(order);
       continue;
     }
 
     const existing = accountsMap.get(clientId);
-    const label = getClientLabel(order.client);
+    const label =
+      order.client?.name || order.client?.email || "Cliente não identificado";
     const orderTotal = Number(order.totalAmount ?? 0);
 
     if (!existing) {
@@ -539,7 +564,10 @@ export default async function AdminCheckoutPage({
                                   <p className="text-paragraph-small text-content-secondary">
                                     Criado em {createdAtStr}
                                   </p>
-                                  <p className="text-paragraph-small text-content-secondary">
+                                  <p
+                                    className="text-paragraph-small text
+                                    text-content-secondary"
+                                  >
                                     Produtos: {itemsLabel || "—"}
                                   </p>
                                 </div>
@@ -873,6 +901,9 @@ function OrdersSection({
     barber: { name: string | null } | null;
     appointment?: {
       scheduleAt: Date;
+      clientId?: string | null;
+      clientName?: string | null;
+      client?: { name: string | null; email?: string | null } | null;
       barber?: { name: string | null } | null;
     } | null;
     items: Array<{
@@ -908,9 +939,13 @@ function OrdersSection({
   });
 
   function getClientLabel(order: (typeof orders)[number]) {
-    return (
-      order.client?.name || order.client?.email || "Cliente não identificado"
-    );
+    return getOrderClientLabel(order);
+  }
+
+  function getClientKey(order: (typeof orders)[number]) {
+    // ✅ se for serviço, appointment manda na chave
+    const key = getOrderClientKey(order);
+    return key ?? `no-client:${getClientLabel(order)}`;
   }
 
   // Agrupa pedidos por cliente (visão “extrato”)
@@ -928,7 +963,7 @@ function OrdersSection({
       }
     >
   >((acc, order) => {
-    const clientKey = order.clientId ?? `no-client:${getClientLabel(order)}`;
+    const clientKey = getClientKey(order);
     const label = getClientLabel(order);
 
     const serviceTotalForOrder = order.items
@@ -1099,7 +1134,6 @@ function OrdersSection({
 
                         return (
                           <details
-                            // ✅ evita hydration mismatch quando o browser injeta/recupera "open"
                             suppressHydrationWarning
                             key={order.id}
                             className="rounded-lg border border-border-primary bg-background-secondary px-3 py-2"
