@@ -32,7 +32,7 @@ export default async function AdminReviewTagsPage() {
   const inactiveTags = tags.filter((t) => !t.isActive);
 
   return (
-    <div className="space-y-8 max-w-4xl">
+    <div className="space-y-8 max-w-7xl">
       {/* HEADER */}
       <header className="flex items-center justify-between gap-4">
         <div>

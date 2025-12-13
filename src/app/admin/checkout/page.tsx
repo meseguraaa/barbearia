@@ -1099,10 +1099,15 @@ function OrdersSection({
 
                         return (
                           <details
+                            // ✅ evita hydration mismatch quando o browser injeta/recupera "open"
+                            suppressHydrationWarning
                             key={order.id}
                             className="rounded-lg border border-border-primary bg-background-secondary px-3 py-2"
                           >
-                            <summary className="cursor-pointer list-none">
+                            <summary
+                              suppressHydrationWarning
+                              className="cursor-pointer list-none"
+                            >
                               <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div className="min-w-0">
                                   <p className="text-paragraph-small text-content-primary truncate">
