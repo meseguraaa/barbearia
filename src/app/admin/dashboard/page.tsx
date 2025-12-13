@@ -1,12 +1,24 @@
 // app/admin/dashboard/page.tsx
 import { prisma } from "@/lib/prisma";
-import { startOfDay, endOfDay, startOfMonth, endOfMonth } from "date-fns";
+import {
+  startOfDay,
+  endOfDay,
+  startOfMonth,
+  endOfMonth,
+  subMonths,
+  getDaysInMonth,
+  format,
+} from "date-fns";
+import { ptBR } from "date-fns/locale";
 import type { Metadata } from "next";
 
 import { DatePicker } from "@/components/date-picker";
 import { DashboardDailySummary } from "@/components/dashboard-daily-summary";
 import { DashboardMonthlySummary } from "@/components/dashboard-monthly-summary";
 import { requireAdminPermission } from "@/lib/admin-permissions";
+import { DashboardRevenueChart } from "@/components/dashboard-charts/dashboard-revenue-chart";
+import { DashboardRatingsDistributionChart } from "@/components/dashboard-charts/dashboard-ratings-distribution-chart";
+import { DashboardProductsVsServicesChart } from "@/components/dashboard-charts/dashboard-products-vs-services-chart";
 
 export const dynamic = "force-dynamic";
 
@@ -88,7 +100,6 @@ export default async function AdminDashboardPage({
   const dateParam = resolvedSearchParams.date;
 
   const todaySP = getSaoPauloToday();
-
   const selectedDate = dateParam
     ? (parseDateParam(dateParam) ?? todaySP)
     : todaySP;
@@ -99,6 +110,10 @@ export default async function AdminDashboardPage({
   const monthStart = startOfMonth(selectedDate);
   const monthEnd = endOfMonth(selectedDate);
 
+  const previousMonthDate = subMonths(selectedDate, 1);
+  const previousMonthStart = startOfMonth(previousMonthDate);
+  const previousMonthEnd = endOfMonth(previousMonthDate);
+
   const [
     appointmentsPrisma,
     monthAppointmentsPrisma,
@@ -106,8 +121,15 @@ export default async function AdminDashboardPage({
     monthExpensesPrisma,
     dayProductSalesPrisma,
     monthProductSalesPrisma,
+    // ⭐ avaliações filtradas pelo mês selecionado (createdAt)
     allReviewsPrisma,
+    // ⭐ todas as avaliações históricas (para média geral)
     allReviewsOverallPrisma,
+    // 🔹 dados do mês anterior para o gráfico de faturamento
+    previousMonthAppointmentsPrisma,
+    previousMonthProductSalesPrisma,
+    // 🔹 pedidos (Order + OrderItem) para o gráfico Produtos x Serviços
+    monthOrdersPrisma,
   ] = await Promise.all([
     getAppointments(dateParam),
     prisma.appointment.findMany({
@@ -163,7 +185,6 @@ export default async function AdminDashboardPage({
         barber: true,
       },
     }),
-    // ⭐ avaliações filtradas pelo mês selecionado (createdAt)
     prisma.appointmentReview.findMany({
       where: {
         createdAt: {
@@ -186,10 +207,45 @@ export default async function AdminDashboardPage({
         },
       },
     }),
-    // ⭐ todas as avaliações históricas (para média geral)
     prisma.appointmentReview.findMany({
       select: {
         rating: true,
+      },
+    }),
+    prisma.appointment.findMany({
+      where: {
+        status: "DONE",
+        scheduleAt: {
+          gte: previousMonthStart,
+          lte: previousMonthEnd,
+        },
+      },
+      include: {
+        service: true,
+      },
+    }),
+    prisma.productSale.findMany({
+      where: {
+        soldAt: {
+          gte: previousMonthStart,
+          lte: previousMonthEnd,
+        },
+      },
+      include: {
+        product: true,
+        barber: true,
+      },
+    }),
+    prisma.order.findMany({
+      where: {
+        status: "COMPLETED",
+        createdAt: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+      },
+      include: {
+        items: true, // OrderItem[]
       },
     }),
   ]);
@@ -255,10 +311,12 @@ export default async function AdminDashboardPage({
   const canceledWithFeeDay = canceledAppointmentsDay.filter(
     (appt) => appt.cancelFeeApplied,
   );
+
   const totalCancelFeeDay = canceledWithFeeDay.reduce((acc, appt) => {
     const fee = appt.cancelFeeValue ? Number(appt.cancelFeeValue) : 0;
     return acc + fee;
   }, 0);
+
   const totalCanceledWithFeeDay = canceledWithFeeDay.length;
 
   // ================================
@@ -268,6 +326,7 @@ export default async function AdminDashboardPage({
     (acc, sale) => acc + Number(sale.totalPrice),
     0,
   );
+
   const totalProductsCommissionDay = dayProductSalesPrisma.reduce(
     (acc, sale) => {
       const percent = sale.product?.barberPercentage ?? 0;
@@ -275,6 +334,7 @@ export default async function AdminDashboardPage({
     },
     0,
   );
+
   const totalProductsNetDay =
     totalProductsRevenueDay - totalProductsCommissionDay;
 
@@ -335,10 +395,12 @@ export default async function AdminDashboardPage({
   const canceledWithFeeMonth = monthCanceledAppointmentsPrisma.filter(
     (appt) => appt.cancelFeeApplied,
   );
+
   const totalCancelFeeMonth = canceledWithFeeMonth.reduce((acc, appt) => {
     const fee = appt.cancelFeeValue ? Number(appt.cancelFeeValue) : 0;
     return acc + fee;
   }, 0);
+
   const totalCanceledWithFeeMonth = canceledWithFeeMonth.length;
 
   // ================================
@@ -348,6 +410,7 @@ export default async function AdminDashboardPage({
     (acc, sale) => acc + Number(sale.totalPrice),
     0,
   );
+
   const totalProductsCommissionMonth = monthProductSalesPrisma.reduce(
     (acc, sale) => {
       const percent = sale.product?.barberPercentage ?? 0;
@@ -355,6 +418,7 @@ export default async function AdminDashboardPage({
     },
     0,
   );
+
   const totalProductsNetMonth =
     totalProductsRevenueMonth - totalProductsCommissionMonth;
 
@@ -381,6 +445,7 @@ export default async function AdminDashboardPage({
   // AVALIAÇÕES (MÊS + HISTÓRICO)
   // ================================
   const totalReviewsMonth = allReviewsPrisma.length;
+
   const averageRatingMonth =
     totalReviewsMonth > 0
       ? allReviewsPrisma.reduce((acc, review) => acc + review.rating, 0) /
@@ -388,6 +453,7 @@ export default async function AdminDashboardPage({
       : 0;
 
   const totalReviewsOverall = allReviewsOverallPrisma.length;
+
   const averageRatingOverall =
     totalReviewsOverall > 0
       ? allReviewsOverallPrisma.reduce((acc, r) => acc + r.rating, 0) /
@@ -396,6 +462,7 @@ export default async function AdminDashboardPage({
 
   const averageRatingMonthDisplay =
     totalReviewsMonth > 0 ? averageRatingMonth.toFixed(2) : "—";
+
   const averageRatingOverallDisplay =
     totalReviewsOverall > 0 ? averageRatingOverall.toFixed(2) : "—";
 
@@ -460,7 +527,6 @@ export default async function AdminDashboardPage({
       if (isPositive) {
         positiveTagMap.set(label, (positiveTagMap.get(label) ?? 0) + 1);
       }
-
       if (isNegative) {
         negativeTagMap.set(label, (negativeTagMap.get(label) ?? 0) + 1);
       }
@@ -494,6 +560,172 @@ export default async function AdminDashboardPage({
   const recentNegativeReviews = [...negativeReviews]
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .slice(0, 5);
+
+  // 🔹 Distribuição de notas (1 a 5) no mês
+  const ratingBuckets = [0, 0, 0, 0, 0]; // índices 0–4 => notas 1–5
+
+  for (const review of allReviewsPrisma) {
+    const r = review.rating;
+    if (r >= 1 && r <= 5) {
+      ratingBuckets[r - 1] += 1;
+    }
+  }
+
+  const ratingsDistributionData = ratingBuckets.map((count, index) => ({
+    rating: index + 1,
+    count,
+  }));
+
+  // ================================
+  // DADOS PARA O GRÁFICO DE FATURAMENTO
+  // ================================
+  const currentMonthRevenueByDay = new Map<number, number>();
+  const previousMonthRevenueByDay = new Map<number, number>();
+
+  // mês atual: serviços
+  for (const appt of monthAppointmentsPrisma) {
+    const day = appt.scheduleAt.getDate();
+
+    const priceSnapshot = appt.servicePriceAtTheTime;
+    const priceService = appt.service?.price ?? 0;
+    const priceNumber = priceSnapshot
+      ? Number(priceSnapshot)
+      : Number(priceService);
+
+    currentMonthRevenueByDay.set(
+      day,
+      (currentMonthRevenueByDay.get(day) ?? 0) + priceNumber,
+    );
+  }
+
+  // mês atual: produtos
+  for (const sale of monthProductSalesPrisma) {
+    const day = sale.soldAt.getDate();
+    const total = Number(sale.totalPrice);
+
+    currentMonthRevenueByDay.set(
+      day,
+      (currentMonthRevenueByDay.get(day) ?? 0) + total,
+    );
+  }
+
+  // mês anterior: serviços
+  let previousMonthTotalGross = 0;
+
+  for (const appt of previousMonthAppointmentsPrisma) {
+    const day = appt.scheduleAt.getDate();
+
+    const priceSnapshot = appt.servicePriceAtTheTime;
+    const priceService = appt.service?.price ?? 0;
+    const priceNumber = priceSnapshot
+      ? Number(priceSnapshot)
+      : Number(priceService);
+
+    previousMonthRevenueByDay.set(
+      day,
+      (previousMonthRevenueByDay.get(day) ?? 0) + priceNumber,
+    );
+
+    previousMonthTotalGross += priceNumber;
+  }
+
+  // mês anterior: produtos
+  for (const sale of previousMonthProductSalesPrisma) {
+    const day = sale.soldAt.getDate();
+    const total = Number(sale.totalPrice);
+
+    previousMonthRevenueByDay.set(
+      day,
+      (previousMonthRevenueByDay.get(day) ?? 0) + total,
+    );
+
+    previousMonthTotalGross += total;
+  }
+
+  const maxDays = Math.max(
+    getDaysInMonth(selectedDate),
+    getDaysInMonth(previousMonthDate),
+  );
+
+  const revenueChartData = Array.from({ length: maxDays }, (_, index) => {
+    const day = index + 1;
+
+    return {
+      day,
+      currentMonth: currentMonthRevenueByDay.get(day) ?? 0,
+      previousMonth: previousMonthRevenueByDay.get(day) ?? 0,
+    };
+  });
+
+  const variationPercentage =
+    previousMonthTotalGross > 0
+      ? ((totalGrossMonth - previousMonthTotalGross) /
+          previousMonthTotalGross) *
+        100
+      : null;
+
+  const currentMonthLabel = format(selectedDate, "MMM/yyyy", {
+    locale: ptBR,
+  });
+
+  const previousMonthLabel = format(previousMonthDate, "MMM/yyyy", {
+    locale: ptBR,
+  });
+
+  // ================================
+  // GRÁFICO 5 · PRODUTOS x SERVIÇOS (ORDERS)
+  // ================================
+  const daysInMonth = getDaysInMonth(selectedDate);
+
+  type ProductsVsServicesBucket = {
+    services: number;
+    products: number;
+  };
+
+  const revenueByDayFromOrders = new Map<number, ProductsVsServicesBucket>();
+
+  let totalOrdersServicesMonth = 0;
+  let totalOrdersProductsMonth = 0;
+
+  for (const order of monthOrdersPrisma) {
+    const day = order.createdAt.getDate();
+
+    const bucket: ProductsVsServicesBucket = revenueByDayFromOrders.get(
+      day,
+    ) ?? { services: 0, products: 0 };
+
+    for (const item of order.items ?? []) {
+      const total = item.totalPrice ? Number(item.totalPrice) : 0;
+
+      if (item.serviceId) {
+        bucket.services += total;
+        totalOrdersServicesMonth += total;
+      } else if (item.productId) {
+        bucket.products += total;
+        totalOrdersProductsMonth += total;
+      }
+    }
+
+    revenueByDayFromOrders.set(day, bucket);
+  }
+
+  const productsVsServicesChartData = Array.from(
+    { length: daysInMonth },
+    (_, index) => {
+      const day = index + 1;
+      const bucket = revenueByDayFromOrders.get(day) ?? {
+        services: 0,
+        products: 0,
+      };
+
+      return {
+        day,
+        label: String(day).padStart(2, "0"),
+        services: bucket.services,
+        products: bucket.products,
+      };
+    },
+  );
 
   return (
     <div className="space-y-6">
@@ -554,6 +786,22 @@ export default async function AdminDashboardPage({
         totalCanceledWithFeeMonth={totalCanceledWithFeeMonth}
       />
 
+      {/* GRÁFICO DE FATURAMENTO (MÊS ATUAL VS ANTERIOR) */}
+      <DashboardRevenueChart
+        data={revenueChartData}
+        currentMonthLabel={currentMonthLabel}
+        previousMonthLabel={previousMonthLabel}
+        variationPercentage={variationPercentage ?? undefined}
+      />
+
+      {/* GRÁFICO 5 · PRODUTOS x SERVIÇOS (FATURAMENTO DO MÊS) */}
+      <DashboardProductsVsServicesChart
+        data={productsVsServicesChartData}
+        monthLabel={currentMonthLabel}
+        totalServices={totalOrdersServicesMonth}
+        totalProducts={totalOrdersProductsMonth}
+      />
+
       {/* AVALIAÇÕES DE CLIENTES (POR MÊS + HISTÓRICO) */}
       <section className="space-y-4 rounded-xl border border-border-primary bg-background-tertiary p-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -561,6 +809,7 @@ export default async function AdminDashboardPage({
             <p className="text-label-small text-content-secondary">
               Satisfação dos clientes (mês selecionado)
             </p>
+
             <p className="text-title font-semibold text-content-primary">
               Nota média no mês:{" "}
               <span className="font-semibold">{averageRatingMonthDisplay}</span>
@@ -570,6 +819,7 @@ export default async function AdminDashboardPage({
                 </span>
               )}
             </p>
+
             <p className="text-paragraph-small text-content-secondary">
               Nota média geral (histórico):{" "}
               <span className="font-semibold text-content-primary">
@@ -581,12 +831,14 @@ export default async function AdminDashboardPage({
                 </span>
               )}
             </p>
+
             <p className="text-paragraph-small text-content-secondary">
               Total de avaliações no mês:{" "}
               <span className="font-semibold text-content-primary">
                 {totalReviewsMonth}
               </span>
             </p>
+
             <p className="mt-1 text-paragraph-small text-content-tertiary">
               Algumas avaliações podem ter o nome do cliente oculto para o
               profissional, quando ele opta por avaliação anônima. Aqui no
@@ -643,6 +895,7 @@ export default async function AdminDashboardPage({
                 <p className="text-label-small text-content-primary">
                   Motivos positivos mais citados (no mês)
                 </p>
+
                 {topPositiveTags.length === 0 ? (
                   <p className="text-paragraph-small text-content-secondary">
                     Ainda não há tags positivas suficientes neste mês.
@@ -667,6 +920,7 @@ export default async function AdminDashboardPage({
                 <p className="text-label-small text-content-primary">
                   Motivos negativos mais citados (no mês)
                 </p>
+
                 {topNegativeTags.length === 0 ? (
                   <p className="text-paragraph-small text-content-secondary">
                     Ainda não há feedbacks negativos suficientes neste mês. ✨
@@ -822,6 +1076,18 @@ export default async function AdminDashboardPage({
           </>
         )}
       </section>
+
+      {/* GRÁFICO 4 · SATISFAÇÃO: DISTRIBUIÇÃO DE NOTAS */}
+      <DashboardRatingsDistributionChart
+        data={ratingsDistributionData}
+        monthLabel={currentMonthLabel}
+        averageRatingMonth={totalReviewsMonth > 0 ? averageRatingMonth : null}
+        averageRatingOverall={
+          totalReviewsOverall > 0 ? averageRatingOverall : null
+        }
+        totalReviewsMonth={totalReviewsMonth}
+        totalReviewsOverall={totalReviewsOverall}
+      />
     </div>
   );
 }
