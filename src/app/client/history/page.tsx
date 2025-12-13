@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { nextAuthOptions } from "@/lib/nextauth";
 import { prisma } from "@/lib/prisma";
-import { format, parse, startOfMonth, endOfMonth } from "date-fns";
+import { format, parse, startOfMonth, endOfMonth, isAfter } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 import { AppointmentStatusBadge } from "@/components/appointment-status-badge";
@@ -383,12 +383,6 @@ export default async function ClientHistoryPage({
             <p className="text-content-primary">
               Histórico dos seus pedidos de produtos.
             </p>
-
-            <Link href="/client/products">
-              <Button variant="outline" size="sm">
-                Ver produtos
-              </Button>
-            </Link>
           </div>
 
           {productOrders.length === 0 ? (
@@ -417,14 +411,38 @@ export default async function ClientHistoryPage({
                 const isHighlighted =
                   highlightOrderId && order.id === highlightOrderId;
 
+                const hasReservedUntil = !!order.reservedUntil;
+                const reservedUntilDate = hasReservedUntil
+                  ? new Date(order.reservedUntil as any)
+                  : null;
+
+                const isLateButNotExpired =
+                  order.status === "PENDING_CHECKIN" &&
+                  reservedUntilDate &&
+                  isAfter(new Date(), reservedUntilDate);
+
+                const reservedUntilLabel =
+                  reservedUntilDate && !isNaN(reservedUntilDate.getTime())
+                    ? format(reservedUntilDate, "dd/MM 'às' HH:mm", {
+                        locale: ptBR,
+                      })
+                    : null;
+
                 const statusExtraText =
                   order.status === "PENDING_CHECKIN"
-                    ? " · Reservado para retirada no estabelecimento."
-                    : order.status === "COMPLETED"
-                      ? " · Compra concluída na barbearia."
-                      : order.status === "CANCELED"
-                        ? " · Pedido cancelado."
-                        : "";
+                    ? reservedUntilLabel
+                      ? ` · Reservado para retirada. Retire até ${reservedUntilLabel}.`
+                      : " · Reservado para retirada no estabelecimento."
+                    : order.status === "EXPIRED"
+                      ? " · Reserva expirada. Produto estornado para o estoque."
+                      : order.status === "COMPLETED"
+                        ? " · Compra concluída na barbearia."
+                        : order.status === "CANCELED"
+                          ? " · Pedido cancelado."
+                          : "";
+
+                const showReserveAgain =
+                  order.status === "EXPIRED" || isLateButNotExpired;
 
                 return (
                   <div
@@ -435,6 +453,7 @@ export default async function ClientHistoryPage({
                       isHighlighted
                         ? "border-brand ring-1 ring-brand/30"
                         : "border-border-primary",
+                      showReserveAgain ? "pb-3" : "",
                     ].join(" ")}
                   >
                     {/* ESQUERDA */}
@@ -449,6 +468,12 @@ export default async function ClientHistoryPage({
                             Nova reserva ✅
                           </span>
                         )}
+
+                        {isLateButNotExpired && (
+                          <span className="text-xs font-medium text-yellow-500 whitespace-nowrap">
+                            Prazo encerrado ⏳
+                          </span>
+                        )}
                       </div>
 
                       <p className="text-paragraph-small text-content-secondary truncate">
@@ -456,6 +481,30 @@ export default async function ClientHistoryPage({
                         {itemsLabel && ` · ${itemsLabel}`}
                         {statusExtraText}
                       </p>
+
+                      {order.status === "EXPIRED" && (
+                        <p className="mt-1 text-xs text-content-secondary">
+                          Se quiser, você pode fazer uma nova reserva do
+                          produto.
+                        </p>
+                      )}
+
+                      {isLateButNotExpired && (
+                        <p className="mt-1 text-xs text-content-secondary">
+                          Esta reserva está fora do prazo. Caso ainda não tenha
+                          retirado, faça uma nova reserva.
+                        </p>
+                      )}
+
+                      {showReserveAgain && (
+                        <div className="mt-2">
+                          <Link href="/client/products">
+                            <Button variant="active" size="sm">
+                              Reservar novamente
+                            </Button>
+                          </Link>
+                        </div>
+                      )}
                     </div>
 
                     {/* DIREITA: valor + status */}

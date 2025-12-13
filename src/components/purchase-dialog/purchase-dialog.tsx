@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 import {
   Dialog,
@@ -48,6 +50,7 @@ export function ProductPurchaseDialog({
 
   const [successOpen, setSuccessOpen] = useState(false);
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
+  const [reservedUntil, setReservedUntil] = useState<Date | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -73,12 +76,19 @@ export function ProductPurchaseDialog({
     if (quantity > 1) setQuantity((q) => q - 1);
   };
 
+  const reservedUntilLabel = useMemo(() => {
+    if (!reservedUntil) return null;
+
+    const datePart = format(reservedUntil, "dd/MM", { locale: ptBR });
+    const timePart = format(reservedUntil, "HH:mm", { locale: ptBR });
+    return `${datePart} às ${timePart}`;
+  }, [reservedUntil]);
+
   const handleGoToHistory = () => {
     const id = lastOrderId;
 
     setSuccessOpen(false);
 
-    // 🔹 manda o orderId pra destacar no histórico
     if (id) {
       router.push(`/client/history?orderId=${encodeURIComponent(id)}`);
     } else {
@@ -106,7 +116,17 @@ export function ProductPurchaseDialog({
 
         setLastOrderId(result.orderId);
 
-        // fecha o dialog de compra e abre o alerta de sucesso
+        // reservedUntil pode chegar como string, garantimos Date.
+        if (result?.reservedUntil) {
+          const d =
+            result.reservedUntil instanceof Date
+              ? result.reservedUntil
+              : new Date(result.reservedUntil);
+          setReservedUntil(isNaN(d.getTime()) ? null : d);
+        } else {
+          setReservedUntil(null);
+        }
+
         onOpenChange(false);
         setSuccessOpen(true);
       } catch (err: any) {
@@ -213,12 +233,27 @@ export function ProductPurchaseDialog({
         <AlertDialogContent className="bg-background-secondary border border-border-primary">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-title text-content-primary">
-              Produto reservado ✅
+              Produto reservado
             </AlertDialogTitle>
+
             <AlertDialogDescription className="text-content-secondary">
               Reservamos este produto para você retirar no estabelecimento.
+              {reservedUntilLabel ? (
+                <div className="mt-3 rounded-lg border border-border-primary bg-background-tertiary px-3 py-2">
+                  <p className="text-xs text-content-secondary">
+                    Prazo para retirada
+                  </p>
+                  <p className="text-sm font-semibold text-content-primary">
+                    Retire até {reservedUntilLabel}
+                  </p>
+                  <p className="mt-1 text-xs text-content-secondary">
+                    Após esse prazo, a reserva pode expirar e o produto volta ao
+                    estoque.
+                  </p>
+                </div>
+              ) : null}
               {lastOrderId ? (
-                <span className="block mt-2 text-xs text-content-secondary">
+                <span className="block mt-3 text-xs text-content-secondary">
                   Código da reserva:{" "}
                   <span className="font-medium">{lastOrderId}</span>
                 </span>
@@ -227,15 +262,14 @@ export function ProductPurchaseDialog({
           </AlertDialogHeader>
 
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-border-primary">
-              Voltar para produtos
+            <AlertDialogCancel asChild>
+              <Button variant="active">Voltar para produtos</Button>
             </AlertDialogCancel>
 
-            <AlertDialogAction
-              className="bg-brand text-brand-foreground hover:bg-brand/90"
-              onClick={handleGoToHistory}
-            >
-              Ver reserva
+            <AlertDialogAction asChild>
+              <Button variant="edit2" onClick={handleGoToHistory}>
+                Ver reserva
+              </Button>
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

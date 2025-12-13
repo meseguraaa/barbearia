@@ -45,6 +45,20 @@ const baseProductSchema = z.object({
     .refine((val) => Number.isInteger(val) && val >= 0, {
       message: "Estoque deve ser um número inteiro maior ou igual a 0",
     }),
+
+  // ✅ PRAZO PARA RETIRADA (DIAS)
+  pickupDeadlineDays: z
+    .string()
+    .optional()
+    .transform((val) => {
+      // se vier vazio/null, usamos 2 dias
+      const n = Number(val);
+      return Number.isFinite(n) ? n : 2;
+    })
+    .refine((val) => Number.isInteger(val) && val >= 1 && val <= 30, {
+      message:
+        "Prazo para retirada deve ser um número inteiro entre 1 e 30 dias",
+    }),
 });
 
 const createProductSchema = baseProductSchema;
@@ -83,6 +97,7 @@ export async function createProduct(formData: FormData) {
     barberPercentage: formData.get("barberPercentage"),
     category: formData.get("category"),
     stockQuantity: formData.get("stockQuantity"),
+    pickupDeadlineDays: formData.get("pickupDeadlineDays"),
   });
 
   if (!parsed.success) {
@@ -100,6 +115,7 @@ export async function createProduct(formData: FormData) {
     barberPercentage,
     category,
     stockQuantity,
+    pickupDeadlineDays,
   } = parsed.data;
 
   const normalizedPrice = normalizePriceToDecimalString(price);
@@ -113,6 +129,7 @@ export async function createProduct(formData: FormData) {
       barberPercentage,
       category,
       stockQuantity,
+      pickupDeadlineDays,
     },
   });
 
@@ -128,6 +145,7 @@ export async function updateProduct(productId: string, formData: FormData) {
     barberPercentage: formData.get("barberPercentage"),
     category: formData.get("category"),
     stockQuantity: formData.get("stockQuantity"),
+    pickupDeadlineDays: formData.get("pickupDeadlineDays"),
   });
 
   if (!parsed.success) {
@@ -145,6 +163,7 @@ export async function updateProduct(productId: string, formData: FormData) {
     barberPercentage,
     category,
     stockQuantity,
+    pickupDeadlineDays,
   } = parsed.data;
 
   const normalizedPrice = normalizePriceToDecimalString(price);
@@ -159,6 +178,7 @@ export async function updateProduct(productId: string, formData: FormData) {
       barberPercentage,
       category,
       stockQuantity,
+      pickupDeadlineDays,
     },
   });
 

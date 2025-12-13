@@ -6,7 +6,7 @@ import { z } from "zod";
 
 const purchaseSchema = z.object({
   productId: z.string(),
-  quantity: z.number().min(1),
+  quantity: z.number().int().min(1),
   // 🔹 opcionalmente podemos vincular ao cliente
   clientId: z.string().optional(),
 });
@@ -17,6 +17,7 @@ const purchaseSchema = z.object({
  * - NÃO baixa estoque
  * - NÃO registra ProductSale
  * - Cria Order com status PENDING_CHECKIN
+ * - Salva reservedUntil baseado no prazo do produto (pickupDeadlineDays)
  */
 export async function createProductSale(data: unknown) {
   const parsed = purchaseSchema.safeParse(data);
@@ -28,8 +29,16 @@ export async function createProductSale(data: unknown) {
   const { productId, quantity, clientId } = parsed.data;
 
   return await prisma.$transaction(async (tx) => {
-    const product = await tx.product.findUnique({
+    // ✅ findUnique NÃO aceita filtro com isActive (campo não-unique)
+    // então usamos findFirst
+    const product = await tx.product.findFirst({
       where: { id: productId, isActive: true },
+      select: {
+        id: true,
+        stockQuantity: true,
+        price: true,
+        pickupDeadlineDays: true,
+      },
     });
 
     if (!product) {
@@ -44,18 +53,30 @@ export async function createProductSale(data: unknown) {
     const unitPrice = product.price; // Decimal
     const totalPrice = unitPrice.mul(quantity); // Decimal
 
+    // ✅ Prazo de retirada (em dias)
+    const deadlineDays =
+      typeof product.pickupDeadlineDays === "number" &&
+      Number.isFinite(product.pickupDeadlineDays) &&
+      product.pickupDeadlineDays > 0
+        ? product.pickupDeadlineDays
+        : 2;
+
+    const reservedUntil = new Date();
+    reservedUntil.setDate(reservedUntil.getDate() + deadlineDays);
+
     // 🔹 Cria o PEDIDO com status PENDING_CHECKIN (intenção de compra)
     const order = await tx.order.create({
       data: {
         clientId: clientId ?? null, // pedido vinculado ao cliente, quando logado
-        appointmentId: null, // não está ligado a um atendimento
-        barberId: null, // barbeiro será definido na barbearia, na finalização
+        appointmentId: null,
+        barberId: null,
         status: "PENDING_CHECKIN",
+        reservedUntil, // ✅ salva a data limite
         totalAmount: totalPrice,
         items: {
           create: [
             {
-              productId,
+              productId: product.id,
               quantity,
               unitPrice,
               totalPrice,
@@ -63,12 +84,12 @@ export async function createProductSale(data: unknown) {
           ],
         },
       },
+      select: { id: true },
     });
 
-    // Revalidate das telas relevantes para o cliente
     revalidatePath("/client/products");
     revalidatePath("/client/history");
 
-    return { ok: true, orderId: order.id };
+    return { ok: true, orderId: order.id, reservedUntil };
   });
 }

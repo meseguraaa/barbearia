@@ -27,6 +27,9 @@ export type ProductForRow = {
   category: string | null;
   stockQuantity: number;
   isActive: boolean;
+
+  // ✅ novo: prazo para retirada (dias)
+  pickupDeadlineDays: number;
 };
 
 export default async function ProductsPage() {
@@ -51,6 +54,12 @@ export default async function ProductsPage() {
     category: p.category,
     stockQuantity: p.stockQuantity,
     isActive: p.isActive,
+
+    pickupDeadlineDays:
+      typeof (p as any).pickupDeadlineDays === "number" &&
+      (p as any).pickupDeadlineDays > 0
+        ? (p as any).pickupDeadlineDays
+        : 2,
   }));
 
   return (
@@ -70,6 +79,35 @@ export default async function ProductsPage() {
       {/* TABELA */}
       <section className="overflow-x-auto rounded-xl border border-border-primary bg-background-tertiary">
         <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b border-border-primary bg-background-secondary">
+              <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
+                Produto
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
+                Preço
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
+                Comissão
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
+                Categoria
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
+                Estoque
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
+                Prazo
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
+                Status
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-content-secondary">
+                Ações
+              </th>
+            </tr>
+          </thead>
+
           <tbody>
             {products.length === 0 ? (
               <tr>
