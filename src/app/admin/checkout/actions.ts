@@ -20,6 +20,144 @@ async function withRevalidate<T>(operation: () => Promise<T>): Promise<T> {
   return result;
 }
 
+function getRedirectTo(formData: FormData) {
+  const redirectTo = formData.get("redirectTo") as string | null;
+  if (!redirectTo) return "/admin/checkout";
+  if (typeof redirectTo !== "string") return "/admin/checkout";
+  if (!redirectTo.startsWith("/")) return "/admin/checkout";
+  return redirectTo;
+}
+
+/* ---------------------------------------------------------
+ * NOVO: CONTA DO CLIENTE (Opção A)
+ * ---------------------------------------------------------*/
+export async function finalizeClientOpenOrders(formData: FormData) {
+  const clientId = formData.get("clientId") as string | null;
+  const barberId = (formData.get("barberId") as string | null) || null;
+
+  if (!clientId) {
+    throw new Error("clientId é obrigatório para finalizar a conta.");
+  }
+
+  await withRevalidate(async () => {
+    // Busca pedidos abertos do cliente
+    const [serviceOrders, productOrders] = await Promise.all([
+      prisma.order.findMany({
+        where: {
+          clientId,
+          status: "PENDING",
+          items: { some: { serviceId: { not: null } } },
+        },
+        select: { id: true, status: true },
+      }),
+
+      prisma.order.findMany({
+        where: {
+          clientId,
+          status: "PENDING_CHECKIN",
+          items: { some: { productId: { not: null } } },
+        },
+        include: {
+          items: {
+            include: {
+              product: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    // Nada aberto? só sai
+    if (serviceOrders.length === 0 && productOrders.length === 0) return;
+
+    // Se houver produtos pendentes, barberId vira obrigatório (mesma regra do fluxo antigo)
+    if (productOrders.length > 0 && !barberId) {
+      throw new Error(
+        "Selecione o barbeiro responsável para finalizar a venda de produtos.",
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // 1) Finaliza serviços (só muda status)
+      for (const order of serviceOrders) {
+        // dupla checagem de status (evita corrida)
+        if (order.status !== "PENDING") continue;
+
+        await tx.order.update({
+          where: { id: order.id },
+          data: { status: "COMPLETED" },
+        });
+      }
+
+      // 2) Finaliza produtos (baixa estoque + cria productSale + status completed)
+      for (const order of productOrders) {
+        // dupla checagem (evita mexer se já mudou)
+        if (order.status !== "PENDING_CHECKIN") continue;
+
+        const productItems = order.items.filter(
+          (item) => item.productId != null,
+        );
+
+        for (const item of productItems) {
+          if (!item.productId || !item.product) continue;
+
+          const newQuantity = item.product.stockQuantity - item.quantity;
+
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              stockQuantity: newQuantity < 0 ? 0 : newQuantity,
+            },
+          });
+
+          await tx.productSale.create({
+            data: {
+              productId: item.productId,
+              barberId: barberId!, // aqui já garantimos que existe
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.totalPrice,
+            },
+          });
+        }
+
+        await tx.order.update({
+          where: { id: order.id },
+          data: {
+            status: "COMPLETED",
+            barberId: barberId!,
+          },
+        });
+      }
+    });
+  });
+
+  redirect(getRedirectTo(formData));
+}
+
+export async function cancelClientOpenOrders(formData: FormData) {
+  const clientId = formData.get("clientId") as string | null;
+
+  if (!clientId) {
+    throw new Error("clientId é obrigatório para cancelar a conta.");
+  }
+
+  await withRevalidate(async () => {
+    // Cancela tudo que estiver “aberto” para checkout
+    await prisma.order.updateMany({
+      where: {
+        clientId,
+        status: { in: ["PENDING", "PENDING_CHECKIN"] },
+      },
+      data: {
+        status: "CANCELED",
+      },
+    });
+  });
+
+  redirect(getRedirectTo(formData));
+}
+
 /* ---------------------------------------------------------
  * PRODUTOS – fluxo antigo (PENDING_CHECKIN → COMPLETED)
  * ---------------------------------------------------------*/
@@ -48,36 +186,23 @@ export async function finalizeProductOrder(formData: FormData) {
     }
 
     if (order.status !== "PENDING_CHECKIN") {
-      // nada a fazer, evita mexer em pedido já finalizado/cancelado
       return;
     }
 
-    // Atualiza estoque e cria registros de venda de produto
     const productItems = order.items.filter((item) => item.productId != null);
 
     await prisma.$transaction(async (tx) => {
-      // Abate estoque e registra venda
       for (const item of productItems) {
         if (!item.productId || !item.product) continue;
 
         const newQuantity = item.product.stockQuantity - item.quantity;
-        if (newQuantity < 0) {
-          // Aqui você pode decidir se lança erro ou deixa negativo.
-          // Por segurança, vamos limitar a zero.
-          await tx.product.update({
-            where: { id: item.productId },
-            data: {
-              stockQuantity: 0,
-            },
-          });
-        } else {
-          await tx.product.update({
-            where: { id: item.productId },
-            data: {
-              stockQuantity: newQuantity,
-            },
-          });
-        }
+
+        await tx.product.update({
+          where: { id: item.productId },
+          data: {
+            stockQuantity: newQuantity < 0 ? 0 : newQuantity,
+          },
+        });
 
         await tx.productSale.create({
           data: {
@@ -90,7 +215,6 @@ export async function finalizeProductOrder(formData: FormData) {
         });
       }
 
-      // Marca o pedido como concluído
       await tx.order.update({
         where: { id: orderId },
         data: {
@@ -101,7 +225,7 @@ export async function finalizeProductOrder(formData: FormData) {
     });
   });
 
-  redirect("/admin/checkout");
+  redirect(getRedirectTo(formData));
 }
 
 export async function cancelProductOrder(formData: FormData) {
@@ -114,13 +238,15 @@ export async function cancelProductOrder(formData: FormData) {
   await withRevalidate(async () => {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
+      select: { id: true, status: true },
     });
 
     if (!order) {
       throw new Error("Pedido não encontrado.");
     }
 
-    if (order.status === "COMPLETED" || order.status === "CANCELED") {
+    // ✅ aqui restringe: só cancela produto se estiver no status do fluxo de produto
+    if (order.status !== "PENDING_CHECKIN") {
       return;
     }
 
@@ -132,7 +258,7 @@ export async function cancelProductOrder(formData: FormData) {
     });
   });
 
-  redirect("/admin/checkout");
+  redirect(getRedirectTo(formData));
 }
 
 /* ---------------------------------------------------------
@@ -148,14 +274,7 @@ export async function finalizeServiceOrder(formData: FormData) {
   await withRevalidate(async () => {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      include: {
-        appointment: true,
-        items: {
-          include: {
-            service: true,
-          },
-        },
-      },
+      select: { id: true, status: true },
     });
 
     if (!order) {
@@ -163,12 +282,9 @@ export async function finalizeServiceOrder(formData: FormData) {
     }
 
     if (order.status !== "PENDING") {
-      // já foi tratado, não faz nada
       return;
     }
 
-    // Aqui não tem estoque pra mexer (é serviço),
-    // então só marcamos como COMPLETED.
     await prisma.order.update({
       where: { id: orderId },
       data: {
@@ -177,7 +293,7 @@ export async function finalizeServiceOrder(formData: FormData) {
     });
   });
 
-  redirect("/admin/checkout");
+  redirect(getRedirectTo(formData));
 }
 
 export async function cancelServiceOrder(formData: FormData) {
@@ -190,13 +306,14 @@ export async function cancelServiceOrder(formData: FormData) {
   await withRevalidate(async () => {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
+      select: { id: true, status: true },
     });
 
     if (!order) {
       throw new Error("Pedido não encontrado.");
     }
 
-    if (order.status === "COMPLETED" || order.status === "CANCELED") {
+    if (order.status !== "PENDING") {
       return;
     }
 
@@ -208,5 +325,5 @@ export async function cancelServiceOrder(formData: FormData) {
     });
   });
 
-  redirect("/admin/checkout");
+  redirect(getRedirectTo(formData));
 }

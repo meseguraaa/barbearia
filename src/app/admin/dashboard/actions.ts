@@ -1,3 +1,4 @@
+// app/admin/dashboard/actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
@@ -178,6 +179,8 @@ async function withAppointmentMutation<T>(
     revalidatePath("/client/schedule");
     // dashboard admin
     revalidatePath("/admin/dashboard");
+    // ✅ checkout (importante pra sumir / virar taxa)
+    revalidatePath("/admin/checkout");
     // dashboards barbeiro
     revalidatePath("/barber");
     revalidatePath("/barber/earnings");
@@ -604,6 +607,8 @@ export async function concludeAppointment(
 
 /* ---------------------------------------------------------
  * CANCEL (CANCELED) COM OU SEM TAXA
+ * - Sem taxa: cancela o Appointment e cancela o Order (some do checkout)
+ * - Com taxa: cancela o Appointment e garante Order PENDING com total = taxa
  * ---------------------------------------------------------*/
 type CancelOptions = {
   applyFee?: boolean;
@@ -621,29 +626,32 @@ export async function cancelAppointment(id: string, options?: CancelOptions) {
       throw new Error("Agendamento não encontrado");
     }
 
+    // ✅ sempre registra quem cancelou (mesmo sem taxa)
+    const cancelledByRole: RoleForAction | null =
+      options?.cancelledByRole ?? null;
+
     let cancelFeeApplied = false;
     let cancelFeeValue: Prisma.Decimal | null = null;
-    let cancelledByRole: RoleForAction | null = null;
 
+    // Calcula taxa (se pedir e se existir config)
     if (options?.applyFee && appt.service) {
       const feePercentage = appt.service.cancelFeePercentage;
 
       if (feePercentage && Number(feePercentage) > 0) {
         const basePrice = appt.servicePriceAtTheTime ?? appt.service.price; // Decimal
-
         const feeDecimal = basePrice
           .mul(feePercentage)
           .div(new Prisma.Decimal(100));
 
-        cancelFeeApplied = true;
-        cancelFeeValue = feeDecimal;
-        cancelledByRole = options.cancelledByRole ?? null;
+        // Só aplica se > 0
+        if (feeDecimal && feeDecimal.gt(new Prisma.Decimal(0))) {
+          cancelFeeApplied = true;
+          cancelFeeValue = feeDecimal;
+        }
       }
-    } else if (!options?.applyFee) {
-      // cancelamento sem taxa, mas ainda assim queremos saber quem cancelou
-      cancelledByRole = options?.cancelledByRole ?? null;
     }
 
+    // Atualiza appointment
     await prisma.appointment.update({
       where: { id },
       data: {
@@ -652,6 +660,95 @@ export async function cancelAppointment(id: string, options?: CancelOptions) {
         cancelFeeValue,
         cancelledByRole,
       },
+    });
+
+    // ✅ Agora: refletir no CHECKOUT via Order
+    const existingOrder = await prisma.order.findFirst({
+      where: { appointmentId: id },
+      include: { items: true },
+    });
+
+    // Se não tem taxa → pedido não pode ficar PENDING no checkout
+    if (!cancelFeeApplied || !cancelFeeValue) {
+      if (!existingOrder) return;
+
+      // Se já foi pago ou já foi cancelado, não mexe
+      if (
+        existingOrder.status === "COMPLETED" ||
+        existingOrder.status === "CANCELED"
+      ) {
+        return;
+      }
+
+      await prisma.order.update({
+        where: { id: existingOrder.id },
+        data: { status: "CANCELED" },
+      });
+
+      return;
+    }
+
+    // Se tem taxa, precisamos de um Order "cobrável"
+    // Sem serviceId não temos como criar item (schema atual), então aborta com segurança
+    if (!appt.serviceId) {
+      return;
+    }
+
+    // Cria ou atualiza o order para representar a taxa
+    if (!existingOrder) {
+      await prisma.order.create({
+        data: {
+          clientId: appt.clientId,
+          appointmentId: appt.id,
+          barberId: appt.barberId ?? null,
+          status: "PENDING",
+          totalAmount: cancelFeeValue,
+          items: {
+            create: [
+              {
+                serviceId: appt.serviceId,
+                quantity: 1,
+                unitPrice: cancelFeeValue,
+                totalPrice: cancelFeeValue,
+              },
+            ],
+          },
+        },
+      });
+
+      return;
+    }
+
+    // Se já foi pago, não vamos “reabrir” cobrança
+    if (existingOrder.status === "COMPLETED") {
+      return;
+    }
+
+    // Atualiza pedido existente para virar taxa
+    await prisma.$transaction(async (tx) => {
+      await tx.order.update({
+        where: { id: existingOrder.id },
+        data: {
+          status: "PENDING",
+          totalAmount: cancelFeeValue,
+          barberId: appt.barberId ?? null,
+        },
+      });
+
+      // Mantém só 1 item com o valor da taxa (evita soma errada)
+      await tx.orderItem.deleteMany({
+        where: { orderId: existingOrder.id },
+      });
+
+      await tx.orderItem.create({
+        data: {
+          orderId: existingOrder.id,
+          serviceId: appt.serviceId,
+          quantity: 1,
+          unitPrice: cancelFeeValue,
+          totalPrice: cancelFeeValue,
+        },
+      });
     });
   }, "Falha ao cancelar o agendamento");
 }
