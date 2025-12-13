@@ -52,6 +52,10 @@ function chance(probability: number): boolean {
   return Math.random() < probability;
 }
 
+function normalizePhone(phone: string): string {
+  return String(phone ?? "").replace(/\D/g, "");
+}
+
 // Data aleatória nos últimos N dias
 function randomDateInLastNDays(daysBack: number): Date {
   const now = new Date();
@@ -152,7 +156,10 @@ async function seedClients(): Promise<SeedClient[]> {
       .replace(/[^a-z\s]/g, "")
       .replace(/\s+/g, ".");
     const email = `${slug}@cliente.com`;
-    const phone = `1198${randomInt(1000000, 9999999)}`;
+
+    // gera dígitos já no padrão DDD + número (11 dígitos)
+    const phoneRaw = `1198${randomInt(1000000, 9999999)}`;
+    const phone = normalizePhone(phoneRaw);
 
     const user = await prisma.user.upsert({
       where: { email },
@@ -252,7 +259,7 @@ async function seedProductSales(
   barbers: SeedBarber[],
   products: SeedProduct[],
 ) {
-  const totalSales = 350; // +75% vendas para inflar faturamento
+  const totalSales = 350;
 
   for (let i = 0; i < totalSales; i++) {
     const barber = sample(barbers);
@@ -260,7 +267,7 @@ async function seedProductSales(
     const quantity = randomInt(1, 3);
     const unitPrice = product.price;
     const totalPrice = unitPrice * quantity;
-    const soldAt = randomDateInLastNDays(180); // últimos ~6 meses
+    const soldAt = randomDateInLastNDays(180);
 
     await prisma.productSale.create({
       data: {
@@ -282,14 +289,12 @@ async function seedProductSales(
 // ================================================================
 async function seedExpenses() {
   const now = new Date();
-  const monthsBack = 5; // mês atual + últimos 5
+  const monthsBack = 5;
 
-  // valores base fixos para recorrentes (iguais em todos os meses)
-  const rentAmount = 3500; // aluguel
-  const utilitiesAmount = 700; // contas de consumo
-  const taxesAmount = 900; // impostos
+  const rentAmount = 3500;
+  const utilitiesAmount = 700;
+  const taxesAmount = 900;
 
-  // insumos não são recorrentes, podem variar mês a mês
   const suppliesBaseAmount = 400;
 
   for (let i = 0; i <= monthsBack; i++) {
@@ -300,7 +305,7 @@ async function seedExpenses() {
         {
           description: `Aluguel salão - ${date.getMonth() + 1}/${date.getFullYear()}`,
           category: "RENT",
-          amount: rentAmount, // mesmo valor sempre
+          amount: rentAmount,
           dueDate: new Date(date.getFullYear(), date.getMonth(), 5),
           isRecurring: true,
           isPaid: true,
@@ -308,7 +313,7 @@ async function seedExpenses() {
         {
           description: `Contas de consumo - ${date.getMonth() + 1}/${date.getFullYear()}`,
           category: "UTILITIES",
-          amount: utilitiesAmount, // mesmo valor sempre
+          amount: utilitiesAmount,
           dueDate: new Date(date.getFullYear(), date.getMonth(), 10),
           isRecurring: true,
           isPaid: true,
@@ -316,7 +321,7 @@ async function seedExpenses() {
         {
           description: `Impostos - ${date.getMonth() + 1}/${date.getFullYear()}`,
           category: "TAXES",
-          amount: taxesAmount, // mesmo valor sempre
+          amount: taxesAmount,
           dueDate: new Date(date.getFullYear(), date.getMonth(), 20),
           isRecurring: true,
           isPaid: true,
@@ -324,9 +329,9 @@ async function seedExpenses() {
         {
           description: `Insumos - ${date.getMonth() + 1}/${date.getFullYear()}`,
           category: "SUPPLIES",
-          amount: suppliesBaseAmount + randomInt(-50, 50), // variação ok
+          amount: suppliesBaseAmount + randomInt(-50, 50),
           dueDate: new Date(date.getFullYear(), date.getMonth(), 15),
-          isRecurring: false, // 👈 NÃO recorrente
+          isRecurring: false,
           isPaid: true,
         },
       ],
@@ -345,25 +350,23 @@ async function seedAppointmentsAndReviews(
   servicesSeed: SeedService[],
   reviewTags: { id: string; label: string; isNegative: boolean }[],
 ) {
-  const totalAppointments = 600; // ajusta se quiser
+  const totalAppointments = 600;
   const positiveTags = reviewTags.filter((t) => !t.isNegative);
   const negativeTags = reviewTags.filter((t) => t.isNegative);
 
   for (let i = 0; i < totalAppointments; i++) {
     const barber = sample(barbers);
     const client = sample(clients);
-    // serviços mais caros aparecem mais
+
     const weightedServices = [
-      ...servicesSeed, // todos
-      servicesSeed.find((s) => s.price === 120)!, // dobra chance do de 120
-      servicesSeed.find((s) => s.price === 100)!, // dobra chance do de 100
+      ...servicesSeed,
+      servicesSeed.find((s) => s.price === 120)!,
+      servicesSeed.find((s) => s.price === 100)!,
     ];
 
     const serviceSeed = sample(weightedServices);
-
     const scheduleAt = randomDateInLastNDays(180);
 
-    // 🔥 MODO PITCH: todo atendimento é concluído com sucesso
     const status = "DONE" as const;
 
     const priceNumber = serviceSeed.price;
@@ -377,7 +380,7 @@ async function seedAppointmentsAndReviews(
       data: {
         description: `${serviceSeed.name} - ${client.name}`,
         clientName: client.name,
-        phone: client.phone,
+        phone: normalizePhone(client.phone), // ✅ garante dígitos
         scheduleAt,
         status,
         clientId: client.id,
@@ -393,11 +396,10 @@ async function seedAppointmentsAndReviews(
       },
     });
 
-    // Avaliação: só para atendimentos concluídos, probabilidade ~60%
     if (status === "DONE" && chance(0.6)) {
       const rRating = Math.random();
       let rating: 1 | 2 | 3 | 4 | 5;
-      // 80% positivas
+
       if (rRating < 0.02) rating = 1;
       else if (rRating < 0.05) rating = 2;
       else if (rRating < 0.2) rating = 3;
@@ -423,7 +425,6 @@ async function seedAppointmentsAndReviews(
         },
       });
 
-      // Tags da avaliação
       const tagsToUse = isPositive
         ? positiveTags
         : isNegative
@@ -456,10 +457,8 @@ async function seedAppointmentsAndReviews(
 async function main() {
   console.log("🌱 Iniciando seed...");
 
-  // 🧨 HARD RESET: apaga tudo na ordem certa por causa de FK
   console.log("🧨 Limpando banco (deleteMany em todas as tabelas)...");
 
-  // Tabelas que dependem de outras (filhos primeiro)
   await prisma.appointmentReviewTag.deleteMany();
   await prisma.appointmentReview.deleteMany();
 
@@ -497,45 +496,37 @@ async function main() {
 
   console.log("✅ Banco limpo. Recriando dados de demo...");
 
-  // ================================================================
-  // Vars de ambiente (fallbacks somente para DEV)
-  // ================================================================
   const adminEmail = process.env.ADMIN_EMAIL ?? "admin@barbearia.com";
   const adminPassword = process.env.ADMIN_PASSWORD ?? "admin123";
 
   const saltRounds = 10;
   const adminPasswordHash = await bcrypt.hash(adminPassword, saltRounds);
 
-  // Senha padrão para os barbeiros seedados
   const defaultBarberPassword = "12345";
   const barberPasswordHash = await bcrypt.hash(
     defaultBarberPassword,
     saltRounds,
   );
 
-  // ================================================================
-  // ADMIN (DONO)
-  // ================================================================
   const adminUser = await prisma.user.upsert({
     where: { email: adminEmail },
     update: {
       name: "Administrador",
       role: "ADMIN",
       passwordHash: adminPasswordHash,
-      isOwner: true, // 🔹 marca como DONO
+      isOwner: true,
     },
     create: {
       name: "Administrador",
       email: adminEmail,
       role: "ADMIN",
       passwordHash: adminPasswordHash,
-      isOwner: true, // 🔹 marca como DONO
+      isOwner: true,
     },
   });
 
   console.log("✅ Admin criado/atualizado:", adminUser.email);
 
-  // 🔹 Permissões completas para o DONO no AdminAccess
   await prisma.adminAccess.upsert({
     where: { userId: adminUser.id },
     update: {
@@ -594,37 +585,37 @@ async function main() {
   const barbers: SeedBarber[] = [];
 
   for (const barberData of barbersSeed) {
-    // 1) User com role BARBER
+    const phone = normalizePhone(barberData.phone);
+
     const user = await prisma.user.upsert({
       where: { email: barberData.email },
       update: {
         name: barberData.name,
-        phone: barberData.phone,
+        phone,
         role: "BARBER",
         passwordHash: barberPasswordHash,
       },
       create: {
         name: barberData.name,
         email: barberData.email,
-        phone: barberData.phone,
+        phone,
         role: "BARBER",
         passwordHash: barberPasswordHash,
       },
     });
 
-    // 2) Barber vinculado ao User
     const barber = await prisma.barber.upsert({
       where: { email: barberData.email },
       update: {
         name: barberData.name,
-        phone: barberData.phone,
+        phone,
         isActive: true,
         userId: user.id,
       },
       create: {
         name: barberData.name,
         email: barberData.email,
-        phone: barberData.phone,
+        phone,
         isActive: true,
         userId: user.id,
       },
@@ -649,11 +640,11 @@ async function main() {
     {
       id: "service-cabelo",
       name: "Cabelo (máquina ou tesoura)",
-      price: 70, // R$
+      price: 70,
       durationMinutes: 30,
-      barberPercentage: 60, // %
+      barberPercentage: 60,
       cancelLimitHours: 1,
-      cancelFeePercentage: 10, // %
+      cancelFeePercentage: 10,
     },
     {
       id: "service-cabelo-barba",
@@ -725,7 +716,6 @@ async function main() {
 
   // ================================================================
   // RELAÇÃO SERVIÇO x BARBEIRO (ServiceProfessional)
-  // (todos os barbeiros fazem todos os serviços)
   // ================================================================
   if (barbers.length && servicesSeed.length) {
     await prisma.serviceProfessional.createMany({
@@ -741,9 +731,6 @@ async function main() {
     console.log("🔗 Relações serviço x barbeiro criadas/atualizadas.");
   }
 
-  // ================================================================
-  // MASSA DE DADOS PARA DASHBOARD (CLIENTES, PRODUTOS, VENDAS, ETC)
-  // ================================================================
   const reviewTags = await seedReviewTags();
   const clients = await seedClients();
   const products = await seedProducts();
@@ -754,9 +741,6 @@ async function main() {
   console.log("🌱 Seed finalizado com sucesso.");
 }
 
-// ================================================================
-// Execução
-// ================================================================
 main()
   .catch((e) => {
     console.error("❌ Erro ao rodar seed:", e);

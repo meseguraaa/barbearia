@@ -8,17 +8,26 @@ const createClientSchema = z.object({
   name: z.string().min(1, "Nome é obrigatório"),
   email: z.string().email("E-mail inválido"),
   phone: z.string().min(1, "Telefone é obrigatório"),
-  birthday: z.string().min(1, "Data de nascimento é obrigatória"),
+  // ✅ no "Novo Cliente" você ainda não coleta birthday,
+  // então não pode ser obrigatório aqui
+  birthday: z.string().optional().nullable(), // "DD/MM/AAAA" ou "yyyy-MM-dd"
 });
 
-// para edição
 const updateClientSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1, "Nome é obrigatório"),
   email: z.string().email("E-mail inválido"),
   phone: z.string().min(1, "Telefone é obrigatório"),
-  birthday: z.string().nullable().optional(), // "DD/MM/AAAA"
+  birthday: z.string().nullable().optional(), // "DD/MM/AAAA" ou "yyyy-MM-dd"
 });
+
+function normalizePhone(phone: string): string {
+  return String(phone ?? "").replace(/\D/g, "");
+}
+
+function isValidDate(d: Date) {
+  return d instanceof Date && !Number.isNaN(d.getTime());
+}
 
 function parseBirthdayToDate(birthday: string | null | undefined): Date | null {
   if (!birthday) return null;
@@ -30,13 +39,37 @@ function parseBirthdayToDate(birthday: string | null | undefined): Date | null {
     if (trimmed.includes("-")) {
       // yyyy-MM-dd
       const [year, month, day] = trimmed.split("-");
-      return new Date(Number(year), Number(month) - 1, Number(day), 0, 0, 0);
+      const y = Number(year);
+      const m = Number(month);
+      const d = Number(day);
+
+      const date = new Date(y, m - 1, d, 0, 0, 0);
+
+      const ok =
+        isValidDate(date) &&
+        date.getFullYear() === y &&
+        date.getMonth() === m - 1 &&
+        date.getDate() === d;
+
+      return ok ? date : null;
     }
 
     if (trimmed.includes("/")) {
       // dd/MM/yyyy
       const [day, month, year] = trimmed.split("/");
-      return new Date(Number(year), Number(month) - 1, Number(day), 0, 0, 0);
+      const d = Number(day);
+      const m = Number(month);
+      const y = Number(year);
+
+      const date = new Date(y, m - 1, d, 0, 0, 0);
+
+      const ok =
+        isValidDate(date) &&
+        date.getFullYear() === y &&
+        date.getMonth() === m - 1 &&
+        date.getDate() === d;
+
+      return ok ? date : null;
     }
   } catch (e) {
     console.error("Erro ao converter data de nascimento:", e);
@@ -45,10 +78,15 @@ function parseBirthdayToDate(birthday: string | null | undefined): Date | null {
   return null;
 }
 
+function revalidateClientsRelated() {
+  revalidatePath("/admin/clients");
+  revalidatePath("/admin/dashboard");
+  revalidatePath("/admin/checkout");
+}
+
 /* =======================================================
  * CRIAR CLIENTE
- * =======================================================
- */
+ * ======================================================= */
 export async function createClientAction(
   formData: FormData,
 ): Promise<{ error?: string; success?: true }> {
@@ -60,10 +98,15 @@ export async function createClientAction(
   };
 
   const parsed = createClientSchema.safeParse({
-    name: String(raw.name ?? ""),
-    email: String(raw.email ?? ""),
-    phone: String(raw.phone ?? ""),
-    birthday: String(raw.birthday ?? ""),
+    name: String(raw.name ?? "").trim(),
+    email: String(raw.email ?? "")
+      .trim()
+      .toLowerCase(),
+    phone: String(raw.phone ?? "").trim(),
+    birthday:
+      raw.birthday != null && String(raw.birthday).trim() !== ""
+        ? String(raw.birthday).trim()
+        : null,
   });
 
   if (!parsed.success) {
@@ -73,36 +116,43 @@ export async function createClientAction(
 
   const { name, email, phone, birthday } = parsed.data;
 
-  const existing = await prisma.user.findUnique({
-    where: { email },
-  });
-
-  if (existing) {
-    // segurança extra: não sobrescrever
-    return { error: "Já existe um cliente cadastrado com esse e-mail." };
+  // 🔒 telefone obrigatório de verdade: 11 dígitos (DDD + 9)
+  const normalizedPhone = normalizePhone(phone);
+  if (normalizedPhone.length !== 11) {
+    return { error: "Informe um telefone válido com DDD (11 dígitos)." };
   }
 
-  const birthdayDate = parseBirthdayToDate(birthday);
+  const birthdayDate = parseBirthdayToDate(birthday ?? null);
+  if (birthday != null && birthday !== "" && !birthdayDate) {
+    return { error: "Data de nascimento inválida." };
+  }
 
-  await prisma.user.create({
-    data: {
-      name,
-      email,
-      phone,
-      birthday: birthdayDate,
-      role: "CLIENT",
-    },
-  });
+  try {
+    await prisma.user.create({
+      data: {
+        name,
+        email,
+        phone: normalizedPhone,
+        birthday: birthdayDate, // pode ser null
+        role: "CLIENT",
+      },
+    });
+  } catch (err: any) {
+    const message = String(err?.message ?? "");
+    if (message.toLowerCase().includes("unique") || message.includes("P2002")) {
+      return { error: "Já existe um cliente cadastrado com esse e-mail." };
+    }
+    console.error("Erro ao criar cliente:", err);
+    return { error: "Erro ao criar cliente. Tente novamente." };
+  }
 
-  revalidatePath("/admin/clients");
-
+  revalidateClientsRelated();
   return { success: true };
 }
 
 /* =======================================================
  * EDITAR CLIENTE
- * =======================================================
- */
+ * ======================================================= */
 export async function updateClientAction(
   formData: FormData,
 ): Promise<{ error?: string; success?: true }> {
@@ -115,12 +165,16 @@ export async function updateClientAction(
   };
 
   const parsed = updateClientSchema.safeParse({
-    id: String(raw.id ?? ""),
-    name: String(raw.name ?? ""),
-    email: String(raw.email ?? ""),
-    phone: String(raw.phone ?? ""),
+    id: String(raw.id ?? "").trim(),
+    name: String(raw.name ?? "").trim(),
+    email: String(raw.email ?? "")
+      .trim()
+      .toLowerCase(),
+    phone: String(raw.phone ?? "").trim(),
     birthday:
-      raw.birthday != null && raw.birthday !== "" ? String(raw.birthday) : null,
+      raw.birthday != null && String(raw.birthday).trim() !== ""
+        ? String(raw.birthday).trim()
+        : null,
   });
 
   if (!parsed.success) {
@@ -130,19 +184,36 @@ export async function updateClientAction(
 
   const { id, name, email, phone, birthday } = parsed.data;
 
+  const normalizedPhone = normalizePhone(phone);
+  if (normalizedPhone.length !== 11) {
+    return { error: "Informe um telefone válido com DDD (11 dígitos)." };
+  }
+
   const birthdayDate = parseBirthdayToDate(birthday ?? null);
+  if (birthday != null && birthday !== "" && !birthdayDate) {
+    return { error: "Data de nascimento inválida." };
+  }
 
-  await prisma.user.update({
-    where: { id },
-    data: {
-      name,
-      email,
-      phone,
-      birthday: birthdayDate,
-    },
-  });
+  try {
+    await prisma.user.update({
+      where: { id },
+      data: {
+        name,
+        email,
+        phone: normalizedPhone,
+        birthday: birthdayDate,
+      },
+    });
+  } catch (err: any) {
+    const message = String(err?.message ?? "");
+    if (message.toLowerCase().includes("unique") || message.includes("P2002")) {
+      return { error: "Já existe um usuário com esse e-mail." };
+    }
 
-  revalidatePath("/admin/clients");
+    console.error("Erro ao atualizar cliente:", err);
+    return { error: "Erro ao atualizar cliente. Tente novamente." };
+  }
 
+  revalidateClientsRelated();
   return { success: true };
 }

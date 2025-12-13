@@ -86,7 +86,7 @@ export default async function AdminCheckoutPage({
     pendingProductOrders,
     // 🔹 Pedidos de serviço aguardando checkout
     pendingServiceOrders,
-    // 🔹 Barbeiros para selecionar na venda de produto
+    // 🔹 Profissionals para selecionar na venda de produto
     barbers,
   ] = await Promise.all([
     prisma.order.findMany({
@@ -476,7 +476,7 @@ export default async function AdminCheckoutPage({
                                     </p>
                                   )}
                                   <p className="text-paragraph-small text-content-secondary">
-                                    Barbeiro: {barberNameFromAppt}
+                                    Profissional: {barberNameFromAppt}
                                   </p>
                                   <p className="text-paragraph-small text-content-secondary">
                                     Serviços: {itemsLabel}
@@ -591,7 +591,7 @@ export default async function AdminCheckoutPage({
                       {account.hasProducts ? (
                         <>
                           <p className="text-label-small text-content-secondary mb-1">
-                            Barbeiro responsável pela venda dos produtos
+                            Profissional responsável pela venda dos produtos
                           </p>
                           <p className="text-paragraph-small text-content-secondary">
                             Necessário para calcular faturamento e comissão das
@@ -652,7 +652,7 @@ export default async function AdminCheckoutPage({
                             disabled={!hasBarbers}
                           >
                             <option value="" disabled>
-                              Selecione o barbeiro
+                              Selecione o Profissional
                             </option>
                             {barbers.map((barber) => (
                               <option key={barber.id} value={barber.id}>
@@ -809,7 +809,7 @@ export default async function AdminCheckoutPage({
                           disabled={!hasBarbers}
                         >
                           <option value="" disabled>
-                            Selecione o barbeiro
+                            Selecione o Profissional
                           </option>
                           {barbers.map((barber) => (
                             <option key={barber.id} value={barber.id}>
@@ -1117,7 +1117,7 @@ function OrdersSection({
                                     </p>
                                   )}
                                   <p className="text-paragraph-small text-content-secondary">
-                                    Barbeiro: {barberName}
+                                    Profissional: {barberName}
                                   </p>
                                 </div>
 
@@ -1275,16 +1275,6 @@ function OrdersSection({
                                   </div>
                                 </div>
                               )}
-
-                              {/* Total do pedido */}
-                              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border-primary">
-                                <span className="text-paragraph-small text-content-secondary">
-                                  Total do pedido:
-                                </span>
-                                <span className="text-paragraph-small font-semibold text-content-primary">
-                                  {currencyFormatter.format(orderTotal)}
-                                </span>
-                              </div>
                             </div>
                           </details>
                         );

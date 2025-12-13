@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import {
   Dialog,
   DialogContent,
@@ -30,9 +30,7 @@ function formatPhone(value: string): string {
 
   if (digits.length === 0) return "";
   if (digits.length <= 2) return `(${digits}`;
-  if (digits.length <= 7) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  }
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
 
@@ -59,9 +57,25 @@ export function AdminEditClientDialog({ client }: AdminEditClientDialogProps) {
     formatBirthdayToDisplay(client.birthday),
   );
 
+  // ✅ garante que ao abrir (e ao trocar o cliente) os campos sempre refletem o client atual
+  useEffect(() => {
+    if (!open) return;
+
+    setName(client.name ?? "");
+    setEmail(client.email ?? "");
+    setPhone(formatPhone(client.phone ?? ""));
+    setBirthdayInput(formatBirthdayToDisplay(client.birthday));
+  }, [
+    open,
+    client.id,
+    client.name,
+    client.email,
+    client.phone,
+    client.birthday,
+  ]);
+
   function handlePhoneChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const masked = formatPhone(e.target.value);
-    setPhone(masked);
+    setPhone(formatPhone(e.target.value));
   }
 
   function handleBirthdayChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -82,37 +96,47 @@ export function AdminEditClientDialog({ client }: AdminEditClientDialogProps) {
   }
 
   function handleSubmit(formData: FormData) {
-    // sobrescreve com os valores controlados
-    formData.set("id", client.id);
-    formData.set("name", name.trim());
-    formData.set("email", email.trim());
-    formData.set("phone", phone.trim());
-    formData.set("birthday", birthdayInput.trim());
+    const n = name.trim();
+    const e = email.trim();
+    const p = phone.trim();
+    const b = birthdayInput.trim();
 
-    if (!name.trim()) {
+    if (!n) {
       toast.error("Informe o nome do cliente.");
       return;
     }
 
-    if (!email.trim()) {
+    if (!e) {
       toast.error("Informe o e-mail do cliente.");
       return;
     }
 
-    if (!phone.trim()) {
+    if (!p) {
       toast.error("Informe o telefone do cliente.");
       return;
     }
 
-    if (!isValidBirthdayDisplay(birthdayInput)) {
+    if (!b) {
+      toast.error("Informe a data de nascimento.");
+      return;
+    }
+
+    if (!isValidBirthdayDisplay(b)) {
       toast.error("Preencha a data de nascimento no formato DD/MM/AAAA.");
       return;
     }
 
+    // sobrescreve com os valores controlados
+    formData.set("id", client.id);
+    formData.set("name", n);
+    formData.set("email", e);
+    formData.set("phone", p);
+    formData.set("birthday", b);
+
     startTransition(async () => {
       const result = await updateClientAction(formData);
 
-      if (result && "error" in result) {
+      if (result?.error) {
         toast.error(result.error);
         return;
       }
