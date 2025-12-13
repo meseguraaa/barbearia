@@ -23,6 +23,8 @@ import {
   PaginationPrevious,
   PaginationEllipsis,
 } from "@/components/ui/pagination";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
@@ -100,7 +102,6 @@ function buildPageHref(
 }
 
 function getPageRange(current: number, total: number) {
-  // range pequeno e bonitinho (1 ... 4 5 [6] 7 8 ... 20)
   const delta = 2;
   const left = Math.max(1, current - delta);
   const right = Math.min(total, current + delta);
@@ -125,6 +126,26 @@ function getPageRange(current: number, total: number) {
   };
 }
 
+function getSingleParam(v: string | string[] | undefined): string | undefined {
+  if (v == null) return undefined;
+  return Array.isArray(v) ? v[0] : v;
+}
+
+type SortKey = "name_asc" | "name_desc" | "createdAt_desc" | "createdAt_asc";
+function normalizeSort(v: string | undefined): SortKey {
+  if (v === "name_desc") return "name_desc";
+  if (v === "createdAt_desc") return "createdAt_desc";
+  if (v === "createdAt_asc") return "createdAt_asc";
+  return "name_asc";
+}
+
+type PlanFilter = "all" | "active" | "none";
+function normalizePlan(v: string | undefined): PlanFilter {
+  if (v === "active") return "active";
+  if (v === "none") return "none";
+  return "all";
+}
+
 export default async function ClientsPage({
   searchParams,
 }: {
@@ -136,6 +157,15 @@ export default async function ClientsPage({
 
   // ✅ resolve searchParams antes de usar
   const resolvedSearchParams = await searchParams;
+
+  // =========================
+  // FILTROS (A, D, E)
+  // =========================
+  const qRaw = getSingleParam(resolvedSearchParams.q);
+  const q = (qRaw ?? "").trim();
+
+  const sort = normalizeSort(getSingleParam(resolvedSearchParams.sort));
+  const plan = normalizePlan(getSingleParam(resolvedSearchParams.plan));
 
   // =========================
   // PAGINAÇÃO
@@ -150,33 +180,119 @@ export default async function ClientsPage({
   const requestedPage = Number(pageParam ?? "1");
   const safeRequestedPage = Number.isFinite(requestedPage) ? requestedPage : 1;
 
+  // =========================
+  // PRISMA WHERE + ORDERBY (A, D)
+  // =========================
+  const whereUser: any = {
+    role: "CLIENT",
+  };
+
+  // A) Busca por texto (q)
+  if (q.length > 0) {
+    whereUser.OR = [
+      { name: { contains: q, mode: "insensitive" } },
+      { email: { contains: q, mode: "insensitive" } },
+      { phone: { contains: q } },
+    ];
+  }
+
+  // D) Ordenação
+  const orderBy =
+    sort === "name_desc"
+      ? ({ name: "desc" } as const)
+      : sort === "createdAt_desc"
+        ? ({ createdAt: "desc" } as const)
+        : sort === "createdAt_asc"
+          ? ({ createdAt: "asc" } as const)
+          : ({ name: "asc" } as const);
+
   const totalClients = await prisma.user.count({
-    where: { role: "CLIENT" },
+    where: whereUser,
   });
 
   const totalPages = Math.max(1, Math.ceil(totalClients / PAGE_SIZE));
   const page = clampInt(safeRequestedPage, 1, totalPages);
 
   const users = await prisma.user.findMany({
-    where: { role: "CLIENT" },
-    orderBy: { name: "asc" },
+    where: whereUser,
+    orderBy,
     skip: (page - 1) * PAGE_SIZE,
     take: PAGE_SIZE,
   });
 
+  // Se não encontrar ninguém (por filtros), ainda mostra a barra de filtros
   if (users.length === 0) {
     return (
       <div className="max-w-7xl mx-auto space-y-6">
         <header className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-title text-content-primary">Clientes</h1>
-            <p className="text-paragraph-medium-size text-content-secondary">
-              Nenhum cliente cadastrado ainda.
+            <p className="text-paragraph-medium text-content-secondary">
+              Nenhum cliente encontrado com esses filtros.
             </p>
           </div>
 
           <AdminNewClientDialog />
         </header>
+
+        {/* FILTROS */}
+        <section className="rounded-xl border border-border-primary bg-background-tertiary p-4 space-y-4">
+          <form method="GET" className="space-y-4">
+            <div className="flex flex-col md:flex-row gap-3 md:items-end">
+              <div className="flex-1">
+                <label className="text-[11px] text-content-secondary">
+                  Buscar
+                </label>
+                <Input
+                  name="q"
+                  defaultValue={q}
+                  placeholder="Nome, e-mail ou telefone..."
+                  className="h-10 bg-background-secondary border-border-primary"
+                />
+              </div>
+
+              <div className="w-full md:w-[220px]">
+                <label className="text-[11px] text-content-secondary">
+                  Ordenar por
+                </label>
+                <select
+                  name="sort"
+                  defaultValue={sort}
+                  className="h-10 w-full rounded-md border border-border-primary bg-background-secondary px-3 text-sm text-content-primary"
+                >
+                  <option value="name_asc">Nome (A-Z)</option>
+                  <option value="name_desc">Nome (Z-A)</option>
+                  <option value="createdAt_desc">Cadastro (mais novos)</option>
+                  <option value="createdAt_asc">Cadastro (mais antigos)</option>
+                </select>
+              </div>
+
+              <div className="w-full md:w-[220px]">
+                <label className="text-[11px] text-content-secondary">
+                  Plano
+                </label>
+                <select
+                  name="plan"
+                  defaultValue={plan}
+                  className="h-10 w-full rounded-md border border-border-primary bg-background-secondary px-3 text-sm text-content-primary"
+                >
+                  <option value="all">Todos</option>
+                  <option value="active">Com plano ativo</option>
+                  <option value="none">Sem plano ativo</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2">
+                <Button type="submit" variant="edit2">
+                  Filtrar
+                </Button>
+                <Button asChild variant="destructive">
+                  <Link href="/admin/clients">Limpar</Link>
+                </Button>
+              </div>
+            </div>
+          </form>
+        </section>
       </div>
     );
   }
@@ -317,7 +433,9 @@ export default async function ClientsPage({
 
     const whatsappUrl =
       phoneDigits.length > 0
-        ? `https://wa.me/${phoneDigits}?text=${encodeURIComponent(whatsappMessage)}`
+        ? `https://wa.me/${phoneDigits}?text=${encodeURIComponent(
+            whatsappMessage,
+          )}`
         : null;
 
     return {
@@ -342,42 +460,125 @@ export default async function ClientsPage({
     };
   });
 
+  // E) Plano (pós-processamento, V1)
+  const filteredRows =
+    plan === "active"
+      ? rows.filter((r) => r.hasActivePlan)
+      : plan === "none"
+        ? rows.filter((r) => !r.hasActivePlan)
+        : rows;
+
   const { pages, showLeftEllipsis, showRightEllipsis, firstPage, lastPage } =
     getPageRange(page, totalPages);
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
-      {/* HEADER GERAL */}
-      <header className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-title text-content-primary">Clientes</h1>
-          <p className="text-paragraph-medium text-content-secondary">
-            Veja seus clientes, sua recorrência e quanto cada um movimenta na
-            barbearia.
-          </p>
-          <p className="text-xs text-content-secondary mt-1">
-            Mostrando{" "}
-            <span className="font-semibold text-content-primary">
-              {(page - 1) * PAGE_SIZE + 1}
-            </span>{" "}
-            a{" "}
-            <span className="font-semibold text-content-primary">
-              {Math.min(page * PAGE_SIZE, totalClients)}
-            </span>{" "}
-            de{" "}
-            <span className="font-semibold text-content-primary">
-              {totalClients}
-            </span>
-            .
-          </p>
+      {/* HEADER + FILTROS */}
+      <header className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-title text-content-primary">Clientes</h1>
+            <p className="text-paragraph-medium text-content-secondary">
+              Veja seus clientes, sua recorrência e quanto cada um movimenta na
+              barbearia.
+            </p>
+
+            <p className="text-xs text-content-secondary mt-1">
+              Mostrando{" "}
+              <span className="font-semibold text-content-primary">
+                {(page - 1) * PAGE_SIZE + 1}
+              </span>{" "}
+              a{" "}
+              <span className="font-semibold text-content-primary">
+                {Math.min(page * PAGE_SIZE, totalClients)}
+              </span>{" "}
+              de{" "}
+              <span className="font-semibold text-content-primary">
+                {totalClients}
+              </span>
+              {plan !== "all" && (
+                <>
+                  {" "}
+                  <span className="text-content-secondary">
+                    (nesta página:{" "}
+                    <span className="font-semibold text-content-primary">
+                      {filteredRows.length}
+                    </span>{" "}
+                    após filtro de plano)
+                  </span>
+                </>
+              )}
+              .
+            </p>
+          </div>
+
+          <AdminNewClientDialog />
         </div>
-        <AdminNewClientDialog />
+
+        {/* FILTROS */}
+        <section className="rounded-xl border border-border-primary bg-background-tertiary p-4 space-y-4">
+          <form method="GET" className="space-y-4">
+            <div className="flex flex-col md:flex-row gap-3 md:items-end">
+              <div className="flex-1">
+                <label className="text-[11px] text-content-secondary">
+                  Buscar
+                </label>
+                <Input
+                  name="q"
+                  defaultValue={q}
+                  placeholder="Nome, e-mail ou telefone..."
+                  className="h-10 bg-background-secondary border-border-primary"
+                />
+              </div>
+
+              <div className="w-full md:w-[220px]">
+                <label className="text-[11px] text-content-secondary">
+                  Ordenar por
+                </label>
+                <select
+                  name="sort"
+                  defaultValue={sort}
+                  className="h-10 w-full rounded-md border border-border-primary bg-background-secondary px-3 text-sm text-content-primary"
+                >
+                  <option value="name_asc">Nome (A-Z)</option>
+                  <option value="name_desc">Nome (Z-A)</option>
+                  <option value="createdAt_desc">Cadastro (mais novos)</option>
+                  <option value="createdAt_asc">Cadastro (mais antigos)</option>
+                </select>
+              </div>
+
+              <div className="w-full md:w-[220px]">
+                <label className="text-[11px] text-content-secondary">
+                  Plano
+                </label>
+                <select
+                  name="plan"
+                  defaultValue={plan}
+                  className="h-10 w-full rounded-md border border-border-primary bg-background-secondary px-3 text-sm text-content-primary"
+                >
+                  <option value="all">Todos</option>
+                  <option value="active">Com plano ativo</option>
+                  <option value="none">Sem plano ativo</option>
+                </select>
+              </div>
+
+              <div className="flex gap-2">
+                <Button type="submit" variant="edit2">
+                  Filtrar
+                </Button>
+                <Button asChild variant="outline">
+                  <Link href="/admin/clients">Limpar</Link>
+                </Button>
+              </div>
+            </div>
+          </form>
+        </section>
       </header>
 
       {/* LISTA EM ACCORDION */}
       <section className="space-y-4">
         <Accordion type="single" collapsible className="space-y-2">
-          {rows.map((row) => (
+          {filteredRows.map((row) => (
             <AccordionItem
               key={row.id}
               value={row.id}
