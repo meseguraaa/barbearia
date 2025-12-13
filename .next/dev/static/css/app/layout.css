@@ -299,6 +299,7 @@
     --color-blue-600: oklch(54.6% 0.245 262.881);
     --color-slate-100: oklch(96.8% 0.007 247.896);
     --color-slate-500: oklch(55.4% 0.046 257.417);
+    --color-gray-100: oklch(96.7% 0.003 264.542);
     --color-gray-500: oklch(55.1% 0.027 264.364);
     --color-zinc-100: oklch(96.7% 0.001 286.375);
     --color-black: #000;
@@ -1325,6 +1326,9 @@
       border-color: color-mix(in oklab, var(--color-emerald-500) 60%, transparent);
     }
   }
+  .border-gray-500 {
+    border-color: var(--color-gray-500);
+  }
   .border-green-500 {
     border-color: var(--color-green-500);
   }
@@ -1452,6 +1456,12 @@
     background-color: color-mix(in srgb, oklch(69.6% 0.17 162.48) 10%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
       background-color: color-mix(in oklab, var(--color-emerald-500) 10%, transparent);
+    }
+  }
+  .bg-gray-100\/10 {
+    background-color: color-mix(in srgb, oklch(96.7% 0.003 264.542) 10%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-gray-100) 10%, transparent);
     }
   }
   .bg-green-100\/10 {
