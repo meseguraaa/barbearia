@@ -13,13 +13,33 @@ import { nextAuthOptions } from "@/lib/nextauth";
 import { Prisma } from "@prisma/client";
 
 /* ---------------------------------------------------------
+ * Helpers
+ * ---------------------------------------------------------*/
+function normalizePhone(phone: string): string {
+  return String(phone ?? "").replace(/\D/g, "");
+}
+
+function isValidPhoneDigits(phoneDigits: string): boolean {
+  // BR normalmente 10 ou 11 dígitos (DDD + número)
+  return phoneDigits.length === 10 || phoneDigits.length === 11;
+}
+
+/* ---------------------------------------------------------
  * Schema
  * ---------------------------------------------------------*/
 const appointmentSchema = z.object({
-  clientName: z.string(),
-  phone: z.string(),
+  clientName: z.string().min(1, "Nome do cliente é obrigatório"),
+  phone: z
+    .string()
+    .min(1, "Telefone é obrigatório")
+    .transform((v) => normalizePhone(v))
+    .refine(
+      (v) => isValidPhoneDigits(v),
+      "Telefone inválido (use DDD + número)",
+    ),
+
   // espelho do nome do serviço (pra exibir)
-  description: z.string(),
+  description: z.string().min(1, "Descrição é obrigatória"),
   scheduleAt: z.date(),
   serviceId: z.string().min(1, "O serviço é obrigatório"),
   barberId: z.string().min(1, "O barbeiro é obrigatório"),
@@ -126,15 +146,17 @@ async function getDefaultClientId(): Promise<string> {
 
 /* ---------------------------------------------------------
  * NOVO: descobrir clientId
- * 1) Tenta achar pelo telefone informado no agendamento
+ * 1) Tenta achar pelo telefone informado no agendamento (NORMALIZADO)
  * 2) Se não achar → tenta sessão NextAuth
  * 3) Se ainda não tiver → cai no cliente padrão
  * ---------------------------------------------------------*/
-async function getClientIdForAppointment(phone: string): Promise<string> {
-  // 1) tenta achar usuário pelo telefone
-  if (phone) {
+async function getClientIdForAppointment(phoneDigits: string): Promise<string> {
+  const normalized = normalizePhone(phoneDigits);
+
+  // 1) tenta achar usuário pelo telefone normalizado
+  if (normalized) {
     const clientByPhone = await prisma.user.findFirst({
-      where: { phone },
+      where: { phone: normalized },
     });
 
     if (clientByPhone) {
@@ -145,7 +167,6 @@ async function getClientIdForAppointment(phone: string): Promise<string> {
   // 2) se não achar pelo telefone, tenta sessão
   try {
     const session = await getServerSession(nextAuthOptions);
-
     const userId = (session?.user as any)?.id as string | undefined;
 
     if (userId) {
@@ -217,7 +238,7 @@ export async function createAppointment(data: AppointmentData) {
     return { error: "Serviço não encontrado" };
   }
 
-  // 🔹 Descobre o clientId deste agendamento
+  // 🔹 Descobre o clientId deste agendamento (telefone já está normalizado pelo schema)
   const clientId = await getClientIdForAppointment(parsed.phone);
 
   // Snapshots default (sem plano)
@@ -302,7 +323,7 @@ export async function createAppointment(data: AppointmentData) {
   return withAppointmentMutation(async () => {
     await prisma.appointment.create({
       data: {
-        ...parsed, // inclui serviceId, description, etc.
+        ...parsed, // phone já vem normalizado
         clientId,
         clientPlanId,
         servicePriceAtTheTime,
@@ -374,7 +395,7 @@ export async function updateAppointment(id: string, data: AppointmentData) {
       // aqui não mudamos o clientId nem o clientPlanId,
       // só os campos do formulário e os snapshots calculados acima
       data: {
-        ...parsed, // inclui serviceId, description, etc.
+        ...parsed, // phone já vem normalizado
         servicePriceAtTheTime,
         barberPercentageAtTheTime,
         barberEarningValue,
@@ -433,17 +454,6 @@ async function ensureOrderForAppointment(appointmentId: string) {
 
 /* ---------------------------------------------------------
  * CONCLUDE (DONE) – consumindo crédito do plano
- * e EXPIRANDO quando usar o último crédito
- *
- * REGRA DO PLANO:
- * - Cliente paga o valor TOTAL do plano (ex: 360) só em UM crédito
- * - Demais créditos daquele ClientPlan não cobram nada (0)
- * - Barbeiro recebe comissão por crédito:
- *   (plan.price * commissionPercent / 100) / totalBookings
- *
- * Agora:
- * - Sempre que concluir, tenta garantir uma Order PENDING desse atendimento
- * - Retorna { orderId } (admin pode usar pra redirecionar pro checkout)
  * ---------------------------------------------------------*/
 type ConcludeOptions = {
   concludedByRole?: RoleForAction;
@@ -555,9 +565,6 @@ export async function concludeAppointment(
     );
 
     // 💰 Regra de cobrança do cliente:
-    // - Se ainda não havia créditos consumidos (usedBookings === 0 antes do incremento),
-    //   este atendimento é o primeiro crédito → cobra o valor total do plano.
-    // - Senão, este é 2º, 3º... crédito → não cobra nada do cliente.
     const isFirstCredit = usedBookings === 0;
 
     const newServicePriceAtTheTime = isFirstCredit
@@ -567,11 +574,8 @@ export async function concludeAppointment(
     const newBarberPercentageAtTheTime = commissionPercentDecimal;
     const newBarberEarningValue = perBooking;
 
-    // 🔹 Descobre se este é o ÚLTIMO crédito
     const isLastCredit = usedBookings + 1 >= totalBookings;
 
-    // 🔹 Fluxo ideal: plano ativo, com crédito → marca DONE e consome 1 crédito
-    // Se for o último crédito, também EXPIRE o plano
     await prisma.$transaction([
       prisma.appointment.update({
         where: { id },
@@ -587,15 +591,11 @@ export async function concludeAppointment(
         where: { id: clientPlan.id },
         data: isLastCredit
           ? {
-              usedBookings: {
-                increment: 1,
-              },
+              usedBookings: { increment: 1 },
               status: "EXPIRED",
             }
           : {
-              usedBookings: {
-                increment: 1,
-              },
+              usedBookings: { increment: 1 },
             },
       }),
     ]);
@@ -607,8 +607,6 @@ export async function concludeAppointment(
 
 /* ---------------------------------------------------------
  * CANCEL (CANCELED) COM OU SEM TAXA
- * - Sem taxa: cancela o Appointment e cancela o Order (some do checkout)
- * - Com taxa: cancela o Appointment e garante Order PENDING com total = taxa
  * ---------------------------------------------------------*/
 type CancelOptions = {
   applyFee?: boolean;
@@ -626,24 +624,21 @@ export async function cancelAppointment(id: string, options?: CancelOptions) {
       throw new Error("Agendamento não encontrado");
     }
 
-    // ✅ sempre registra quem cancelou (mesmo sem taxa)
     const cancelledByRole: RoleForAction | null =
       options?.cancelledByRole ?? null;
 
     let cancelFeeApplied = false;
     let cancelFeeValue: Prisma.Decimal | null = null;
 
-    // Calcula taxa (se pedir e se existir config)
     if (options?.applyFee && appt.service) {
       const feePercentage = appt.service.cancelFeePercentage;
 
       if (feePercentage && Number(feePercentage) > 0) {
-        const basePrice = appt.servicePriceAtTheTime ?? appt.service.price; // Decimal
+        const basePrice = appt.servicePriceAtTheTime ?? appt.service.price;
         const feeDecimal = basePrice
           .mul(feePercentage)
           .div(new Prisma.Decimal(100));
 
-        // Só aplica se > 0
         if (feeDecimal && feeDecimal.gt(new Prisma.Decimal(0))) {
           cancelFeeApplied = true;
           cancelFeeValue = feeDecimal;
@@ -651,7 +646,6 @@ export async function cancelAppointment(id: string, options?: CancelOptions) {
       }
     }
 
-    // Atualiza appointment
     await prisma.appointment.update({
       where: { id },
       data: {
@@ -662,17 +656,14 @@ export async function cancelAppointment(id: string, options?: CancelOptions) {
       },
     });
 
-    // ✅ Agora: refletir no CHECKOUT via Order
     const existingOrder = await prisma.order.findFirst({
       where: { appointmentId: id },
       include: { items: true },
     });
 
-    // Se não tem taxa → pedido não pode ficar PENDING no checkout
     if (!cancelFeeApplied || !cancelFeeValue) {
       if (!existingOrder) return;
 
-      // Se já foi pago ou já foi cancelado, não mexe
       if (
         existingOrder.status === "COMPLETED" ||
         existingOrder.status === "CANCELED"
@@ -688,13 +679,10 @@ export async function cancelAppointment(id: string, options?: CancelOptions) {
       return;
     }
 
-    // Se tem taxa, precisamos de um Order "cobrável"
-    // Sem serviceId não temos como criar item (schema atual), então aborta com segurança
     if (!appt.serviceId) {
       return;
     }
 
-    // Cria ou atualiza o order para representar a taxa
     if (!existingOrder) {
       await prisma.order.create({
         data: {
@@ -719,12 +707,10 @@ export async function cancelAppointment(id: string, options?: CancelOptions) {
       return;
     }
 
-    // Se já foi pago, não vamos “reabrir” cobrança
     if (existingOrder.status === "COMPLETED") {
       return;
     }
 
-    // Atualiza pedido existente para virar taxa
     await prisma.$transaction(async (tx) => {
       await tx.order.update({
         where: { id: existingOrder.id },
@@ -735,7 +721,6 @@ export async function cancelAppointment(id: string, options?: CancelOptions) {
         },
       });
 
-      // Mantém só 1 item com o valor da taxa (evita soma errada)
       await tx.orderItem.deleteMany({
         where: { orderId: existingOrder.id },
       });
@@ -755,7 +740,6 @@ export async function cancelAppointment(id: string, options?: CancelOptions) {
 
 /* ---------------------------------------------------------
  * DELETE – usado apenas na tela do USUÁRIO
- * (admin/barbeiro não têm botão para isso)
  * ---------------------------------------------------------*/
 export async function deleteAppointment(id: string) {
   return withAppointmentMutation(async () => {
@@ -774,7 +758,7 @@ export async function getAvailabilityWindowsForBarberOnDateAction(
 ) {
   const date = new Date(dateISO);
   const windows = await getAvailabilityWindowsForBarberOnDate(barberId, date);
-  return windows ?? null; // null pra ficar mais amigável na serialização pro client
+  return windows ?? null;
 }
 
 /* ---------------------------------------------------------
@@ -789,14 +773,12 @@ export async function getAvailableBarbersForDateAction(dateISO: string) {
     );
   }
 
-  // 🔹 Usa util que já calcula disponibilidade
   const baseBarbers = await getAvailableBarbersOnDate(date);
 
   if (!baseBarbers || baseBarbers.length === 0) {
     return [];
   }
 
-  // 🔹 Busca no Prisma os serviços que cada barbeiro realiza
   const prismaBarbers = await prisma.barber.findMany({
     where: {
       id: {
@@ -816,8 +798,6 @@ export async function getAvailableBarbersForDateAction(dateISO: string) {
     prismaBarbers.map((b) => [b.id, b.services.map((s) => s.serviceId)]),
   );
 
-  // 🔹 devolve no formato esperado pelo AppointmentForm,
-  //     com serviceIds para filtrar por serviço no front
   return baseBarbers.map((b) => ({
     id: b.id,
     name: b.name,
