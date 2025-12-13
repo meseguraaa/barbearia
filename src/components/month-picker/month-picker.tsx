@@ -42,6 +42,13 @@ export const MonthPicker = () => {
   const updateURLWithMonth = (selected: Date) => {
     const newParams = new URLSearchParams(searchParams.toString());
     newParams.set("month", format(selected, "yyyy-MM"));
+
+    // ✅ Seguro e genérico:
+    // se a tela usa paginação via query param "page", ao trocar o mês volta pra página 1
+    if (newParams.has("page")) {
+      newParams.set("page", "1");
+    }
+
     router.push(`${pathname}?${newParams.toString()}`);
   };
 
