@@ -27,6 +27,9 @@ export type ProductForRow = {
   stockQuantity: number;
   category: string | null;
   isActive: boolean;
+
+  // ✅ novo: prazo em dias
+  pickupDeadlineDays?: number | null;
 };
 
 type ProductEditDialogProps = {
@@ -36,6 +39,12 @@ type ProductEditDialogProps = {
 export function ProductEditDialog({ product }: ProductEditDialogProps) {
   // truque recomendado pelo Next: partial apply da Server Action
   const updateProductWithId = updateProductAction.bind(null, product.id);
+
+  const pickupDeadlineDaysDefault =
+    typeof product.pickupDeadlineDays === "number" &&
+    product.pickupDeadlineDays > 0
+      ? product.pickupDeadlineDays
+      : 2;
 
   return (
     <Dialog>
@@ -157,6 +166,26 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
               placeholder="Ex: Barba, Cabelo, Hidratação..."
               className="bg-background-tertiary border-border-primary text-content-primary"
             />
+          </div>
+
+          {/* ✅ PRAZO DE RETIRADA */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              Prazo para retirada (dias) <span className="text-red-500">*</span>
+            </label>
+            <Input
+              name="pickupDeadlineDays"
+              type="number"
+              min={1}
+              max={30}
+              required
+              defaultValue={pickupDeadlineDaysDefault}
+              className="bg-background-tertiary border-border-primary text-content-primary"
+            />
+            <p className="text-xs text-content-secondary">
+              Após esse prazo, a reserva pode expirar e o produto volta ao
+              estoque.
+            </p>
           </div>
 
           <div className="flex justify-end gap-2 pt-2">

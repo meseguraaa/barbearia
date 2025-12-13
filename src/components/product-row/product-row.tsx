@@ -23,6 +23,12 @@ function truncate(
   return text.slice(0, max - 1) + "…";
 }
 
+function formatDeadline(days: number) {
+  if (!Number.isFinite(days) || days <= 0) return "—";
+  if (days === 1) return "1 dia";
+  return `${days} dias`;
+}
+
 export function ProductRow({ product }: ProductRowProps) {
   // Garante que o objeto enviado para o dialog tenha os campos numéricos esperados
   const productForDialog: ProductForEditDialog = {
@@ -30,10 +36,18 @@ export function ProductRow({ product }: ProductRowProps) {
     priceAsNumber: Number(product.price),
     barberPercentageAsNumber:
       product.barberPercentage !== null ? Number(product.barberPercentage) : 0,
+
+    pickupDeadlineDays:
+      typeof (product as any).pickupDeadlineDays === "number" &&
+      (product as any).pickupDeadlineDays > 0
+        ? (product as any).pickupDeadlineDays
+        : 2,
   };
 
   const displayName = truncate(product.name);
   const displayDescription = truncate(product.description);
+
+  const deadlineText = formatDeadline(product.pickupDeadlineDays);
 
   return (
     <tr className="border-t border-border-primary">
@@ -85,6 +99,14 @@ export function ProductRow({ product }: ProductRowProps) {
       <td className="px-4 py-3">
         {product.stockQuantity} unidade
         {product.stockQuantity === 1 ? "" : "s"}
+      </td>
+
+      {/* ✅ PRAZO */}
+      <td className="px-4 py-3">
+        <span className="text-content-primary">{deadlineText}</span>
+        <span className="block text-[11px] text-content-secondary">
+          Retirada
+        </span>
       </td>
 
       {/* STATUS */}

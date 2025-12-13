@@ -53,6 +53,9 @@ enum OrderStatus {
   // Pedido feito pelo cliente fora da barbearia, aguardando ele chegar para concluir
   PENDING_CHECKIN
 
+  // ✅ Reserva expirada (prazo acabou e voltou pro estoque)
+  EXPIRED
+
   // Venda efetivamente concluída (estoque abatido, entra no financeiro)
   COMPLETED
 
@@ -360,6 +363,9 @@ model Product {
   // ⭐ ESTOQUE
   stockQuantity Int @default(0)
 
+  // ✅ PRAZO DE RETIRADA (em dias) para reservas feitas pelo cliente
+  pickupDeadlineDays Int @default(2)
+
   // ⭐ RELAÇÃO COM VENDAS
   sales ProductSale[]
 
@@ -417,6 +423,15 @@ model Order {
 
   // ⭐ Status do pedido (inclui PENDING_CHECKIN e COMPLETED)
   status OrderStatus @default(PENDING)
+
+  // ✅ Data limite para retirada quando o pedido for uma reserva (PENDING_CHECKIN)
+  reservedUntil DateTime?
+
+  // ✅ Quando a reserva foi expirada
+  expiredAt DateTime?
+
+  // ✅ Marca que qualquer "seguro" de estoque/contabilização foi revertido (idempotência)
+  inventoryRevertedAt DateTime?
 
   totalAmount Decimal @default(0) @db.Decimal(10, 2)
 

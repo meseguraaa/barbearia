@@ -299,6 +299,15 @@ type RouteHandlerConfig<Route extends AppRouteHandlerRoutes = AppRouteHandlerRou
   type __Unused = __Check
 }
 
+// Validate ../../../src/app/api/cron/expire-reservations/route.ts
+{
+  type __IsExpected<Specific extends RouteHandlerConfig<"/api/cron/expire-reservations">> = Specific
+  const handler = {} as typeof import("../../../src/app/api/cron/expire-reservations/route.js")
+  type __Check = __IsExpected<typeof handler>
+  // @ts-ignore
+  type __Unused = __Check
+}
+
 // Validate ../../../src/app/api/services/[id]/route.ts
 {
   type __IsExpected<Specific extends RouteHandlerConfig<"/api/services/[id]">> = Specific
