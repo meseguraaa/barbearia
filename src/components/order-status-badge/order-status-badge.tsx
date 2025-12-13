@@ -23,6 +23,11 @@ const STATUS_MAP: Record<OrderStatus, { label: string; className: string }> = {
     label: "Cancelado",
     className: "text-red-500 bg-red-100/10 border border-red-500",
   },
+
+  EXPIRED: {
+    label: "Expirado",
+    className: "text-gray-500 bg-gray-100/10 border border-gray-500",
+  },
 };
 
 type Props = {
