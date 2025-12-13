@@ -38,8 +38,6 @@ const PERMISSION_REDIRECT_ORDER: { perm: AdminPermissionKey; path: string }[] =
     { perm: "canAccessAppointments", path: "/admin/appointments" },
     { perm: "canAccessProfessionals", path: "/admin/professionals" },
     { perm: "canAccessServices", path: "/admin/services" },
-    { perm: "canAccessReviews", path: "/admin/reviews" },
-    { perm: "canAccessProducts", path: "/admin/products" },
     { perm: "canAccessClients", path: "/admin/clients" },
     { perm: "canAccessFinance", path: "/admin/finance" },
   ];

@@ -71,7 +71,7 @@ export function DashboardDailySummary({
 
       {/* Taxas de cancelamento (dia) */}
       <DashboardStatCard>
-        <p className="text-label-small text-content_secondary">
+        <p className="text-label-small text-content-secondary">
           Taxas de cancelamento (dia)
         </p>
         <p className="text-title text-content-primary">{totalCancelFeeDay}</p>

@@ -535,6 +535,10 @@
   }
 }
 @layer utilities {
+  .\@container\/card-header {
+    container-type: inline-size;
+    container-name: card-header;
+  }
   .pointer-events-none {
     pointer-events: none;
   }
@@ -627,6 +631,15 @@
   .col-span-2 {
     grid-column: span 2 / span 2;
   }
+  .col-start-2 {
+    grid-column-start: 2;
+  }
+  .row-span-2 {
+    grid-row: span 2 / span 2;
+  }
+  .row-start-1 {
+    grid-row-start: 1;
+  }
   .container {
     width: 100%;
     @media (width >= 40rem) {
@@ -698,6 +711,9 @@
   }
   .ml-2 {
     margin-left: calc(var(--spacing) * 2);
+  }
+  .ml-auto {
+    margin-left: auto;
   }
   .line-clamp-2 {
     overflow: hidden;
@@ -806,6 +822,9 @@
   }
   .h-40 {
     height: calc(var(--spacing) * 40);
+  }
+  .h-80 {
+    height: calc(var(--spacing) * 80);
   }
   .h-full {
     height: 100%;
@@ -1031,6 +1050,9 @@
   .list-none {
     list-style-type: none;
   }
+  .auto-rows-min {
+    grid-auto-rows: min-content;
+  }
   .grid-cols-1 {
     grid-template-columns: repeat(1, minmax(0, 1fr));
   }
@@ -1046,11 +1068,17 @@
   .grid-cols-\[minmax\(0\,3fr\)_minmax\(0\,2fr\)_minmax\(0\,2fr\)_auto\] {
     grid-template-columns: minmax(0,3fr) minmax(0,2fr) minmax(0,2fr) auto;
   }
+  .grid-rows-\[auto_auto\] {
+    grid-template-rows: auto auto;
+  }
   .flex-col {
     flex-direction: column;
   }
   .flex-col-reverse {
     flex-direction: column-reverse;
+  }
+  .flex-row {
+    flex-direction: row;
   }
   .flex-wrap {
     flex-wrap: wrap;
@@ -1152,6 +1180,12 @@
       margin-block-start: calc(calc(var(--spacing) * 10) * var(--tw-space-y-reverse));
       margin-block-end: calc(calc(var(--spacing) * 10) * calc(1 - var(--tw-space-y-reverse)));
     }
+  }
+  .self-start {
+    align-self: flex-start;
+  }
+  .justify-self-end {
+    justify-self: flex-end;
   }
   .truncate {
     overflow: hidden;
@@ -1276,6 +1310,9 @@
   .border-border-secondary {
     border-color: var(--color-border-secondary);
   }
+  .border-emerald-500 {
+    border-color: var(--color-emerald-500);
+  }
   .border-emerald-500\/40 {
     border-color: color-mix(in srgb, oklch(69.6% 0.17 162.48) 40%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
@@ -1324,8 +1361,14 @@
   .bg-\[\#333333\] {
     background-color: #333333;
   }
+  .bg-accent-blue {
+    background-color: var(--color-accent-blue);
+  }
   .bg-accent-primary {
     background-color: var(--color-accent-primary);
+  }
+  .bg-accent-yellow {
+    background-color: var(--color-accent-yellow);
   }
   .bg-amber-100\/10 {
     background-color: color-mix(in srgb, oklch(96.2% 0.059 95.617) 10%, transparent);
@@ -1424,6 +1467,12 @@
     background-color: color-mix(in srgb, oklch(93.6% 0.032 17.717) 10%, transparent);
     @supports (color: color-mix(in lab, red, red)) {
       background-color: color-mix(in oklab, var(--color-red-100) 10%, transparent);
+    }
+  }
+  .bg-red-500\/10 {
+    background-color: color-mix(in srgb, oklch(63.7% 0.237 25.331) 10%, transparent);
+    @supports (color: color-mix(in lab, red, red)) {
+      background-color: color-mix(in oklab, var(--color-red-500) 10%, transparent);
     }
   }
   .bg-red-600 {
@@ -1820,12 +1869,20 @@
     --tw-shadow: 0 4px 6px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 2px 4px -2px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
+  .shadow-none {
+    --tw-shadow: 0 0 #0000;
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
   .shadow-sm {
     --tw-shadow: 0 1px 3px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.1)), 0 1px 2px -1px var(--tw-shadow-color, rgb(0 0 0 / 0.1));
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
   .shadow-xs {
     --tw-shadow: 0 1px 2px 0 var(--tw-shadow-color, rgb(0 0 0 / 0.05));
+    box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+  }
+  .ring-1 {
+    --tw-ring-shadow: var(--tw-ring-inset,) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
   }
   .outline-hidden {
@@ -2196,6 +2253,13 @@
       }
     }
   }
+  .hover\:bg-transparent {
+    &:hover {
+      @media (hover: hover) {
+        background-color: transparent;
+      }
+    }
+  }
   .hover\:bg-zinc-100 {
     &:hover {
       @media (hover: hover) {
@@ -2361,6 +2425,11 @@
     &:has(*:focus) {
       --tw-ring-shadow: var(--tw-ring-inset,) 0 0 0 calc(3px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);
       box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
+    }
+  }
+  .has-data-\[slot\=card-action\]\:grid-cols-\[1fr_auto\] {
+    &:has(*[data-slot="card-action"]) {
+      grid-template-columns: 1fr auto;
     }
   }
   .has-\[\>svg\]\:px-2\.5 {
@@ -2780,6 +2849,16 @@
     &:first-child[data-selected=true] button {
       border-top-left-radius: var(--radius-md);
       border-bottom-left-radius: var(--radius-md);
+    }
+  }
+  .\[\.border-b\]\:pb-6 {
+    &:is(.border-b) {
+      padding-bottom: calc(var(--spacing) * 6);
+    }
+  }
+  .\[\.border-t\]\:pt-6 {
+    &:is(.border-t) {
+      padding-top: calc(var(--spacing) * 6);
     }
   }
   .rtl\:\*\*\:\[\.rdp-button\\_next\>svg\]\:rotate-180 {

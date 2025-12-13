@@ -17,6 +17,7 @@ export const dynamic = "force-dynamic";
 type ClientHistoryPageProps = {
   searchParams: Promise<{
     month?: string; // yyyy-MM
+    orderId?: string; // destaque de uma reserva recém-criada
   }>;
 };
 
@@ -45,6 +46,7 @@ export default async function ClientHistoryPage({
 
   const resolvedSearchParams = await searchParams;
   const monthParam = resolvedSearchParams.month;
+  const highlightOrderId = resolvedSearchParams.orderId ?? null;
 
   // Data de referência: se vier ?month=yyyy-MM usa ela, senão hoje
   const referenceDate = monthParam
@@ -377,9 +379,17 @@ export default async function ClientHistoryPage({
 
         {/* COMPRAS / PEDIDOS DE PRODUTOS */}
         <section className="space-y-4">
-          <p className="text-content-primary">
-            Histórico dos seus pedidos de produtos.
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-content-primary">
+              Histórico dos seus pedidos de produtos.
+            </p>
+
+            <Link href="/client/products">
+              <Button variant="outline" size="sm">
+                Ver produtos
+              </Button>
+            </Link>
+          </div>
 
           {productOrders.length === 0 ? (
             <div className="space-y-2">
@@ -404,9 +414,12 @@ export default async function ClientHistoryPage({
 
                 const monthKey = format(order.createdAt, "yyyy-MM");
 
+                const isHighlighted =
+                  highlightOrderId && order.id === highlightOrderId;
+
                 const statusExtraText =
                   order.status === "PENDING_CHECKIN"
-                    ? " · Aguardando sua visita na barbearia para finalizar a compra."
+                    ? " · Reservado para retirada no estabelecimento."
                     : order.status === "COMPLETED"
                       ? " · Compra concluída na barbearia."
                       : order.status === "CANCELED"
@@ -417,13 +430,27 @@ export default async function ClientHistoryPage({
                   <div
                     key={order.id}
                     data-month={monthKey}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border-primary bg-background-tertiary px-4 py-2.5"
+                    className={[
+                      "flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-background-tertiary px-4 py-2.5",
+                      isHighlighted
+                        ? "border-brand ring-1 ring-brand/30"
+                        : "border-border-primary",
+                    ].join(" ")}
                   >
                     {/* ESQUERDA */}
                     <div className="flex-1 min-w-0">
-                      <p className="text-paragraph-small text-content-primary truncate">
-                        Pedido #{order.id.slice(0, 8)}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-paragraph-small text-content-primary truncate">
+                          Pedido #{order.id.slice(0, 8)}
+                        </p>
+
+                        {isHighlighted && (
+                          <span className="text-xs font-medium text-brand whitespace-nowrap">
+                            Nova reserva ✅
+                          </span>
+                        )}
+                      </div>
+
                       <p className="text-paragraph-small text-content-secondary truncate">
                         {dateStr}
                         {itemsLabel && ` · ${itemsLabel}`}
