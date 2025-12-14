@@ -15,7 +15,7 @@ import { updateProductAction } from "@/app/admin/products/actions";
 
 /**
  * Mesmo tipo que você está usando no ProductRow
- * (ajuste aqui se o seu ProductForRow for diferente)
+ * (mantive compatível e adicionei Unit)
  */
 export type ProductForRow = {
   id: string;
@@ -28,7 +28,11 @@ export type ProductForRow = {
   category: string | null;
   isActive: boolean;
 
-  // ✅ novo: prazo em dias
+  // ✅ Unidade do produto (estoque é por unidade)
+  unitId?: string | null;
+  unitName?: string | null;
+
+  // ✅ prazo em dias
   pickupDeadlineDays?: number | null;
 };
 
@@ -45,6 +49,8 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
     product.pickupDeadlineDays > 0
       ? product.pickupDeadlineDays
       : 2;
+
+  const unitLabel = product.unitName || "—";
 
   return (
     <Dialog>
@@ -66,6 +72,22 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
         </DialogHeader>
 
         <form action={updateProductWithId} className="space-y-4 pb-2">
+          {/* ✅ UNIDADE (somente leitura) */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              Unidade do estoque
+            </label>
+            <Input
+              value={unitLabel}
+              disabled
+              className="bg-background-tertiary border-border-primary text-content-primary opacity-90"
+            />
+            <p className="text-xs text-content-secondary">
+              Este produto pertence ao estoque desta unidade. A reserva e o
+              checkout seguem essa unidade.
+            </p>
+          </div>
+
           {/* NOME */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">

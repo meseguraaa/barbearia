@@ -235,7 +235,14 @@ export default async function AdminCheckoutPage({
           : {}),
       },
       orderBy: { name: "asc" },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        units: {
+          where: { isActive: true },
+          select: { unitId: true, isActive: true },
+        },
+      },
     }),
   ]);
 
@@ -464,6 +471,34 @@ export default async function AdminCheckoutPage({
                   minimumFractionDigits: 2,
                 },
               );
+
+              // ✅ unidade do(s) produtos dessa conta (para filtrar barbeiros)
+              const productUnitIds = Array.from(
+                new Set(
+                  (account.productOrders ?? [])
+                    .map((o: any) => o.unitId as string | undefined)
+                    .filter(Boolean),
+                ),
+              );
+
+              // Regra: se tiver produtos, esperamos 1 unidade só.
+              // Se vier mais de uma (ex: filtro "todas unidades"), bloqueia e força o cara filtrar.
+              const productUnitId =
+                account.hasProducts && productUnitIds.length === 1
+                  ? productUnitIds[0]!
+                  : null;
+
+              const barbersForAccount = account.hasProducts
+                ? productUnitId
+                  ? barbers.filter((b: any) =>
+                      (b.units ?? []).some(
+                        (u: any) => u.unitId === productUnitId && u.isActive,
+                      ),
+                    )
+                  : []
+                : barbers;
+
+              const hasBarbersForAccount = barbersForAccount.length > 0;
 
               return (
                 <div
@@ -732,12 +767,15 @@ export default async function AdminCheckoutPage({
                             required
                             className="h-9 rounded-md border border-border-primary bg-background-secondary px-2 text-sm text-content-primary"
                             defaultValue=""
-                            disabled={!hasBarbers}
+                            disabled={!hasBarbersForAccount}
                           >
                             <option value="" disabled>
-                              Selecione o Profissional
+                              {productUnitId
+                                ? "Selecione o Profissional"
+                                : "Filtre por uma unidade (produtos em múltiplas/unidade indefinida)"}
                             </option>
-                            {barbers.map((barber) => (
+
+                            {barbersForAccount.map((barber: any) => (
                               <option key={barber.id} value={barber.id}>
                                 {barber.name}
                               </option>
@@ -749,7 +787,9 @@ export default async function AdminCheckoutPage({
                           type="submit"
                           variant="brand"
                           size="sm"
-                          disabled={account.hasProducts && !hasBarbers}
+                          disabled={
+                            account.hasProducts && !hasBarbersForAccount
+                          }
                         >
                           Marcar tudo como pago
                         </Button>

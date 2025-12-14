@@ -1,14 +1,7 @@
 // app/admin/dashboard/page.tsx
 import { prisma } from "@/lib/prisma";
-import {
-  startOfDay,
-  endOfDay,
-  startOfMonth,
-  endOfMonth,
-  subMonths,
-  getDaysInMonth,
-  format,
-} from "date-fns";
+import { subMonths, getDaysInMonth, format } from "date-fns";
+
 import { ptBR } from "date-fns/locale";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
@@ -60,6 +53,44 @@ function parseDateParam(dateStr?: string): Date | null {
   const [y, m, d] = dateStr.split("-").map(Number);
   if (!y || !m || !d) return null;
   return new Date(y, m - 1, d);
+}
+
+function getSaoPauloYMD(date: Date): { y: number; m: number; d: number } {
+  const formatter = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: SAO_PAULO_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  const parts = formatter.formatToParts(date);
+  const d = Number(parts.find((p) => p.type === "day")?.value ?? "1");
+  const m = Number(parts.find((p) => p.type === "month")?.value ?? "1");
+  const y = Number(parts.find((p) => p.type === "year")?.value ?? "1970");
+
+  return { y, m, d };
+}
+
+// 00:00 em SP (UTC-03) = 03:00 UTC
+function startOfDaySP(date: Date): Date {
+  const { y, m, d } = getSaoPauloYMD(date);
+  return new Date(Date.UTC(y, m - 1, d, 3, 0, 0));
+}
+
+function endOfDaySP(date: Date): Date {
+  const start = startOfDaySP(date);
+  return new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
+}
+
+function startOfMonthSP(date: Date): Date {
+  const { y, m } = getSaoPauloYMD(date);
+  return new Date(Date.UTC(y, m - 1, 1, 3, 0, 0));
+}
+
+function endOfMonthSP(date: Date): Date {
+  const { y, m } = getSaoPauloYMD(date);
+  const nextMonth = new Date(Date.UTC(y, m, 1, 3, 0, 0));
+  return new Date(nextMonth.getTime() - 1);
 }
 
 /* =========================================================
@@ -157,10 +188,9 @@ function whereReviewUnit(unitId: string | null) {
   return unitId ? { appointment: { unitId } } : {};
 }
 
-// ⚠️ ProductSale NÃO tem unitId no seu schema.
-// Filtra via product.unitId.
+// ✅ ProductSale TEM unitId (e agora é obrigatório).
 function whereProductSaleUnit(unitId: string | null) {
-  return unitId ? { product: { unitId } } : {};
+  return unitId ? { unitId } : {};
 }
 
 async function getAppointments(
@@ -176,8 +206,8 @@ async function getAppointments(
     baseDate = getSaoPauloToday();
   }
 
-  const start = startOfDay(baseDate);
-  const end = endOfDay(baseDate);
+  const start = startOfDaySP(baseDate);
+  const end = endOfDaySP(baseDate);
 
   const appointments = await prisma.appointment.findMany({
     where: {
@@ -220,15 +250,15 @@ export default async function AdminDashboardPage({
     ? (parseDateParam(dateParam) ?? todaySP)
     : todaySP;
 
-  const dayStart = startOfDay(selectedDate);
-  const dayEnd = endOfDay(selectedDate);
+  const dayStart = startOfDaySP(selectedDate);
+  const dayEnd = endOfDaySP(selectedDate);
 
-  const monthStart = startOfMonth(selectedDate);
-  const monthEnd = endOfMonth(selectedDate);
+  const monthStart = startOfMonthSP(selectedDate);
+  const monthEnd = endOfMonthSP(selectedDate);
 
   const previousMonthDate = subMonths(selectedDate, 1);
-  const previousMonthStart = startOfMonth(previousMonthDate);
-  const previousMonthEnd = endOfMonth(previousMonthDate);
+  const previousMonthStart = startOfMonthSP(previousMonthDate);
+  const previousMonthEnd = endOfMonthSP(previousMonthDate);
 
   const [
     appointmentsPrisma,
