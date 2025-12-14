@@ -1,6 +1,7 @@
 // app/admin/products/page.tsx
 import { prisma } from "@/lib/prisma";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 
 import { ProductRow } from "@/components/product-row";
 import { ProductNewDialog } from "@/components/product-new-dialog";
@@ -12,9 +13,8 @@ export const metadata: Metadata = {
   title: "Admin | Produtos",
 };
 
-type ProductFromPrisma = Awaited<
-  ReturnType<typeof prisma.product.findMany>
->[number];
+const UNIT_COOKIE_NAME = "admin_unit_context";
+const UNIT_ALL_VALUE = "all";
 
 // 👇 tipo "plano" que vai para o Client Component
 export type ProductForRow = {
@@ -30,14 +30,59 @@ export type ProductForRow = {
 
   // ✅ novo: prazo para retirada (dias)
   pickupDeadlineDays: number;
+
+  // ✅ novo: unidade do produto (estoque por unidade)
+  unitId: string;
+  unitName: string;
 };
+
+/**
+ * Resolve o "escopo" de unidade para as queries do admin.
+ * - Dono: respeita cookie (all = tudo)
+ * - Admin de unidade: ignora cookie e força unitId do admin
+ */
+async function resolveUnitScope(admin: {
+  unitId: string | null;
+  canSeeAllUnits: boolean;
+}) {
+  if (!admin.canSeeAllUnits) return admin.unitId;
+
+  const cookieStore = await cookies();
+  const cookieValue =
+    cookieStore.get(UNIT_COOKIE_NAME)?.value ?? UNIT_ALL_VALUE;
+
+  if (!cookieValue || cookieValue === UNIT_ALL_VALUE) return null;
+  return cookieValue;
+}
 
 export default async function ProductsPage() {
   // 🔐 Permissão: precisa ter acesso a Produtos (ou ser Dono)
-  await requireAdminPermission("canAccessProducts");
+  const admin = (await requireAdminPermission("canAccessProducts")) as any;
 
-  const productsPrisma: ProductFromPrisma[] = await prisma.product.findMany({
+  // ✅ Unidade ativa para TODAS as queries desta página
+  const activeUnitId = await resolveUnitScope({
+    unitId: admin?.unitId ?? null,
+    canSeeAllUnits: !!admin?.canSeeAllUnits,
+  });
+
+  // ✅ lista de unidades para o modal (dono vê todas, admin de unidade vê só a dele)
+  const units = await prisma.unit.findMany({
+    where: activeUnitId ? { id: activeUnitId } : {},
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, isActive: true },
+  });
+
+  const productsPrisma = await prisma.product.findMany({
+    where: activeUnitId ? { unitId: activeUnitId } : {},
     orderBy: { createdAt: "desc" },
+    include: {
+      unit: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
   });
 
   // 🔧 aqui a gente tira Decimal e deixa tudo como number/string
@@ -60,6 +105,9 @@ export default async function ProductsPage() {
       (p as any).pickupDeadlineDays > 0
         ? (p as any).pickupDeadlineDays
         : 2,
+
+    unitId: p.unit?.id ?? p.unitId,
+    unitName: p.unit?.name ?? "—",
   }));
 
   return (
@@ -73,7 +121,12 @@ export default async function ProductsPage() {
           </p>
         </div>
 
-        <ProductNewDialog />
+        {/* ✅ Agora o modal já sabe a unidade do estoque */}
+        <ProductNewDialog
+          units={units}
+          defaultUnitId={activeUnitId}
+          canSeeAllUnits={!!admin?.canSeeAllUnits}
+        />
       </header>
 
       {/* TABELA */}
@@ -84,6 +137,12 @@ export default async function ProductsPage() {
               <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
                 Produto
               </th>
+
+              {/* ✅ nova coluna */}
+              <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
+                Unidade
+              </th>
+
               <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
                 Preço
               </th>
@@ -112,7 +171,7 @@ export default async function ProductsPage() {
             {products.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="px-4 py-6 text-center text-paragraph-small text-content-secondary"
                 >
                   Nenhum produto cadastrado ainda.

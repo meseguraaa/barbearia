@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 
 import {
   Dialog,
@@ -15,17 +15,53 @@ import { Textarea } from "@/components/ui/textarea";
 import { UploadImageField } from "@/components/upload-image-field/upload-image-field";
 import { createProductAction } from "@/app/admin/products/actions";
 
-export function ProductNewDialog() {
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+type UnitOption = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
+
+export function ProductNewDialog({
+  units = [],
+  defaultUnitId,
+  canSeeAllUnits = true,
+}: {
+  units?: UnitOption[];
+  defaultUnitId?: string | null;
+  canSeeAllUnits?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  const initialUnitId = useMemo(() => {
+    if (!canSeeAllUnits && defaultUnitId) return defaultUnitId;
+    if (defaultUnitId) return defaultUnitId;
+    const firstActive = units.find((u) => u.isActive);
+    return firstActive?.id ?? "";
+  }, [units, defaultUnitId, canSeeAllUnits]);
+
+  const [selectedUnitId, setSelectedUnitId] = useState<string>(initialUnitId);
+
   function handleCreate(formData: FormData) {
+    // ✅ garante que unitId vai junto (estoque por unidade)
+    formData.set("unitId", selectedUnitId);
+
     startTransition(async () => {
       await createProductAction(formData);
-      // se não explodir, fechamos o modal
       setOpen(false);
     });
   }
+
+  const hasUnits = units.length > 0;
+  const unitIsLocked = !canSeeAllUnits && !!defaultUnitId;
 
   return (
     <Dialog open={open} onOpenChange={(next) => !isPending && setOpen(next)}>
@@ -41,6 +77,69 @@ export function ProductNewDialog() {
         </DialogHeader>
 
         <form action={handleCreate} className="space-y-4 pb-2">
+          {/* ✅ UNIDADE */}
+          <div className="space-y-1">
+            <label className="text-label-small text-content-secondary">
+              Unidade do estoque <span className="text-red-500">*</span>
+            </label>
+
+            {unitIsLocked ? (
+              <>
+                <Input
+                  value={units.find((u) => u.id === defaultUnitId)?.name ?? "—"}
+                  disabled
+                  className="bg-background-tertiary border-border-primary text-content-primary opacity-90"
+                />
+                <input
+                  type="hidden"
+                  name="unitId"
+                  value={defaultUnitId ?? ""}
+                />
+                <p className="text-xs text-content-secondary">
+                  Você é admin de unidade. Produtos criados aqui ficam nesta
+                  unidade.
+                </p>
+              </>
+            ) : (
+              <>
+                <Select
+                  value={selectedUnitId}
+                  onValueChange={(v) => setSelectedUnitId(v)}
+                  disabled={!hasUnits}
+                >
+                  <SelectTrigger className="bg-background-tertiary border-border-primary text-content-primary">
+                    <SelectValue
+                      placeholder={
+                        hasUnits
+                          ? "Selecione a unidade"
+                          : "Nenhuma unidade cadastrada"
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {units.map((u) => (
+                      <SelectItem
+                        key={u.id}
+                        value={u.id}
+                        disabled={!u.isActive}
+                      >
+                        {u.name} {!u.isActive ? "(inativa)" : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {/* redundância pro server action (e também ajuda no autofill) */}
+                <input type="hidden" name="unitId" value={selectedUnitId} />
+
+                <p className="text-xs text-content-secondary">
+                  O estoque não é central. Reservas e checkout seguirão a
+                  unidade escolhida.
+                </p>
+              </>
+            )}
+          </div>
+
           {/* NOME */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
@@ -155,7 +254,21 @@ export function ProductNewDialog() {
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="submit" variant="brand" disabled={isPending}>
+            <Button
+              type="submit"
+              variant="brand"
+              disabled={
+                isPending ||
+                (!unitIsLocked &&
+                  (!selectedUnitId || selectedUnitId.length === 0))
+              }
+              title={
+                !unitIsLocked &&
+                (!selectedUnitId || selectedUnitId.length === 0)
+                  ? "Selecione uma unidade"
+                  : undefined
+              }
+            >
               {isPending ? "Salvando..." : "Criar produto"}
             </Button>
           </div>

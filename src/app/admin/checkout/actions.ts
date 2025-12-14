@@ -86,6 +86,51 @@ export async function finalizeClientOpenOrders(formData: FormData) {
       );
     }
 
+    /**
+     * ✅ REGRA MULTI-UNIDADE (CRÍTICA):
+     * - Ao finalizar produtos, o barbeiro escolhido PRECISA pertencer à unidade do pedido.
+     * - E uma “conta” não pode finalizar produtos de unidades diferentes num clique só.
+     */
+    if (productOrders.length > 0) {
+      const unitIds = Array.from(
+        new Set(productOrders.map((o) => o.unitId).filter(Boolean)),
+      ) as string[];
+
+      if (unitIds.length === 0) {
+        throw new Error(
+          "Pedidos de produto sem unidade vinculada. Não é possível finalizar.",
+        );
+      }
+
+      if (unitIds.length > 1) {
+        throw new Error(
+          "Esta conta possui produtos de mais de uma unidade. Filtre por unidade e finalize separadamente.",
+        );
+      }
+
+      const orderUnitId = unitIds[0];
+
+      const barberOk = await prisma.barber.findFirst({
+        where: {
+          id: barberId!,
+          isActive: true,
+          units: {
+            some: {
+              unitId: orderUnitId,
+              isActive: true,
+            },
+          },
+        },
+        select: { id: true },
+      });
+
+      if (!barberOk) {
+        throw new Error(
+          "O profissional selecionado não pertence à unidade deste(s) pedido(s) de produto.",
+        );
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       // 1) Finaliza serviços (status do pedido + reflete no appointment)
       for (const order of serviceOrders) {
@@ -137,11 +182,18 @@ export async function finalizeClientOpenOrders(formData: FormData) {
           });
 
           // ✅ unitId: vem do order (multi-unidade)
+          if (!order.unitId) {
+            throw new Error(
+              "Pedido de produto sem unidade vinculada. Não é possível finalizar.",
+            );
+          }
+
           await tx.productSale.create({
             data: {
-              productId: item.productId,
-              barberId: barberId!,
-              unitId: order.unitId ?? undefined,
+              product: { connect: { id: item.productId } },
+              barber: { connect: { id: barberId! } },
+              unit: { connect: { id: order.unitId } },
+
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               totalPrice: item.totalPrice,
@@ -227,6 +279,33 @@ export async function finalizeProductOrder(formData: FormData) {
     const productItems = order.items.filter((item) => item.productId != null);
 
     await prisma.$transaction(async (tx) => {
+      if (!order.unitId) {
+        throw new Error(
+          "Pedido de produto sem unidade vinculada. Não é possível finalizar.",
+        );
+      }
+
+      // ✅ valida barbeiro pertence à unidade do pedido
+      const barberOk = await tx.barber.findFirst({
+        where: {
+          id: barberId,
+          isActive: true,
+          units: {
+            some: {
+              unitId: order.unitId,
+              isActive: true,
+            },
+          },
+        },
+        select: { id: true },
+      });
+
+      if (!barberOk) {
+        throw new Error(
+          "O profissional selecionado não pertence à unidade deste pedido.",
+        );
+      }
+
       for (const item of productItems) {
         if (!item.productId || !item.product) continue;
 
@@ -241,9 +320,10 @@ export async function finalizeProductOrder(formData: FormData) {
 
         await tx.productSale.create({
           data: {
-            productId: item.productId,
-            barberId: barberId!,
-            unitId: order.unitId ?? undefined,
+            product: { connect: { id: item.productId } },
+            barber: { connect: { id: barberId } }, // barberId aqui já é string
+            unit: { connect: { id: order.unitId } },
+
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             totalPrice: item.totalPrice,

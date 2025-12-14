@@ -82,6 +82,18 @@ export function ProductRow({ product }: ProductRowProps) {
         </div>
       </td>
 
+      {/* ✅ UNIDADE */}
+      <td className="px-4 py-3">
+        <div className="flex flex-col">
+          <span className="text-content-primary">
+            {product.unitName || "—"}
+          </span>
+          <span className="text-[11px] text-content-secondary">
+            Estoque da unidade
+          </span>
+        </div>
+      </td>
+
       {/* PREÇO */}
       <td className="px-4 py-3">R$ {Number(product.price).toFixed(2)}</td>
 
@@ -97,8 +109,7 @@ export function ProductRow({ product }: ProductRowProps) {
 
       {/* ESTOQUE */}
       <td className="px-4 py-3">
-        {product.stockQuantity} unidade
-        {product.stockQuantity === 1 ? "" : "s"}
+        {product.stockQuantity} unidade{product.stockQuantity === 1 ? "" : "s"}
       </td>
 
       {/* ✅ PRAZO */}
