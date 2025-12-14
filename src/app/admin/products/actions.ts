@@ -51,7 +51,6 @@ const baseProductSchema = z.object({
     .string()
     .optional()
     .transform((val) => {
-      // se vier vazio/null, usamos 2 dias
       const n = Number(val);
       return Number.isFinite(n) ? n : 2;
     })
@@ -84,6 +83,38 @@ function normalizePriceToDecimalString(raw: string): string {
   }
 
   return onlyDigitsAndSeparators;
+}
+
+/**
+ * Resolve um unitId:
+ * - tenta pegar do form (se existir)
+ * - senão, pega a primeira unit (prioriza ativa)
+ *
+ * Mantém compatibilidade enquanto a UI não manda unitId.
+ */
+async function getUnitIdFromFormOrDefault(formData: FormData): Promise<string> {
+  const raw = formData.get("unitId");
+  const fromForm = String(raw ?? "").trim();
+  if (fromForm) return fromForm;
+
+  const unit =
+    (await prisma.unit.findFirst({
+      where: { isActive: true },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    })) ??
+    (await prisma.unit.findFirst({
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    }));
+
+  if (!unit) {
+    throw new Error(
+      "Nenhuma unidade encontrada. Crie uma unidade antes de cadastrar produtos.",
+    );
+  }
+
+  return unit.id;
 }
 
 // ===== Funções base (trabalham com prisma + revalidate) =====
@@ -119,6 +150,7 @@ export async function createProduct(formData: FormData) {
   } = parsed.data;
 
   const normalizedPrice = normalizePriceToDecimalString(price);
+  const unitId = await getUnitIdFromFormOrDefault(formData);
 
   await prisma.product.create({
     data: {
@@ -130,6 +162,9 @@ export async function createProduct(formData: FormData) {
       category,
       stockQuantity,
       pickupDeadlineDays,
+
+      // ✅ obrigatório agora
+      unit: { connect: { id: unitId } },
     },
   });
 
@@ -179,6 +214,7 @@ export async function updateProduct(productId: string, formData: FormData) {
       category,
       stockQuantity,
       pickupDeadlineDays,
+      // ⚠️ não mexo em unit aqui pra não “mover produto de unidade” sem querer
     },
   });
 

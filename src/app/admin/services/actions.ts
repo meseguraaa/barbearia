@@ -24,6 +24,38 @@ function revalidateAll() {
   revalidatePath("/admin/services");
 }
 
+/**
+ * Resolve um unitId:
+ * - tenta pegar do form (se existir)
+ * - senão, pega a primeira unit (prioriza ativa)
+ *
+ * Isso evita quebrar fluxo antigo enquanto você não pluga unitId na UI.
+ */
+async function getUnitIdFromFormOrDefault(formData: FormData): Promise<string> {
+  const raw = formData.get("unitId");
+  const fromForm = String(raw ?? "").trim();
+  if (fromForm) return fromForm;
+
+  const unit =
+    (await prisma.unit.findFirst({
+      where: { isActive: true },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    })) ??
+    (await prisma.unit.findFirst({
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    }));
+
+  if (!unit) {
+    throw new Error(
+      "Nenhuma unidade encontrada. Crie uma unidade antes de cadastrar serviços.",
+    );
+  }
+
+  return unit.id;
+}
+
 /* =====================================================================
  * SERVIÇOS
  * ===================================================================== */
@@ -83,6 +115,8 @@ export async function createService(formData: FormData) {
     }
   }
 
+  const unitId = await getUnitIdFromFormOrDefault(formData);
+
   await prisma.service.create({
     data: {
       name,
@@ -92,6 +126,12 @@ export async function createService(formData: FormData) {
       barberPercentage: barberPercentage ?? 0,
       cancelLimitHours: cancelLimitHours ?? null,
       cancelFeePercentage: cancelFeePercentage ?? null,
+
+      // ✅ obrigatório agora
+      unit: {
+        connect: { id: unitId },
+      },
+
       // vincula os profissionais (se vierem)
       professionals: {
         create: professionalIds.map((barberId) => ({
@@ -118,6 +158,7 @@ export async function toggleServiceStatus(formData: FormData) {
 
   const service = await prisma.service.findUnique({
     where: { id },
+    select: { id: true, isActive: true },
   });
 
   if (!service) {
@@ -205,6 +246,7 @@ export async function updateService(id: string, formData: FormData) {
         cancelLimitHours: cancelLimitHours ?? null,
         cancelFeePercentage: cancelFeePercentage ?? null,
       },
+      select: { id: true },
     });
 
     // Reseta vínculos antigos
@@ -308,6 +350,7 @@ export async function togglePlanStatus(formData: FormData) {
 
   const plan = await prisma.plan.findUnique({
     where: { id },
+    select: { id: true, isActive: true },
   });
 
   if (!plan) {
@@ -414,6 +457,7 @@ export async function createClientPlanForClient(formData: FormData) {
 
   const plan = await prisma.plan.findUnique({
     where: { id: planId },
+    select: { id: true, durationDays: true },
   });
 
   if (!plan) {
@@ -426,6 +470,7 @@ export async function createClientPlanForClient(formData: FormData) {
       clientId,
       status: "ACTIVE",
     },
+    select: { id: true },
   });
 
   if (existingActivePlan) {
@@ -462,6 +507,7 @@ export async function expireClientPlan(formData: FormData) {
 
   const clientPlan = await prisma.clientPlan.findUnique({
     where: { id: clientPlanId },
+    select: { id: true, status: true },
   });
 
   if (!clientPlan) {
@@ -469,7 +515,6 @@ export async function expireClientPlan(formData: FormData) {
   }
 
   if (clientPlan.status !== "ACTIVE") {
-    // nada a fazer, mas não precisa quebrar
     return;
   }
 
@@ -507,13 +552,10 @@ export async function revalidateClientPlan(formData: FormData) {
     throw new Error("Plano do cliente não encontrado.");
   }
 
-  // Agora aceitamos revalidar planos ACTIVE ou EXPIRED,
-  // desde que já tenham todos os créditos usados.
   if (clientPlan.status !== "ACTIVE" && clientPlan.status !== "EXPIRED") {
     throw new Error("Apenas planos ativos ou expirados podem ser revalidados.");
   }
 
-  // Regra de negócio: só revalidar se já usou todos os créditos
   const totalBookings = clientPlan.plan.totalBookings;
   if (clientPlan.usedBookings < totalBookings) {
     throw new Error(
@@ -538,7 +580,6 @@ export async function revalidateClientPlan(formData: FormData) {
   endDate.setDate(endDate.getDate() + newPlan.durationDays);
 
   await prisma.$transaction(async (tx) => {
-    // Expira o plano atual (caso ainda não esteja expirado)
     if (clientPlan.status !== "EXPIRED") {
       await tx.clientPlan.update({
         where: { id: clientPlanId },
@@ -548,7 +589,6 @@ export async function revalidateClientPlan(formData: FormData) {
       });
     }
 
-    // Cria um novo plano para o cliente
     await tx.clientPlan.create({
       data: {
         clientId: clientPlan.clientId,
