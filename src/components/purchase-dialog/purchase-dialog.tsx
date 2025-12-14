@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { format } from "date-fns";
+import { format, addDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 import {
@@ -35,6 +35,12 @@ type ProductPurchaseDialogProps = {
   onOpenChange: (v: boolean) => void;
   clientId?: string | null;
 };
+
+function formatDeadline(days: number) {
+  if (!Number.isFinite(days) || days <= 0) return "—";
+  if (days === 1) return "1 dia";
+  return `${days} dias`;
+}
 
 export function ProductPurchaseDialog({
   product,
@@ -83,6 +89,29 @@ export function ProductPurchaseDialog({
     const timePart = format(reservedUntil, "HH:mm", { locale: ptBR });
     return `${datePart} às ${timePart}`;
   }, [reservedUntil]);
+
+  // ✅ fallback amigável só para exibir no modal (se ainda não tiver reservado)
+  const pickupDays = useMemo(() => {
+    const d = Number(product.pickupDeadlineDays);
+    return Number.isFinite(d) && d > 0 ? d : 2;
+  }, [product.pickupDeadlineDays]);
+
+  const pickupDaysLabel = useMemo(
+    () => formatDeadline(pickupDays),
+    [pickupDays],
+  );
+
+  const estimatedUntilLabel = useMemo(() => {
+    // só pra orientar o cliente antes de confirmar
+    const estimated = addDays(new Date(), pickupDays);
+    return format(estimated, "dd/MM", { locale: ptBR });
+  }, [pickupDays]);
+
+  const unitLabel = useMemo(() => {
+    const name = (product as any)?.unitName;
+    if (typeof name === "string" && name.trim()) return name.trim();
+    return "Unidade não informada";
+  }, [product]);
 
   const handleGoToHistory = () => {
     const id = lastOrderId;
@@ -157,6 +186,35 @@ export function ProductPurchaseDialog({
               alt={product.name}
               className="w-full h-40 object-cover rounded-lg border border-border-primary"
             />
+
+            {/* ✅ MENSAGEM NOVA (unidade + prazo) */}
+            <div className="rounded-lg border border-border-primary bg-background-tertiary px-3 py-3 space-y-1">
+              <p className="text-sm text-content-primary font-medium">
+                Este produto está disponível na unidade{" "}
+                <span className="underline underline-offset-2">
+                  {unitLabel}
+                </span>
+                .
+              </p>
+
+              <p className="text-xs text-content-secondary leading-snug">
+                Ao reservar, você garante a separação do item e finaliza o
+                pagamento presencialmente nessa unidade.
+              </p>
+
+              <p className="text-xs text-content-secondary leading-snug">
+                Prazo para retirada:{" "}
+                <span className="font-medium text-content-primary">
+                  {pickupDaysLabel}
+                </span>{" "}
+                (estimativa: até{" "}
+                <span className="font-medium text-content-primary">
+                  {estimatedUntilLabel}
+                </span>
+                ). Após o prazo, a reserva pode expirar e o produto volta ao
+                estoque.
+              </p>
+            </div>
 
             <p className="text-content-secondary text-sm">
               Esse pedido será registrado no seu histórico e finalizado na
@@ -238,6 +296,15 @@ export function ProductPurchaseDialog({
 
             <AlertDialogDescription className="text-content-secondary">
               Reservamos este produto para você retirar no estabelecimento.
+              {/* ✅ também reforça a unidade no sucesso */}
+              <div className="mt-3 rounded-lg border border-border-primary bg-background-tertiary px-3 py-2">
+                <p className="text-xs text-content-secondary">
+                  Unidade de retirada
+                </p>
+                <p className="text-sm font-semibold text-content-primary">
+                  {unitLabel}
+                </p>
+              </div>
               {reservedUntilLabel ? (
                 <div className="mt-3 rounded-lg border border-border-primary bg-background-tertiary px-3 py-2">
                   <p className="text-xs text-content-secondary">
