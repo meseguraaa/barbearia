@@ -137,14 +137,25 @@ export default async function Home({ searchParams }: HomeProps) {
   const dayStart = startOfDay(baseDate);
   const dayEnd = endOfDay(baseDate);
 
+  // ✅ Unidades ativas (pra Combo do Item B)
+  const unitsPrisma = await prisma.unit.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, isActive: true },
+  });
+
+  const units = unitsPrisma.map((u) => ({
+    id: u.id,
+    name: u.name,
+    isActive: u.isActive,
+  }));
+
   const rawAppointments = await prisma.appointment.findMany({
     where: {
       scheduleAt: {
         gte: dayStart,
         lte: dayEnd,
       },
-      // 👇 REGRA DE BACKEND: na agenda do barbeiro
-      // não exibimos agendamentos cancelados
       status: {
         not: "CANCELED",
       },
@@ -153,8 +164,6 @@ export default async function Home({ searchParams }: HomeProps) {
       scheduleAt: "asc",
     },
     include: {
-      // agora é o model Barber, não mais User
-      // 🔹 e incluímos também o user pra ter a foto (user.image)
       barber: {
         include: {
           user: true,
@@ -164,7 +173,7 @@ export default async function Home({ searchParams }: HomeProps) {
   });
 
   // 🔹 barbeiros ativos vindos do model Barber
-  //    agora incluindo os serviços que cada um realiza (ServiceProfessional)
+  //    incluindo serviços que fazem + vínculos de unidade (BarberUnit)
   const barbersPrisma = await prisma.barber.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
@@ -173,6 +182,10 @@ export default async function Home({ searchParams }: HomeProps) {
         select: {
           serviceId: true,
         },
+      },
+      units: {
+        where: { isActive: true },
+        select: { unitId: true },
       },
     },
   });
@@ -186,10 +199,18 @@ export default async function Home({ searchParams }: HomeProps) {
     role: "BARBER",
   }));
 
-  // serviços ativos vindos do model Service
+  // ✅ serviços ativos (NÃO mandamos unitId pro form,
+  // porque no seu negócio "serviço é ligado ao profissional", e o form filtrava errado)
   const servicesPrisma = await prisma.service.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      price: true,
+      durationMinutes: true,
+      isActive: true,
+    },
   });
 
   const services: Service[] = servicesPrisma.map((service) => ({
@@ -239,8 +260,6 @@ export default async function Home({ searchParams }: HomeProps) {
             phone: barberData?.phone ?? null,
             isActive: barberData?.isActive ?? true,
             role: "BARBER",
-            // 🔹 extra: foto do barbeiro vinda do user.image,
-            // que o AppointmentCard consegue ler via "as any"
             user: apt.barber.user
               ? {
                   image: apt.barber.user.image,
@@ -250,7 +269,6 @@ export default async function Home({ searchParams }: HomeProps) {
         : undefined,
       time,
       period,
-      // 🔹 campo extra para o front:
       isLocked,
     } as AppointmentType & { isLocked: boolean };
   });
@@ -258,7 +276,7 @@ export default async function Home({ searchParams }: HomeProps) {
   const periods = groupAppointmentByPeriod(appointments);
 
   // 🔹 Array específico para o AppointmentForm:
-  //    aqui já mandamos também os serviceIds (serviços que cada profissional executa)
+  //    manda serviceIds + unitIds (vínculos do profissional)
   const barbersForForm = barbersPrisma.map((barber) => ({
     id: barber.id,
     name: barber.name ?? "Barbeiro",
@@ -267,6 +285,7 @@ export default async function Home({ searchParams }: HomeProps) {
     isActive: barber.isActive ?? true,
     role: "BARBER" as const,
     serviceIds: barber.services.map((s) => s.serviceId),
+    unitIds: barber.units.map((u) => u.unitId),
   }));
 
   // 🔹 Plano ativo do cliente logado (para o AppointmentForm)
@@ -287,7 +306,7 @@ export default async function Home({ searchParams }: HomeProps) {
       include: {
         plan: {
           include: {
-            services: true, // cada item tem serviceId
+            services: true,
           },
         },
       },
@@ -295,7 +314,6 @@ export default async function Home({ searchParams }: HomeProps) {
 
     const today = new Date();
 
-    // mesma regra que usamos no admin/services: ativo, com créditos e dentro da validade
     const activePlan = clientPlans.find((cp) => {
       const hasCredits = cp.usedBookings < cp.plan.totalBookings;
       const isActive = cp.status === "ACTIVE";
@@ -328,7 +346,6 @@ export default async function Home({ searchParams }: HomeProps) {
           </div>
 
           <div className="flex items-center gap-3">
-            {/* Modal de avaliação pós-login (abre automaticamente se houver atendimento pendente de avaliação) */}
             {pendingReviewAppointment && (
               <ClientAppointmentReviewDialog
                 defaultOpen={shouldOpenReviewModal}
@@ -342,7 +359,6 @@ export default async function Home({ searchParams }: HomeProps) {
               />
             )}
 
-            {/* Modal de perfil abre automaticamente se faltar telefone/aniversário */}
             <ClientProfileDialog
               userName={userName}
               userImage={userImage}
@@ -394,8 +410,9 @@ export default async function Home({ searchParams }: HomeProps) {
       >
         <AppointmentForm
           appointments={appointments}
-          barbers={barbersForForm}
-          services={services}
+          barbers={barbersForForm as any}
+          services={services as any}
+          units={units}
           defaultClientName={userName}
           clientPlan={clientPlanForForm}
         >

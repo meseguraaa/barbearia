@@ -105,6 +105,7 @@ export default async function AdminCheckoutPage({
       gte: monthStart,
       lte: monthEnd,
     },
+    status: "COMPLETED",
   } as const;
 
   const [

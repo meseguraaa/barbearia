@@ -8,6 +8,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  //url      = env("DATABASE_URL")
 }
 
 // ============
@@ -203,6 +204,7 @@ model BarberUnit {
 
   @@unique([barberId, unitId])
   @@index([unitId])
+  @@index([barberId])
   @@map("barber_units")
 }
 
@@ -474,6 +476,7 @@ model Appointment {
   @@index([scheduleAt])
   @@index([serviceId])
   @@index([clientPlanId])
+  @@index([barberId, scheduleAt])
   @@map("appointments")
 }
 
@@ -656,6 +659,7 @@ model BarberWeeklyAvailability {
 
   @@unique([barberId, unitId, weekday])
   @@index([unitId])
+  @@index([barberId, weekday])
   @@map("barber_weekly_availabilities")
 }
 
@@ -689,6 +693,7 @@ model BarberDailyAvailability {
 
   @@unique([barberId, unitId, date])
   @@index([unitId])
+  @@index([barberId, date])
   @@map("barber_daily_availabilities")
 }
 

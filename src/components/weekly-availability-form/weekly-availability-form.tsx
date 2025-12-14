@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 import {
   Select,
   SelectContent,
@@ -36,6 +35,9 @@ type WeeklyAvailabilityFormProps = {
 
   // ✅ quem usa o componente decide como salvar (action server-side, api, etc.)
   onSave: (payload: { days: WeeklyAvailabilityDayPayload[] }) => Promise<void>;
+
+  // ✅ opcional: controlar loading externamente (wrapper)
+  isSaving?: boolean;
 };
 
 const defaultDayState: DayState = {
@@ -86,12 +88,16 @@ export function WeeklyAvailabilityForm({
   initialValue,
   onChange,
   onSave,
+  isSaving = false,
 }: WeeklyAvailabilityFormProps) {
   const [state, setState] = useState<WeeklyAvailabilityState>(
     initialValue ?? createDefaultState(),
   );
 
-  const [isPending, startTransition] = useTransition();
+  // ✅ se o initialValue mudar (ex: troca de unidade / reload), sincroniza
+  useEffect(() => {
+    if (initialValue) setState(initialValue);
+  }, [initialValue]);
 
   // Sempre que o estado mudar, dispara o onChange (se existir)
   useEffect(() => {
@@ -116,25 +122,20 @@ export function WeeklyAvailabilityForm({
     }));
   };
 
-  const handleSave = () => {
-    // Verifica se há algum erro de horário em dias ativos
-    const hasAnyErrorNow = Object.entries(state).some(([_, dayState]) => {
-      const d = dayState as DayState;
-      return d.active && d.startTime && d.endTime && d.startTime >= d.endTime;
-    });
+  const hasAnyError = Object.entries(state).some(([_, dayState]) => {
+    const d = dayState as DayState;
+    return d.active && d.startTime && d.endTime && d.startTime >= d.endTime;
+  });
 
-    if (hasAnyErrorNow) {
-      toast.error(
-        "Verifique os horários: em dias ativos, o horário inicial deve ser menor que o final.",
-      );
-      return;
-    }
+  const handleSave = async () => {
+    if (hasAnyError) return;
 
     const daysPayload: WeeklyAvailabilityDayPayload[] = Object.entries(
       state,
     ).map(([weekdayStr, dayState]) => {
       const weekday = Number(weekdayStr);
       const d = dayState as DayState;
+
       return {
         weekday,
         active: d.active,
@@ -143,22 +144,8 @@ export function WeeklyAvailabilityForm({
       };
     });
 
-    startTransition(async () => {
-      try {
-        await onSave({ days: daysPayload });
-        toast.success("Disponibilidade semanal salva com sucesso!");
-      } catch (error) {
-        console.error("Erro ao salvar disponibilidade semanal:", error);
-        toast.error("Erro ao salvar disponibilidade. Tente novamente.");
-      }
-    });
+    await onSave({ days: daysPayload });
   };
-
-  // recomputa erro global só pra desabilitar botão
-  const hasAnyError = Object.entries(state).some(([_, dayState]) => {
-    const d = dayState as DayState;
-    return d.active && d.startTime && d.endTime && d.startTime >= d.endTime;
-  });
 
   return (
     <div className="space-y-4">
@@ -169,9 +156,9 @@ export function WeeklyAvailabilityForm({
           variant="brand"
           size="sm"
           onClick={handleSave}
-          disabled={isPending || hasAnyError}
+          disabled={isSaving || hasAnyError}
         >
-          {isPending ? "Salvando..." : "Salvar padrão semanal"}
+          {isSaving ? "Salvando..." : "Salvar padrão semanal"}
         </Button>
       </div>
 
@@ -210,13 +197,13 @@ export function WeeklyAvailabilityForm({
                 <button
                   type="button"
                   onClick={() => handleToggleDay(day.key)}
-                  disabled={isPending}
+                  disabled={isSaving}
                   className={cn(
                     "inline-flex items-center rounded-full px-3 py-1 text-[11px] font-medium transition-colors",
                     dayState.active
                       ? "bg-background-brand text-content-on-brand"
                       : "bg-background-primary text-content-secondary border border-border-secondary",
-                    isPending && "opacity-60 cursor-not-allowed",
+                    isSaving && "opacity-60 cursor-not-allowed",
                   )}
                 >
                   {dayState.active ? "Sim" : "Não"}
@@ -233,7 +220,7 @@ export function WeeklyAvailabilityForm({
                     onValueChange={(value) =>
                       handleTimeChange(day.key, "startTime", value)
                     }
-                    disabled={!dayState.active || isPending}
+                    disabled={!dayState.active || isSaving}
                   >
                     <SelectTrigger
                       className={cn(
@@ -265,7 +252,7 @@ export function WeeklyAvailabilityForm({
                     onValueChange={(value) =>
                       handleTimeChange(day.key, "endTime", value)
                     }
-                    disabled={!dayState.active || isPending}
+                    disabled={!dayState.active || isSaving}
                   >
                     <SelectTrigger
                       className={cn(
@@ -298,6 +285,12 @@ export function WeeklyAvailabilityForm({
         Marque apenas os dias em que você trabalha e ajuste os horários. As
         exceções por dia (folgas, eventos, etc.) são configuradas logo abaixo.
       </p>
+
+      {hasAnyError && (
+        <p className="text-[11px] text-destructive">
+          Em dias ativos, o horário inicial deve ser menor que o final.
+        </p>
+      )}
     </div>
   );
 }
