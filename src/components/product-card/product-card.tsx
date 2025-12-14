@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ProductPurchaseDialog } from "../purchase-dialog";
 
-// 👉 TIPO OFICIAL
+// 👉 TIPO OFICIAL (atualizado com unidade + prazo)
 export type ClientProduct = {
   id: string;
   name: string;
@@ -15,6 +15,13 @@ export type ClientProduct = {
   category: string;
   stockQuantity: number;
   isActive: boolean;
+
+  // ✅ estoque por unidade
+  unitId: string;
+  unitName: string;
+
+  // ✅ prazo para retirada (dias)
+  pickupDeadlineDays: number;
 };
 
 type ProductCardProps = {
@@ -23,10 +30,17 @@ type ProductCardProps = {
   clientId?: string | null;
 };
 
+function formatDeadline(days: number) {
+  if (!Number.isFinite(days) || days <= 0) return "—";
+  if (days === 1) return "1 dia";
+  return `${days} dias`;
+}
+
 export function ProductCard({ product, clientId }: ProductCardProps) {
   const [open, setOpen] = useState(false);
 
   const isOutOfStock = product.stockQuantity <= 0;
+  const deadlineText = formatDeadline(product.pickupDeadlineDays);
 
   return (
     <>
@@ -60,6 +74,21 @@ export function ProductCard({ product, clientId }: ProductCardProps) {
                 Em estoque: {product.stockQuantity}
               </span>
             )}
+          </div>
+
+          {/* ✅ hint de unidade + prazo (antes do botão) */}
+          <div className="rounded-lg border border-border-primary bg-background-tertiary px-3 py-2">
+            <p className="text-[12px] text-content-secondary leading-snug">
+              <span className="text-content-primary font-medium">
+                Retirada na unidade:
+              </span>{" "}
+              {product.unitName || "—"}
+              <br />
+              <span className="text-content-primary font-medium">
+                Prazo para retirada:
+              </span>{" "}
+              {deadlineText}
+            </p>
           </div>
 
           <Button
