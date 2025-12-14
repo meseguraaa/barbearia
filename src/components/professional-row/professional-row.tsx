@@ -7,21 +7,44 @@ import { ServiceStatusBadge } from "@/components/service-status-badge";
 import { toggleBarberStatus } from "@/app/admin/professional/actions";
 import { ProfessionalEditDialog } from "@/components/professional-edit-dialog";
 
+/**
+ * Mesma estrutura usada nos dialogs de profissional/unidade
+ * (mantendo aqui pra não depender de outro import)
+ */
+type UnitOption = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
+
 export type AdminProfessionalRowData = Barber & {
   avatarUrl: string | null;
   weeklyScheduleLabel: string;
   exceptionsLabel: string;
+
   // 🔹 nova propriedade opcional, usada quando já temos a URL da imagem
   imageUrl?: string | null;
+
+  // 🔹 ids das unidades já vinculadas (se o backend já montar isso)
+  selectedUnitIds?: string[];
 };
 
 type ProfessionalRowProps = {
   row: AdminProfessionalRowData;
+
+  /**
+   * Lista de unidades disponíveis pra associar no dialog.
+   * Deixo opcional pra não quebrar quem ainda não passou isso no map.
+   */
+  units?: UnitOption[];
 };
 
-export function ProfessionalRow({ row }: ProfessionalRowProps) {
+export function ProfessionalRow({ row, units = [] }: ProfessionalRowProps) {
   // Prioriza imageUrl, depois avatarUrl, depois inicial do nome
   const avatarToShow = row.imageUrl ?? row.avatarUrl ?? null;
+
+  // Unidades selecionadas (se não vier, vai vazio)
+  const selectedUnitIds = row.selectedUnitIds ?? [];
 
   return (
     <tr className="border-b border-border-primary last:border-b-0">
@@ -88,6 +111,8 @@ export function ProfessionalRow({ row }: ProfessionalRowProps) {
               userId: row.userId,
               imageUrl: row.imageUrl ?? row.avatarUrl ?? null,
             }}
+            units={units}
+            selectedUnitIds={selectedUnitIds}
           />
 
           {/* ATIVAR / DESATIVAR */}
