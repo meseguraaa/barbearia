@@ -13,70 +13,74 @@ async function main() {
 
   const passwordHash = await bcrypt.hash(adminPassword, 10);
 
-  // 1) (Opcional) garantir que só exista 1 dono
-  // Se você quiser manter outros ADMINs, mas sem isOwner, isso aqui é perfeito.
-  await prisma.user.updateMany({
-    where: {
-      role: "ADMIN",
-      isOwner: true,
-      email: { not: adminEmail },
-    },
-    data: { isOwner: false },
+  await prisma.$transaction(async (tx) => {
+    // 1) Garantir que só exista 1 dono (isOwner = true) entre os ADMINs
+    // Mantém outros ADMINs possíveis, mas remove o "dono" deles.
+    await tx.user.updateMany({
+      where: {
+        role: "ADMIN",
+        isOwner: true,
+        email: { not: adminEmail },
+      },
+      data: { isOwner: false },
+    });
+
+    // 2) Cria/atualiza o admin dono
+    // Observação: NÃO criamos unidade nenhuma aqui.
+    const adminUser = await tx.user.upsert({
+      where: { email: adminEmail },
+      update: {
+        name: "Admin Master",
+        role: "ADMIN",
+        isOwner: true,
+        isActive: true,
+        passwordHash,
+        phone: null,
+      },
+      create: {
+        name: "Admin Master",
+        email: adminEmail,
+        role: "ADMIN",
+        isOwner: true,
+        isActive: true,
+        passwordHash,
+        phone: null,
+      },
+    });
+
+    console.log("✅ Admin dono pronto:", adminUser.email);
+
+    // 3) Permissões completas (AdminAccess)
+    await tx.adminAccess.upsert({
+      where: { userId: adminUser.id },
+      update: {
+        canAccessDashboard: true,
+        canAccessCheckout: true,
+        canAccessAppointments: true,
+        canAccessProfessionals: true,
+        canAccessServices: true,
+        canAccessReviews: true,
+        canAccessProducts: true,
+        canAccessClients: true,
+        canAccessFinance: true,
+      },
+      create: {
+        userId: adminUser.id,
+        canAccessDashboard: true,
+        canAccessCheckout: true,
+        canAccessAppointments: true,
+        canAccessProfessionals: true,
+        canAccessServices: true,
+        canAccessReviews: true,
+        canAccessProducts: true,
+        canAccessClients: true,
+        canAccessFinance: true,
+      },
+    });
+
+    console.log("🔐 Permissões completas atribuídas ao admin dono.");
   });
 
-  // 2) Cria/atualiza o admin dono
-  const adminUser = await prisma.user.upsert({
-    where: { email: adminEmail },
-    update: {
-      name: "Admin Master",
-      role: "ADMIN",
-      isOwner: true,
-      isActive: true,
-      passwordHash,
-      phone: null,
-    },
-    create: {
-      name: "Admin Master",
-      email: adminEmail,
-      role: "ADMIN",
-      isOwner: true,
-      isActive: true,
-      passwordHash,
-      phone: null,
-    },
-  });
-
-  console.log("✅ Admin dono pronto:", adminUser.email);
-
-  // 3) Permissões completas (AdminAccess)
-  await prisma.adminAccess.upsert({
-    where: { userId: adminUser.id },
-    update: {
-      canAccessDashboard: true,
-      canAccessCheckout: true,
-      canAccessAppointments: true,
-      canAccessProfessionals: true,
-      canAccessServices: true,
-      canAccessReviews: true,
-      canAccessProducts: true,
-      canAccessClients: true,
-      canAccessFinance: true,
-    },
-    create: {
-      userId: adminUser.id,
-      canAccessDashboard: true,
-      canAccessCheckout: true,
-      canAccessAppointments: true,
-      canAccessProfessionals: true,
-      canAccessServices: true,
-      canAccessReviews: true,
-      canAccessProducts: true,
-      canAccessClients: true,
-      canAccessFinance: true,
-    },
-  });
-
-  console.log("🔐 Permissões completas atribuídas ao admin dono.");
   console.log("🌱 Seed finalizado com sucesso (somente admin).");
 }
 
