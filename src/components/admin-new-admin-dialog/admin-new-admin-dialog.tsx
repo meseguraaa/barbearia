@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -14,20 +14,34 @@ import { Input } from "@/components/ui/input";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { createAdminAction } from "@/app/admin/settings/actions";
 import { toast } from "sonner";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+
+/* =========================================================
+ * Tipos
+ * =========================================================*/
+type UnitOption = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
+
+/* =========================================================
+ * Utils
+ * =========================================================*/
 
 // 🔢 Máscara de telefone: (00) 00000-0000
 function formatPhoneDisplay(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 11); // 2 + 5 + 4 = 11 dígitos
+  const digits = value.replace(/\D/g, "").slice(0, 11);
 
   if (digits.length === 0) return "";
-
-  if (digits.length <= 2) {
-    return `(${digits}`;
-  }
-
-  if (digits.length <= 7) {
-    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-  }
+  if (digits.length <= 2) return `(${digits}`;
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
 
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 }
@@ -40,7 +54,10 @@ function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
-export function AdminNewAdminDialog() {
+/* =========================================================
+ * Component
+ * =========================================================*/
+export function AdminNewAdminDialog({ units }: { units: UnitOption[] }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -50,16 +67,28 @@ export function AdminNewAdminDialog() {
   const [birthdayInput, setBirthdayInput] = useState(""); // "DD/MM/AAAA"
   const [password, setPassword] = useState("");
 
+  // ✅ unidade obrigatória
+  const [unitId, setUnitId] = useState<string>("");
+
+  const activeUnits = useMemo(
+    () => (units ?? []).filter((u) => u.isActive),
+    [units],
+  );
+
+  // se abrir o modal e só tiver 1 unidade ativa, já seleciona pra facilitar
+  useEffect(() => {
+    if (!open) return;
+    if (!unitId && activeUnits.length === 1) {
+      setUnitId(activeUnits[0]!.id);
+    }
+  }, [open, unitId, activeUnits]);
+
   function handlePhoneChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const formatted = formatPhoneDisplay(e.target.value);
-    setPhone(formatted);
+    setPhone(formatPhoneDisplay(e.target.value));
   }
 
   function handleBirthdayChange(e: React.ChangeEvent<HTMLInputElement>) {
-    let value = e.target.value;
-
-    value = value.replace(/\D/g, "");
-    if (value.length > 8) value = value.slice(0, 8);
+    let value = e.target.value.replace(/\D/g, "").slice(0, 8);
 
     if (value.length >= 5) {
       value = value.replace(
@@ -75,49 +104,41 @@ export function AdminNewAdminDialog() {
     setBirthdayInput(value);
   }
 
+  function resetForm() {
+    setName("");
+    setEmail("");
+    setPhone("");
+    setBirthdayInput("");
+    setPassword("");
+    setUnitId("");
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
 
     try {
       setSaving(true);
 
-      if (!name.trim()) {
-        toast.error("Preencha o nome do administrador.");
-        return;
-      }
+      if (!name.trim()) return toast.error("Preencha o nome do administrador.");
 
-      if (!email.trim()) {
-        toast.error("Preencha o e-mail.");
-        return;
-      }
+      if (!email.trim()) return toast.error("Preencha o e-mail.");
+      if (!isValidEmail(email.trim()))
+        return toast.error("Preencha um e-mail válido.");
 
-      if (!isValidEmail(email.trim())) {
-        toast.error("Preencha um e-mail válido.");
-        return;
-      }
+      if (!phone.trim()) return toast.error("Preencha o telefone.");
 
-      if (!phone.trim()) {
-        toast.error("Preencha o telefone.");
-        return;
-      }
+      if (!birthdayInput.trim())
+        return toast.error("Preencha a data de nascimento.");
+      if (!isValidBirthdayDisplay(birthdayInput.trim()))
+        return toast.error("Preencha a data no formato DD/MM/AAAA.");
 
-      if (!birthdayInput.trim()) {
-        toast.error("Preencha a data de nascimento.");
-        return;
-      }
+      if (!password.trim()) return toast.error("Preencha a senha.");
+      if (password.trim().length < 6)
+        return toast.error("A senha deve ter pelo menos 6 caracteres.");
 
-      if (!isValidBirthdayDisplay(birthdayInput)) {
-        toast.error("Preencha a data de nascimento no formato DD/MM/AAAA.");
-        return;
-      }
-
-      if (!password.trim()) {
-        toast.error("Preencha a senha.");
-        return;
-      }
-
-      if (password.trim().length < 6) {
-        toast.error("A senha deve ter pelo menos 6 caracteres.");
+      // 🚨 OBRIGATÓRIO
+      if (!unitId) {
+        toast.error("Selecione a unidade do administrador.");
         return;
       }
 
@@ -127,6 +148,7 @@ export function AdminNewAdminDialog() {
       formData.append("phone", phone.trim());
       formData.append("birthday", birthdayInput.trim());
       formData.append("password", password.trim());
+      formData.append("unitId", unitId); // ✅ obrigatório no server
 
       const result = await createAdminAction(formData);
 
@@ -137,24 +159,26 @@ export function AdminNewAdminDialog() {
 
       toast.success("Administrador criado com sucesso!");
       setOpen(false);
-      setName("");
-      setEmail("");
-      setPhone("");
-      setBirthdayInput("");
-      setPassword("");
-    } catch (error) {
-      console.error("Erro ao criar admin", error);
-      toast.error("Erro ao salvar. Tente novamente.");
+      resetForm();
+    } catch (err) {
+      console.error("[AdminNewAdminDialog] erro:", err);
+      toast.error("Erro ao salvar administrador.");
     } finally {
       setSaving(false);
     }
   }
 
   const descriptionText =
-    "Cadastre um novo administrador para o painel e depois ajuste as permissões de acesso.";
+    "Cadastre um novo administrador para o painel e vincule a uma unidade (obrigatório).";
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(v) => {
+        setOpen(v);
+        if (!v) resetForm();
+      }}
+    >
       <DialogTrigger asChild>
         <Button variant="brand">Novo admin</Button>
       </DialogTrigger>
@@ -169,128 +193,129 @@ export function AdminNewAdminDialog() {
           <DialogDescription size="modal">{descriptionText}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-6">
-          <form onSubmit={handleSave} className="space-y-4">
-            {/* 🧍 Nome */}
-            <div className="space-y-2">
-              <label
-                htmlFor="admin-name"
-                className="text-label-small-size text-content-primary flex items-center gap-1"
-              >
-                Nome completo
-                <span className="text-red-500">*</span>
-              </label>
+        <form onSubmit={handleSave} className="space-y-4">
+          {/* 🧍 Nome */}
+          <div className="space-y-2">
+            <label className="text-label-small-size text-content-primary flex items-center gap-1">
+              Nome completo <span className="text-red-500">*</span>
+            </label>
+            <Input
+              placeholder="Nome do administrador"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={saving}
+              className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
+            />
+          </div>
+
+          {/* 📧 Email */}
+          <div className="space-y-2">
+            <label className="text-label-small-size text-content-primary flex items-center gap-1">
+              E-mail <span className="text-red-500">*</span>
+            </label>
+            <Input
+              type="email"
+              placeholder="email@exemplo.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              disabled={saving}
+              className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
+            />
+          </div>
+
+          {/* 🔐 Senha */}
+          <div className="space-y-2">
+            <label className="text-label-small-size text-content-primary flex items-center gap-1">
+              Senha de acesso <span className="text-red-500">*</span>
+            </label>
+            <Input
+              type="password"
+              placeholder="Defina uma senha para o admin"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={saving}
+              className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
+            />
+            <p className="text-[11px] text-content-tertiary">
+              A senha deve ter pelo menos 6 caracteres.
+            </p>
+          </div>
+
+          {/* 📞 Telefone */}
+          <div className="space-y-2">
+            <label className="text-label-small-size text-content-primary flex items-center gap-1">
+              Telefone <span className="text-red-500">*</span>
+            </label>
+            <Input
+              placeholder="(00) 00000-0000"
+              value={phone}
+              onChange={handlePhoneChange}
+              disabled={saving}
+              className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
+            />
+          </div>
+
+          {/* 🎂 Nascimento */}
+          <div className="space-y-2">
+            <label className="text-label-small-size text-content-primary flex items-center gap-1">
+              Data de nascimento <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-border-primary" />
               <Input
-                id="admin-name"
-                name="name"
-                type="text"
-                placeholder="Nome do administrador"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                className="pl-9 bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
+                placeholder="DD/MM/AAAA"
+                value={birthdayInput}
+                onChange={handleBirthdayChange}
                 disabled={saving}
-                className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
+                inputMode="numeric"
               />
             </div>
+          </div>
 
-            {/* 📧 E-mail */}
-            <div className="space-y-2">
-              <label
-                htmlFor="admin-email"
-                className="text-label-small-size text-content-primary flex items-center gap-1"
-              >
-                E-mail
-                <span className="text-red-500">*</span>
-              </label>
-              <Input
-                id="admin-email"
-                name="email"
-                type="email"
-                placeholder="email@exemplo.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={saving}
-                className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
-              />
-            </div>
+          {/* 🏢 Unidade (obrigatória) */}
+          <div className="space-y-2">
+            <label className="text-label-small-size text-content-primary flex items-center gap-1">
+              Unidade <span className="text-red-500">*</span>
+            </label>
 
-            {/* 🔐 Senha */}
-            <div className="space-y-2">
-              <label
-                htmlFor="admin-password"
-                className="text-label-small-size text-content-primary flex items-center gap-1"
-              >
-                Senha de acesso
-                <span className="text-red-500">*</span>
-              </label>
-              <Input
-                id="admin-password"
-                name="password"
-                type="password"
-                placeholder="Defina uma senha para o admin"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={saving}
-                className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
-              />
-              <p className="text-[11px] text-content-tertiary">
-                A senha deve ter pelo menos 6 caracteres.
-              </p>
-            </div>
-
-            {/* 📞 Telefone */}
-            <div className="space-y-2">
-              <label
-                htmlFor="admin-phone"
-                className="text-label-small-size text-content-primary flex items-center gap-1"
-              >
-                Telefone
-                <span className="text-red-500">*</span>
-              </label>
-              <Input
-                id="admin-phone"
-                name="phone"
-                type="tel"
-                placeholder="(00) 00000-0000"
-                value={phone}
-                onChange={handlePhoneChange}
-                disabled={saving}
-                className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
-              />
-            </div>
-
-            {/* 🎂 Data de nascimento */}
-            <div className="space-y-2">
-              <label
-                htmlFor="admin-birthday"
-                className="text-label-small-size text-content-primary flex items-center gap-1"
-              >
-                Data de nascimento
-                <span className="text-red-500">*</span>
-              </label>
-
-              <div className="relative">
-                <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-border-primary" />
-                <Input
-                  id="admin-birthday"
-                  name="birthday"
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="DD/MM/AAAA"
-                  value={birthdayInput}
-                  onChange={handleBirthdayChange}
-                  disabled={saving}
-                  className="pl-9 bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
+            <Select value={unitId} onValueChange={setUnitId} disabled={saving}>
+              <SelectTrigger className="bg-background-tertiary border-border-primary text-content-primary">
+                <SelectValue
+                  placeholder={
+                    activeUnits.length === 0
+                      ? "Nenhuma unidade ativa"
+                      : "Selecione a unidade"
+                  }
                 />
-              </div>
-            </div>
+              </SelectTrigger>
 
-            <div className="flex justify-end">
-              <Button type="submit" variant="brand" disabled={saving}>
-                {saving ? "Salvando..." : "Salvar admin"}
-              </Button>
-            </div>
-          </form>
-        </div>
+              <SelectContent>
+                {activeUnits.map((unit) => (
+                  <SelectItem key={unit.id} value={unit.id}>
+                    {unit.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {activeUnits.length === 0 ? (
+              <p className="text-[11px] text-content-tertiary">
+                Você precisa ter pelo menos 1 unidade ativa para criar admin.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button
+              type="submit"
+              variant="brand"
+              disabled={saving || activeUnits.length === 0}
+            >
+              {saving ? "Salvando..." : "Salvar admin"}
+            </Button>
+          </div>
+        </form>
       </DialogContent>
     </Dialog>
   );

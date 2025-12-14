@@ -1,8 +1,9 @@
 // src/components/admin-nav.tsx
 "use client";
 
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -15,6 +16,7 @@ import {
   ShoppingCart,
   Tag,
   Settings,
+  Building2,
 } from "lucide-react";
 import type { AdminModule } from "@/lib/admin-permissions";
 
@@ -25,9 +27,20 @@ type AdminLink = {
   module?: AdminModule; // se tiver módulo, respeita permissão; se não, sempre mostra
 };
 
+type UnitOption = {
+  id: string;
+  name: string;
+};
+
 type AdminNavProps = {
   allowedModules: AdminModule[];
-  isOwner?: boolean;
+
+  // ✅ Multi-unidade
+  unitId?: string | null;
+  canSeeAllUnits?: boolean;
+
+  // ✅ Lista de unidades (vamos passar pelo layout server depois)
+  units?: UnitOption[];
 };
 
 const adminLinks: AdminLink[] = [
@@ -87,27 +100,181 @@ const adminLinks: AdminLink[] = [
   },
 ];
 
-export function AdminNav({ allowedModules }: AdminNavProps) {
-  const pathname = usePathname();
+const UNIT_COOKIE_NAME = "admin_unit_context";
+const UNIT_ALL_VALUE = "all";
 
-  const filteredLinks = adminLinks.filter((link) => {
-    // se o link tem módulo, só mostra se estiver permitido
-    if (link.module) {
-      return allowedModules.includes(link.module);
+function setClientCookie(
+  name: string,
+  value: string,
+  maxAgeSeconds = 60 * 60 * 24 * 30,
+) {
+  // cookie normal (não httpOnly) só pra contexto de UI/queries
+  // path=/ pra valer no admin inteiro
+  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax`;
+}
+
+function getClientCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const cookies = document.cookie.split(";").map((c) => c.trim());
+  for (const c of cookies) {
+    if (!c) continue;
+    const idx = c.indexOf("=");
+    if (idx === -1) continue;
+    const k = decodeURIComponent(c.slice(0, idx));
+    if (k === name) return decodeURIComponent(c.slice(idx + 1));
+  }
+  return null;
+}
+
+export function AdminNav({
+  allowedModules,
+  unitId = null,
+  canSeeAllUnits = false,
+  units,
+}: AdminNavProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+
+  // Mantém 100% a lógica de módulos
+  const filteredLinks = useMemo(() => {
+    return adminLinks.filter((link) => {
+      if (link.module) return allowedModules.includes(link.module);
+      return true;
+    });
+  }, [allowedModules]);
+
+  // Unidade selecionada (client-side)
+  const [selectedUnit, setSelectedUnit] = useState<string>(() => {
+    const fromCookie =
+      typeof window !== "undefined" ? getClientCookie(UNIT_COOKIE_NAME) : null;
+
+    if (canSeeAllUnits) {
+      // dono: aceita "all" ou uma unidade válida (se units já vierem)
+      const allowedIds = new Set((units ?? []).map((u) => u.id));
+      if (!fromCookie) return UNIT_ALL_VALUE;
+
+      if (fromCookie === UNIT_ALL_VALUE) return UNIT_ALL_VALUE;
+      if (allowedIds.size > 0 && !allowedIds.has(fromCookie))
+        return UNIT_ALL_VALUE;
+
+      // se units ainda não carregou (allowedIds.size === 0), deixa passar por enquanto
+      return fromCookie;
     }
-    // se não tiver module mapeado, mostra sempre (por enquanto)
-    return true;
+
+    // admin de unidade: sempre travado na unitId
+    return unitId ?? "";
   });
+
+  // Regra forte:
+  // - admin de unidade: força cookie = unitId e travado (não mostra seletor)
+  // - dono: se não tiver cookie ainda, seta "all"
+  useEffect(() => {
+    if (!canSeeAllUnits) {
+      if (unitId) {
+        if (selectedUnit !== unitId) setSelectedUnit(unitId);
+        setClientCookie(UNIT_COOKIE_NAME, unitId);
+      }
+      return;
+    }
+
+    // dono
+    // dono
+    const cookie = getClientCookie(UNIT_COOKIE_NAME);
+    const allowedIds = new Set((units ?? []).map((u) => u.id));
+
+    if (!cookie) {
+      setClientCookie(UNIT_COOKIE_NAME, UNIT_ALL_VALUE);
+      setSelectedUnit(UNIT_ALL_VALUE);
+      return;
+    }
+
+    // se units já existe e cookie não é válido, corrige
+    if (
+      allowedIds.size > 0 &&
+      cookie !== UNIT_ALL_VALUE &&
+      !allowedIds.has(cookie)
+    ) {
+      setClientCookie(UNIT_COOKIE_NAME, UNIT_ALL_VALUE);
+      setSelectedUnit(UNIT_ALL_VALUE);
+      return;
+    }
+  }, [canSeeAllUnits, unitId, selectedUnit, units]);
+
+  function handleChangeUnit(next: string) {
+    // admin de unidade nunca troca unidade
+    if (!canSeeAllUnits) return;
+
+    // dono: só aceita "all" OU uma unidade da lista recebida do server
+    const allowedIds = new Set((units ?? []).map((u) => u.id));
+    const safeNext =
+      next === UNIT_ALL_VALUE || allowedIds.has(next) ? next : UNIT_ALL_VALUE;
+
+    setSelectedUnit(safeNext);
+    setClientCookie(UNIT_COOKIE_NAME, safeNext);
+    router.refresh();
+  }
+
+  const shouldShowUnitSelector =
+    canSeeAllUnits && Array.isArray(units) && units.length > 0;
 
   return (
     <nav
       className={cn(
         "group fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border-primary bg-background-primary",
         "w-14 hover:w-56 transition-[width] duration-200 ease-in-out",
-        "pt-6",
+        "pt-20",
       )}
     >
-      <div className="flex-1 space-y-1 px-2 pb-4 pt-14">
+      {/* Topo: contexto de unidade (só dono) */}
+      <div className="px-2">
+        <div
+          className={cn(
+            "flex items-center gap-2 px-3 py-2 rounded-lg",
+            "text-content-secondary",
+            "bg-transparent",
+          )}
+        >
+          <Building2 className="h-4 w-4 shrink-0 text-content-secondary" />
+
+          <div
+            className={cn(
+              "min-w-0 flex-1",
+              "opacity-0 -translate-x-1",
+              "transition-all duration-200",
+              "group-hover:opacity-100 group-hover:translate-x-0",
+            )}
+          >
+            {shouldShowUnitSelector ? (
+              <div className="space-y-1">
+                <select
+                  value={selectedUnit}
+                  onChange={(e) => handleChangeUnit(e.target.value)}
+                  className={cn(
+                    "w-full h-9 rounded-md px-2",
+                    "bg-background-tertiary border border-border-primary",
+                    "text-content-primary text-sm",
+                    "focus:outline-none focus:ring-2 focus:ring-border-brand",
+                  )}
+                >
+                  <option value={UNIT_ALL_VALUE}>Todas as unidades</option>
+                  {units!.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="text-[11px] text-content-tertiary">
+                {canSeeAllUnits ? "Todas as unidades" : "Unidade fixa"}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Links */}
+      <div className="flex-1 space-y-1 px-2 pb-4 pt-4">
         {filteredLinks.map((link) => {
           const isActive = pathname?.startsWith(link.href);
           const Icon = link.icon;

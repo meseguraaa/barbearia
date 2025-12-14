@@ -44,7 +44,7 @@ const updateExpenseSchema = z.object({
  * - tenta pegar do form (se existir)
  * - senão, pega a primeira unit (prioriza ativa)
  *
- * Mantém compatibilidade enquanto a UI não manda unitId.
+ * Mantém compatibilidade enquanto alguma UI não manda unitId.
  */
 async function getUnitIdFromFormOrDefault(formData: FormData): Promise<string> {
   const raw = formData.get("unitId");
@@ -182,6 +182,7 @@ export async function updateExpense(formData: FormData): Promise<ActionResult> {
         isRecurring: true,
         description: true,
         category: true,
+        unitId: true, // ✅ CRÍTICO para não vazar entre unidades
       },
     });
 
@@ -243,10 +244,13 @@ export async function updateExpense(formData: FormData): Promise<ActionResult> {
         },
       });
 
+      // Se não é mais recorrente, não propaga série
       if (!updated.isRecurring) return;
 
+      // ✅ Propaga ajustes só para a MESMA série e MESMA UNIDADE
       await tx.expense.updateMany({
         where: {
+          unitId: existing.unitId,
           isRecurring: true,
           description: existing.description,
           category: existing.category,
@@ -335,6 +339,7 @@ export async function deleteExpense(formData: FormData): Promise<ActionResult> {
         isRecurring: true,
         description: true,
         category: true,
+        unitId: true, // ✅ CRÍTICO para não apagar série de outra unidade
       },
     });
 
@@ -358,8 +363,10 @@ export async function deleteExpense(formData: FormData): Promise<ActionResult> {
     }
 
     await prisma.$transaction(async (tx) => {
+      // ✅ deleta a série (da data pra frente) SOMENTE da mesma unidade
       await tx.expense.deleteMany({
         where: {
+          unitId: expense.unitId,
           isRecurring: true,
           description: expense.description,
           category: expense.category,
@@ -369,8 +376,10 @@ export async function deleteExpense(formData: FormData): Promise<ActionResult> {
         },
       });
 
+      // ✅ encontra a recorrente anterior (mesma unidade) e “quebra” a série nela
       const previousRecurring = await tx.expense.findFirst({
         where: {
+          unitId: expense.unitId,
           isRecurring: true,
           description: expense.description,
           category: expense.category,

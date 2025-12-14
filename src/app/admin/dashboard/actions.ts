@@ -404,9 +404,15 @@ async function withAppointmentMutation<T>(
 
 /* ---------------------------------------------------------
  * ✅ Concluir atendimento (ADMIN/BARBER)
- * - Mantém compat com o client: concludeAppointment(id, { concludedByRole })
- * - Marca status como DONE
- * - Se existirem campos concludedAt/concludedByRole no schema, também preenche
+ *
+ * AJUSTE DE REGRA (IMPORTANTE):
+ * - Antes: ao concluir, marcava Appointment como DONE imediatamente.
+ * - Agora: ao concluir, NÃO muda o status do Appointment para DONE.
+ *   Ele permanece PENDING e gera/garante um Order PENDING para checkout.
+ * - O Appointment só vira DONE quando o Admin clicar "Pagar"/"Marcar como pago"
+ *   (checkout/actions.ts já faz updateMany PENDING -> DONE).
+ *
+ * Isso garante que "Pedidos do mês" (se baseado em Appointment DONE) só alimente após pagamento.
  * ---------------------------------------------------------*/
 const concludeAppointmentSchema = z.object({
   concludedByRole: z.enum(["ADMIN", "BARBER"]).optional(),
@@ -423,7 +429,6 @@ export async function concludeAppointment(
     return { error: "Payload inválido para concluir atendimento" };
   }
 
-  // 🔥 agora a permissão vem do painel_session (e fallback no NextAuth)
   const auth = await getRoleFromPainelSession();
 
   console.log(
@@ -454,6 +459,7 @@ export async function concludeAppointment(
     select: {
       id: true,
       status: true,
+      concludedAt: true, // pode existir OU não no schema (usamos as any abaixo)
     } as any,
   });
 
@@ -462,13 +468,18 @@ export async function concludeAppointment(
     return { error: "Não é possível concluir um agendamento cancelado" };
   }
 
+  // Se já estiver DONE, só retorna ok (idempotência)
+  if ((existing as any).status === "DONE") {
+    return { ok: true };
+  }
+
   return withAppointmentMutation(async () => {
-    // 1) Primeiro: concluir o atendimento (com fallback se campos não existirem)
-    const baseData: Record<string, any> = { status: "DONE" };
+    // 1) "Concluir" sem mudar status.
+    // Tenta setar concludedAt/concludedByRole (se existirem no schema).
     const tryData: Record<string, any> = {
-      ...baseData,
       concludedAt: new Date(),
       concludedByRole,
+      // ⚠️ NÃO setamos status aqui.
     };
 
     let appt: {
@@ -503,9 +514,9 @@ export async function concludeAppointment(
 
       if (!looksLikeUnknownField) throw err;
 
-      appt = await prisma.appointment.update({
+      // fallback: sem campos extras, não faz update do appointment
+      appt = await prisma.appointment.findUnique({
         where: { id: appointmentId },
-        data: baseData as any,
         select: {
           id: true,
           unitId: true,
@@ -515,6 +526,8 @@ export async function concludeAppointment(
           servicePriceAtTheTime: true,
         },
       });
+
+      if (!appt) throw new Error("Agendamento não encontrado após fallback");
     }
 
     // 2) Depois: garantir Order/OrderItem pro checkout (transaction)
@@ -522,8 +535,7 @@ export async function concludeAppointment(
       if (!appt.clientId) throw new Error("Appointment sem clientId");
       if (!appt.serviceId) throw new Error("Appointment sem serviceId");
 
-      // cria/garante o pedido do atendimento
-      // (assumindo que Order tem appointmentId; se for unique, melhor ainda)
+      // cria/garante o pedido do atendimento (PENDING para checkout)
       let order = await tx.order.findFirst({
         where: { appointmentId: appt.id },
         select: { id: true },
@@ -601,6 +613,8 @@ export async function concludeAppointment(
  * - Marca status como CANCELED
  * - Se existirem campos (canceledAt/cancelledByRole/cancelFeeValue), preenche também
  * - Se não existirem, faz fallback sem quebrar
+ *
+ * AJUSTE: se existir concludedAt e ele estiver preenchido, não permite cancelar.
  * ---------------------------------------------------------*/
 const cancelAppointmentSchema = z.object({
   applyFee: z.boolean().optional(),
@@ -643,8 +657,8 @@ export async function cancelAppointment(
     select: {
       id: true,
       status: true,
+      concludedAt: true, // pode existir OU não
       servicePriceAtTheTime: true,
-      // snapshots podem existir OU não no teu schema, então só vamos tentar usar se vier
       cancelFeePercentageAtTheTime: true,
       serviceId: true,
     } as any,
@@ -656,6 +670,11 @@ export async function cancelAppointment(
   }
   if ((existing as any).status === "DONE") {
     return { error: "Não é possível cancelar um agendamento concluído" };
+  }
+
+  // ✅ Se tiver concludedAt no schema e estiver preenchido, trava cancelamento
+  if ((existing as any).concludedAt) {
+    return { error: "Não é possível cancelar um atendimento já concluído" };
   }
 
   // tenta descobrir % de taxa: usa snapshot se existir, senão busca no service
@@ -715,8 +734,6 @@ export async function cancelAppointment(
       canceledAt: new Date(),
       cancelledByRole,
       cancelFeeValue,
-      // opcional: se teu schema tiver flag applyFee, você pode guardar também
-      // cancelFeeApplied: applyFee,
     };
 
     try {
@@ -759,7 +776,6 @@ export async function createAppointment(data: AppointmentData) {
   const scheduleError = validateBusinessHours(scheduleAt);
   if (scheduleError) return { error: scheduleError };
 
-  // ✅ precisa de durationMinutes do serviço (e valida serviço ativo)
   const service = await prisma.service.findUnique({
     where: { id: serviceId },
     select: {
@@ -768,30 +784,25 @@ export async function createAppointment(data: AppointmentData) {
       barberPercentage: true,
       isActive: true,
       durationMinutes: true,
-      unitId: true, // fallback legado
+      unitId: true,
     },
   });
 
   if (!service) return { error: "Serviço não encontrado" };
   if (!service.isActive) return { error: "Serviço inativo" };
 
-  // ✅ unidade do agendamento vem do form (cliente escolhe)
-  // fallback: se admin/legado não mandar unitId, usa unitId do service
   const unitId = parsed.unitId ?? service.unitId;
 
   if (!unitId) {
     return { error: "Unidade é obrigatória para este agendamento" };
   }
 
-  // ✅ REGRA: barbeiro precisa estar vinculado à unidade escolhida
   const linkError = await ensureBarberLinkedToUnit(barberId, unitId);
   if (linkError) return { error: linkError };
 
-  // ✅ REGRA: barbeiro precisa executar o serviço
   const canDoError = await ensureBarberCanDoService(barberId, serviceId);
   if (canDoError) return { error: canDoError };
 
-  // ✅ REGRA: conflito por intervalo (anti teletransporte)
   const availabilityError = await ensureAvailability(
     scheduleAt,
     barberId,
@@ -813,7 +824,6 @@ export async function createAppointment(data: AppointmentData) {
 
   let clientPlanId: string | null = null;
 
-  // 🔹 Tenta usar um plano ativo do cliente
   if (clientId) {
     const clientPlan = await prisma.clientPlan.findFirst({
       where: {
@@ -953,8 +963,6 @@ export async function updateAppointment(id: string, data: AppointmentData) {
       .div(new Prisma.Decimal(100));
   }
 
-  // ✅ unidade do agendamento vem do form
-  // fallback: mantém a existente; ou do service
   const unitId = parsed.unitId ?? existing.unitId ?? targetService.unitId;
 
   if (!unitId) {

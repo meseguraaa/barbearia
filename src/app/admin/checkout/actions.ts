@@ -40,16 +40,24 @@ export async function finalizeClientOpenOrders(formData: FormData) {
   }
 
   await withRevalidate(async () => {
-    // Busca pedidos abertos do cliente
+    // ✅ IMPORTANTE:
+    // - serviços podem estar com order.clientId nulo e client ficar no appointment.clientId
+    // - produtos geralmente ficam no order.clientId
     const [serviceOrders, productOrders] = await Promise.all([
       prisma.order.findMany({
         where: {
-          clientId,
           status: "PENDING",
           items: { some: { serviceId: { not: null } } },
+          OR: [
+            { clientId }, // quando o pedido guarda o cliente
+            { appointment: { clientId } }, // quando o cliente está no appointment
+          ],
         },
-        // ✅ precisamos do appointmentId pra refletir no Appointment
-        select: { id: true, status: true, appointmentId: true },
+        select: {
+          id: true,
+          status: true,
+          appointmentId: true,
+        },
       }),
 
       prisma.order.findMany({
@@ -88,8 +96,6 @@ export async function finalizeClientOpenOrders(formData: FormData) {
           where: { id: order.id },
           data: {
             status: "COMPLETED",
-            // ✅ opcional: ajuda relatórios/financeiro quando o admin escolhe barbeiro
-            ...(barberId ? { barberId } : {}),
           },
         });
 
@@ -130,10 +136,12 @@ export async function finalizeClientOpenOrders(formData: FormData) {
             },
           });
 
+          // ✅ unitId: vem do order (multi-unidade)
           await tx.productSale.create({
             data: {
               productId: item.productId,
               barberId: barberId!, // aqui já garantimos que existe
+              unitId: order.unitId, // ✅ essencial p/ filtros por unidade
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               totalPrice: item.totalPrice,
@@ -163,11 +171,12 @@ export async function cancelClientOpenOrders(formData: FormData) {
   }
 
   await withRevalidate(async () => {
-    // Cancela tudo que estiver “aberto” para checkout
+    // ✅ Cancela tudo que estiver “aberto” para checkout
+    // 🔸 serviço pode estar com client no appointment
     await prisma.order.updateMany({
       where: {
-        clientId,
         status: { in: ["PENDING", "PENDING_CHECKIN"] },
+        OR: [{ clientId }, { appointment: { clientId } }],
       },
       data: {
         status: "CANCELED",
@@ -234,6 +243,7 @@ export async function finalizeProductOrder(formData: FormData) {
           data: {
             productId: item.productId,
             barberId,
+            unitId: order.unitId, // ✅ multi-unidade
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             totalPrice: item.totalPrice,
