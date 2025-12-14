@@ -38,11 +38,18 @@ export async function createProductSale(data: unknown) {
         stockQuantity: true,
         price: true,
         pickupDeadlineDays: true,
+        unitId: true, // ✅ obrigatório para Order
       },
     });
 
     if (!product) {
       throw new Error("Produto não encontrado ou inativo.");
+    }
+
+    if (!product.unitId) {
+      throw new Error(
+        "Produto sem unidade vinculada (unitId). Não é possível criar o pedido.",
+      );
     }
 
     // 🔹 Mesmo sem baixar estoque agora, garantimos que a quantidade faz sentido
@@ -67,12 +74,16 @@ export async function createProductSale(data: unknown) {
     // 🔹 Cria o PEDIDO com status PENDING_CHECKIN (intenção de compra)
     const order = await tx.order.create({
       data: {
-        clientId: clientId ?? null, // pedido vinculado ao cliente, quando logado
+        clientId: clientId ?? null,
         appointmentId: null,
         barberId: null,
         status: "PENDING_CHECKIN",
-        reservedUntil, // ✅ salva a data limite
+        reservedUntil,
         totalAmount: totalPrice,
+
+        // ✅ fix do TS + regra multi-unidade
+        unitId: product.unitId,
+
         items: {
           create: [
             {

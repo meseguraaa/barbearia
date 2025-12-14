@@ -168,9 +168,6 @@ async function getClientIdForAppointment(
     if (client && client.role === "CLIENT" && client.isActive !== false) {
       return client.id;
     }
-
-    // se veio id inválido ou não CLIENT, não explode o sistema:
-    // cai para os próximos passos
   }
 
   const normalized = normalizePhone(phoneDigits);
@@ -180,7 +177,7 @@ async function getClientIdForAppointment(
     const clientByPhone = await prisma.user.findFirst({
       where: {
         phone: normalized,
-        role: "CLIENT", // ✅ CRÍTICO: impede pegar BARBER/ADMIN pelo mesmo telefone
+        role: "CLIENT",
       },
       select: { id: true },
     });
@@ -190,7 +187,7 @@ async function getClientIdForAppointment(
     }
   }
 
-  // 2) se não achar pelo telefone, tenta sessão (SÓ CLIENT)
+  // 2) sessão (SÓ CLIENT)
   try {
     const session = await getServerSession(nextAuthOptions);
     const userId = (session?.user as any)?.id as string | undefined;
@@ -206,7 +203,7 @@ async function getClientIdForAppointment(
     );
   }
 
-  // 3) fallback seguro
+  // 3) fallback
   return getDefaultClientId();
 }
 
@@ -221,15 +218,10 @@ async function withAppointmentMutation<T>(
   try {
     const result = await operation();
 
-    // site público
     revalidatePath("/");
-    // página do cliente
     revalidatePath("/client/schedule");
-    // dashboard admin
     revalidatePath("/admin/dashboard");
-    // ✅ checkout (importante pra sumir / virar taxa)
     revalidatePath("/admin/checkout");
-    // dashboards barbeiro
     revalidatePath("/barber");
     revalidatePath("/barber/earnings");
 
@@ -256,17 +248,24 @@ export async function createAppointment(data: AppointmentData) {
   const availabilityError = await ensureAvailability(scheduleAt, barberId);
   if (availabilityError) return { error: availabilityError };
 
-  // Verifica se o serviço existe para poder calcular os ganhos
+  // ✅ precisa do unitId do serviço agora
   const service = await prisma.service.findUnique({
     where: { id: serviceId },
+    select: {
+      id: true,
+      price: true,
+      barberPercentage: true,
+      unitId: true,
+      isActive: true,
+    },
   });
 
   if (!service) {
     return { error: "Serviço não encontrado" };
   }
 
-  // 🔹 Descobre o clientId deste agendamento
-  // ✅ prioridade: parsed.clientId (ADMIN), senão telefone/sessão/fallback
+  const unitId = service.unitId;
+
   const clientId = await getClientIdForAppointment(
     parsed.phone,
     parsed.clientId,
@@ -279,7 +278,6 @@ export async function createAppointment(data: AppointmentData) {
     .mul(service.barberPercentage)
     .div(new Prisma.Decimal(100)); // Decimal
 
-  // Se usar plano, seta aqui
   let clientPlanId: string | null = null;
 
   // 🔹 Tenta usar um plano ativo do cliente
@@ -297,11 +295,9 @@ export async function createAppointment(data: AppointmentData) {
     });
 
     if (clientPlan && clientPlan.plan.isActive) {
-      const totalBookings = clientPlan.plan.totalBookings; // number
+      const totalBookings = clientPlan.plan.totalBookings;
 
-      // Se já consumiu todos os créditos, esse agendamento não deve usar plano
       if (clientPlan.usedBookings < totalBookings) {
-        // Conta quantos agendamentos (não cancelados) já estão vinculados a ESTE ClientPlan
         const appointmentsUsingPlanCount = await prisma.appointment.count({
           where: {
             clientPlanId: clientPlan.id,
@@ -310,7 +306,6 @@ export async function createAppointment(data: AppointmentData) {
         });
 
         if (appointmentsUsingPlanCount < totalBookings) {
-          // Verifica se o serviço faz parte do plano
           const planHasService = await prisma.planService.findFirst({
             where: {
               planId: clientPlan.planId,
@@ -342,12 +337,9 @@ export async function createAppointment(data: AppointmentData) {
     }
   }
 
-  // 🔹 Cria o agendamento (NÃO consome crédito aqui)
   return withAppointmentMutation(async () => {
     await prisma.appointment.create({
       data: {
-        // ⚠️ não espalha clientId do parsed pra dentro do create
-        // porque o Prisma precisa do clientId calculado acima
         clientName: parsed.clientName,
         phone: parsed.phone,
         description: parsed.description,
@@ -361,6 +353,9 @@ export async function createAppointment(data: AppointmentData) {
         barberPercentageAtTheTime,
         barberEarningValue,
         status: "PENDING",
+
+        // ✅ obrigatório agora
+        unitId,
       },
     });
   }, "Falha ao criar o agendamento");
@@ -368,8 +363,6 @@ export async function createAppointment(data: AppointmentData) {
 
 /* ---------------------------------------------------------
  * UPDATE
- * - Se o agendamento já é de plano, mantemos os snapshots
- *   (não recalculamos comissão / valor do plano)
  * ---------------------------------------------------------*/
 export async function updateAppointment(id: string, data: AppointmentData) {
   const parsed = appointmentSchema.parse(data);
@@ -384,9 +377,17 @@ export async function updateAppointment(id: string, data: AppointmentData) {
   const availabilityError = await ensureAvailability(scheduleAt, barberId, id);
   if (availabilityError) return { error: availabilityError };
 
-  // Busca o agendamento atual para decidir se recalcula snapshot
   const existing = await prisma.appointment.findUnique({
     where: { id },
+    select: {
+      id: true,
+      clientPlanId: true,
+      serviceId: true,
+      servicePriceAtTheTime: true,
+      barberPercentageAtTheTime: true,
+      barberEarningValue: true,
+      unitId: true,
+    },
   });
 
   if (!existing) {
@@ -399,14 +400,17 @@ export async function updateAppointment(id: string, data: AppointmentData) {
   let barberPercentageAtTheTime = existing.barberPercentageAtTheTime;
   let barberEarningValue = existing.barberEarningValue;
 
-  // Se NÃO é de plano e o serviço foi alterado (ou não havia serviço antes),
-  // recalculamos os snapshots a partir do serviço
+  // ✅ por padrão mantém a unit atual do agendamento
+  let unitId = existing.unitId;
+
+  // Se NÃO é de plano e o serviço mudou, recalcula snapshots e também unitId
   if (
     !appointmentUsesPlan &&
     (!existing.serviceId || existing.serviceId !== serviceId)
   ) {
     const service = await prisma.service.findUnique({
       where: { id: serviceId },
+      select: { price: true, barberPercentage: true, unitId: true },
     });
 
     if (!service) {
@@ -418,13 +422,13 @@ export async function updateAppointment(id: string, data: AppointmentData) {
     barberEarningValue = service.price
       .mul(service.barberPercentage)
       .div(new Prisma.Decimal(100));
+
+    unitId = service.unitId;
   }
 
   return withAppointmentMutation(async () => {
     await prisma.appointment.update({
       where: { id },
-      // aqui não mudamos o clientId nem o clientPlanId,
-      // só os campos do formulário e os snapshots calculados acima
       data: {
         clientName: parsed.clientName,
         phone: parsed.phone,
@@ -436,6 +440,9 @@ export async function updateAppointment(id: string, data: AppointmentData) {
         servicePriceAtTheTime,
         barberPercentageAtTheTime,
         barberEarningValue,
+
+        // ✅ obrigatório agora
+        unitId,
       },
     });
   }, "Falha ao atualizar o agendamento");
@@ -443,10 +450,8 @@ export async function updateAppointment(id: string, data: AppointmentData) {
 
 /* ---------------------------------------------------------
  * Helper: garantir que exista um PEDIDO PENDENTE para este atendimento
- * - retorna a order encontrada ou criada
  * ---------------------------------------------------------*/
 async function ensureOrderForAppointment(appointmentId: string) {
-  // Se já tiver pedido, reaproveita
   const existingOrder = await prisma.order.findFirst({
     where: { appointmentId },
   });
@@ -465,14 +470,20 @@ async function ensureOrderForAppointment(appointmentId: string) {
   const priceDecimal =
     appt.servicePriceAtTheTime ?? appt.service?.price ?? new Prisma.Decimal(0);
 
+  // ✅ agora Order exige unitId: usamos o unitId do próprio appointment
+  const unitId = appt.unitId;
+
   const newOrder = await prisma.order.create({
     data: {
       clientId: appt.clientId,
       appointmentId: appt.id,
       barberId: appt.barberId ?? null,
-      // 🔹 Agora o pedido nasce como PENDENTE (checkout depois)
       status: "PENDING",
       totalAmount: priceDecimal,
+
+      // ✅ obrigatório agora
+      unitId,
+
       items: {
         create: [
           {
@@ -509,7 +520,6 @@ export async function concludeAppointment(
       throw new Error("Agendamento não encontrado");
     }
 
-    // Se já estava DONE, só garante o concludedByRole e não mexe em créditos
     if (appt.status === "DONE") {
       await prisma.appointment.update({
         where: { id },
@@ -522,7 +532,6 @@ export async function concludeAppointment(
       return { orderId: order?.id ?? null };
     }
 
-    // Se não está vinculado a nenhum plano, só marca DONE
     if (!appt.clientPlanId) {
       await prisma.appointment.update({
         where: { id },
@@ -536,13 +545,11 @@ export async function concludeAppointment(
       return { orderId: order?.id ?? null };
     }
 
-    // Busca o plano do cliente
     const clientPlan = await prisma.clientPlan.findUnique({
       where: { id: appt.clientPlanId },
       include: { plan: true },
     });
 
-    // Se por algum motivo o plano não existir mais, só conclui o agendamento
     if (!clientPlan || !clientPlan.plan) {
       await prisma.appointment.update({
         where: { id },
@@ -556,7 +563,6 @@ export async function concludeAppointment(
       return { orderId: order?.id ?? null };
     }
 
-    // Se o plano não está ativo, só conclui sem mexer em crédito
     if (clientPlan.status !== "ACTIVE") {
       await prisma.appointment.update({
         where: { id },
@@ -573,8 +579,6 @@ export async function concludeAppointment(
     const totalBookings = clientPlan.plan.totalBookings;
     const usedBookings = clientPlan.usedBookings;
 
-    // Se já não há créditos, não vamos quebrar fluxo:
-    // apenas marcamos DONE sem consumir nada.
     if (usedBookings >= totalBookings) {
       await prisma.appointment.update({
         where: { id },
@@ -588,7 +592,6 @@ export async function concludeAppointment(
       return { orderId: order?.id ?? null };
     }
 
-    // 🔢 Cálculo da comissão por crédito para o barbeiro
     const commissionPercentDecimal = new Prisma.Decimal(
       clientPlan.plan.commissionPercent,
     );
@@ -601,7 +604,6 @@ export async function concludeAppointment(
       new Prisma.Decimal(totalBookings),
     );
 
-    // 💰 Regra de cobrança do cliente:
     const isFirstCredit = usedBookings === 0;
 
     const newServicePriceAtTheTime = isFirstCredit
@@ -720,6 +722,9 @@ export async function cancelAppointment(id: string, options?: CancelOptions) {
       return;
     }
 
+    // ✅ Order.create agora exige unitId
+    const unitId = appt.unitId;
+
     if (!existingOrder) {
       await prisma.order.create({
         data: {
@@ -728,6 +733,10 @@ export async function cancelAppointment(id: string, options?: CancelOptions) {
           barberId: appt.barberId ?? null,
           status: "PENDING",
           totalAmount: cancelFeeValue,
+
+          // ✅ obrigatório agora
+          unitId,
+
           items: {
             create: [
               {

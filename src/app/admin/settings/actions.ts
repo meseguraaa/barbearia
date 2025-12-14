@@ -2,9 +2,10 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+
+type ActionResult = { ok: true } | { ok: false; error: string };
 
 const createAdminSchema = z.object({
   name: z.string().min(1, "Nome obrigatório"),
@@ -41,20 +42,18 @@ function normalizeOptionalText(raw: unknown): string | null {
   return trimmed ? trimmed : null;
 }
 
-// Se você usa aniversário como Date no banco, aqui você pode manter simples.
-// Se vier "dd/MM/yyyy", você pode parsear depois (date-fns parse).
 function normalizeBirthday(raw: unknown): Date | null {
   if (typeof raw !== "string") return null;
   const v = raw.trim();
   if (!v) return null;
 
-  // tenta formatos básicos: yyyy-mm-dd (input type="date")
+  // yyyy-mm-dd (input type="date")
   if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
     const d = new Date(`${v}T00:00:00`);
     return isNaN(d.getTime()) ? null : d;
   }
 
-  // se estiver dd/MM/yyyy
+  // dd/MM/yyyy
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
     const [dd, mm, yyyy] = v.split("/");
     const d = new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
@@ -64,10 +63,18 @@ function normalizeBirthday(raw: unknown): Date | null {
   return null;
 }
 
+function firstZodErrorMessage(err: z.ZodError): string {
+  const flat = err.flatten();
+  const fieldErrors = Object.values(flat.fieldErrors).flat().filter(Boolean);
+  return fieldErrors[0] ?? "Dados inválidos";
+}
+
 /* ===========================
  * CREATE ADMIN
  * =========================== */
-export async function createAdminAction(formData: FormData) {
+export async function createAdminAction(
+  formData: FormData,
+): Promise<ActionResult> {
   const parsed = createAdminSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
@@ -78,7 +85,7 @@ export async function createAdminAction(formData: FormData) {
 
   if (!parsed.success) {
     console.error("[createAdminAction] Validação:", parsed.error.flatten());
-    return;
+    return { ok: false, error: firstZodErrorMessage(parsed.error) };
   }
 
   const name = String(parsed.data.name).trim();
@@ -114,23 +121,26 @@ export async function createAdminAction(formData: FormData) {
     });
 
     revalidatePath("/admin/settings");
-    redirect("/admin/settings");
+    return { ok: true };
   } catch (err) {
     if (
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === "P2002"
     ) {
       console.warn("[createAdminAction] Email já existe:", err.meta);
-      return;
+      return { ok: false, error: "Já existe um usuário com esse e-mail." };
     }
     console.error("[createAdminAction] Erro:", err);
+    return { ok: false, error: "Erro ao criar admin. Tente novamente." };
   }
 }
 
 /* ===========================
  * UPDATE ADMIN
  * =========================== */
-export async function updateAdminAction(formData: FormData) {
+export async function updateAdminAction(
+  formData: FormData,
+): Promise<ActionResult> {
   const parsed = updateAdminSchema.safeParse({
     userId: formData.get("userId"),
     name: formData.get("name"),
@@ -141,7 +151,7 @@ export async function updateAdminAction(formData: FormData) {
 
   if (!parsed.success) {
     console.error("[updateAdminAction] Validação:", parsed.error.flatten());
-    return;
+    return { ok: false, error: firstZodErrorMessage(parsed.error) };
   }
 
   const userId = parsed.data.userId;
@@ -163,23 +173,26 @@ export async function updateAdminAction(formData: FormData) {
     });
 
     revalidatePath("/admin/settings");
-    redirect("/admin/settings");
+    return { ok: true };
   } catch (err) {
     if (
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === "P2002"
     ) {
       console.warn("[updateAdminAction] Email já existe:", err.meta);
-      return;
+      return { ok: false, error: "Já existe um usuário com esse e-mail." };
     }
     console.error("[updateAdminAction] Erro:", err);
+    return { ok: false, error: "Erro ao atualizar admin. Tente novamente." };
   }
 }
 
 /* ===========================
  * UPDATE ADMIN PERMISSIONS
  * =========================== */
-export async function updateAdminPermissions(formData: FormData) {
+export async function updateAdminPermissions(
+  formData: FormData,
+): Promise<ActionResult> {
   const parsed = permissionsSchema.safeParse({
     userId: formData.get("userId"),
     canAccessDashboard: formData.get("canAccessDashboard"),
@@ -198,7 +211,7 @@ export async function updateAdminPermissions(formData: FormData) {
       "[updateAdminPermissions] Validação:",
       parsed.error.flatten(),
     );
-    return;
+    return { ok: false, error: firstZodErrorMessage(parsed.error) };
   }
 
   const p = parsed.data;
@@ -233,17 +246,21 @@ export async function updateAdminPermissions(formData: FormData) {
     });
 
     revalidatePath("/admin/settings");
+    return { ok: true };
   } catch (err) {
     console.error("[updateAdminPermissions] Erro:", err);
+    return { ok: false, error: "Erro ao salvar permissões." };
   }
 }
 
 /* ===========================
  * TOGGLE ADMIN STATUS
  * =========================== */
-export async function toggleAdminStatusAction(formData: FormData) {
+export async function toggleAdminStatusAction(
+  formData: FormData,
+): Promise<ActionResult> {
   const userId = String(formData.get("userId") || "");
-  if (!userId) return;
+  if (!userId) return { ok: false, error: "Usuário inválido." };
 
   try {
     const current = await prisma.user.findUnique({
@@ -251,13 +268,15 @@ export async function toggleAdminStatusAction(formData: FormData) {
       select: { isActive: true, isOwner: true, role: true },
     });
 
-    if (!current) return;
+    if (!current) return { ok: false, error: "Usuário não encontrado." };
 
     // Dono não desativa
-    if (current.isOwner) return;
+    if (current.isOwner)
+      return { ok: false, error: "Não é possível desativar o admin dono." };
 
     // Só admin
-    if (current.role !== "ADMIN") return;
+    if (current.role !== "ADMIN")
+      return { ok: false, error: "Apenas usuários ADMIN podem ser alterados." };
 
     await prisma.user.update({
       where: { id: userId },
@@ -266,7 +285,9 @@ export async function toggleAdminStatusAction(formData: FormData) {
     });
 
     revalidatePath("/admin/settings");
+    return { ok: true };
   } catch (err) {
     console.error("[toggleAdminStatusAction] Erro:", err);
+    return { ok: false, error: "Erro ao alternar status do admin." };
   }
 }

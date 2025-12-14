@@ -39,6 +39,14 @@ export async function createOrderForAppointment(appointmentId: string) {
     throw new Error("Serviço do agendamento não encontrado ao criar pedido.");
   }
 
+  // ✅ obrigatório agora: Order precisa de unitId
+  // usamos o unitId do próprio agendamento (fonte de verdade)
+  if (!appointment.unitId) {
+    throw new Error(
+      "Agendamento sem unidade vinculada (unitId). Não é possível criar pedido.",
+    );
+  }
+
   const priceDecimal =
     appointment.servicePriceAtTheTime ??
     appointment.service.price ??
@@ -51,6 +59,10 @@ export async function createOrderForAppointment(appointmentId: string) {
       barberId: appointment.barberId ?? null,
       status: "PENDING",
       totalAmount: priceDecimal,
+
+      // ✅ fix do TS + regra multi-unidade
+      unitId: appointment.unitId,
+
       items: {
         create: [
           {

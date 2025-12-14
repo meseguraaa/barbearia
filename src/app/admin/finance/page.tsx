@@ -17,6 +17,7 @@ import { createExpense } from "./actions";
 import { ExpenseDueDatePicker } from "@/components/expense-due-date-picker";
 import { AdminExpenseRow } from "@/components/admin-expense-row";
 import { requireAdminPermission } from "@/lib/admin-permissions";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,7 @@ async function seedRecurringExpensesForMonth(monthStart: Date, monthEnd: Date) {
   const previousMonthEnd = endOfMonth(previousMonthStart);
 
   // Todas as despesas recorrentes do mês anterior
+  // ✅ IMPORTANTÍSSIMO: traz unitId pra replicar na mesma unidade
   const lastMonthRecurringExpenses = await prisma.expense.findMany({
     where: {
       isRecurring: true,
@@ -55,6 +57,14 @@ async function seedRecurringExpensesForMonth(monthStart: Date, monthEnd: Date) {
         gte: previousMonthStart,
         lte: previousMonthEnd,
       },
+    },
+    select: {
+      id: true,
+      description: true,
+      category: true,
+      amount: true,
+      dueDate: true,
+      unitId: true,
     },
   });
 
@@ -72,11 +82,14 @@ async function seedRecurringExpensesForMonth(monthStart: Date, monthEnd: Date) {
       where: {
         isRecurring: true,
         description: expense.description,
+        category: expense.category,
+        unitId: expense.unitId, // ✅ garante série por unidade
         dueDate: {
           gte: monthStart,
           lte: monthEnd,
         },
       },
+      select: { id: true, dueDate: true },
     });
 
     const alreadyExists = sameSeriesThisMonth.some(
@@ -85,7 +98,7 @@ async function seedRecurringExpensesForMonth(monthStart: Date, monthEnd: Date) {
 
     if (alreadyExists) continue;
 
-    // Cria a despesa para o mês atual com mesmo valor e dia
+    // Cria a despesa para o mês atual com mesmo valor, dia e unidade
     await prisma.expense.create({
       data: {
         description: expense.description,
@@ -94,6 +107,9 @@ async function seedRecurringExpensesForMonth(monthStart: Date, monthEnd: Date) {
         isRecurring: true,
         isPaid: false,
         dueDate: new Date(year, monthIndex, day),
+
+        // ✅ obrigatório agora
+        unitId: expense.unitId,
       },
     });
   }
@@ -216,7 +232,6 @@ export default async function AdminFinancePage({
   }, 0);
 
   // Lucro líquido final do mês:
-  // lucro líquido agendamentos + lucro líquido produtos - despesas
   const netIncome =
     appointmentsNetProfitMonth + productsNetProfitMonth - totalExpenses;
 
@@ -249,7 +264,7 @@ export default async function AdminFinancePage({
     });
   });
 
-  // Serviços (appointments) – soma da comissão do barbeiro (snapshot)
+  // Serviços (appointments)
   appointmentsDone.forEach((appt) => {
     if (!appt.barberId) return;
     const entry = barberEarningsMap.get(appt.barberId);
@@ -275,7 +290,7 @@ export default async function AdminFinancePage({
     entry.servicesEarnings += earningNumber;
   });
 
-  // Produtos – comissão do barbeiro em cima das vendas
+  // Produtos
   productSales.forEach((sale) => {
     if (!sale.barberId) return;
     const entry = barberEarningsMap.get(sale.barberId);
@@ -288,7 +303,6 @@ export default async function AdminFinancePage({
     entry.productsEarnings += commission;
   });
 
-  // agora: TODOS barbeiros ativos aparecem, mesmo com 0 de faturamento
   const barberEarningsList: BarberMonthlyEarnings[] = Array.from(
     barberEarningsMap.values(),
   ).sort((a, b) => a.name.localeCompare(b.name));
@@ -315,7 +329,6 @@ export default async function AdminFinancePage({
 
       {/* RESUMO FINANCEIRO DO MÊS */}
       <section className="grid gap-4 md:grid-cols-3">
-        {/* FATURAMENTO LÍQUIDO (SERVIÇOS + PRODUTOS) */}
         <div className="space-y-1 rounded-xl border border-border-primary bg-background-tertiary px-4 py-3">
           <p className="text-label-small text-content-secondary">
             Faturamento líquido (serviços + produtos)
@@ -337,7 +350,6 @@ export default async function AdminFinancePage({
           </p>
         </div>
 
-        {/* DESPESAS */}
         <div className="space-y-1 rounded-xl border border-border-primary bg-background-tertiary px-4 py-3">
           <p className="text-label-small text-content-secondary">
             Despesas (mês)
@@ -350,7 +362,6 @@ export default async function AdminFinancePage({
           </p>
         </div>
 
-        {/* LUCRO LÍQUIDO FINAL */}
         <div className="space-y-1 rounded-xl border border-border-primary bg-background-tertiary px-4 py-3">
           <p className="text-label-small text-content-secondary">
             Lucro líquido (mês)
@@ -368,13 +379,11 @@ export default async function AdminFinancePage({
         </div>
       </section>
 
-      {/* FATURAMENTO POR BARBEIRO NO MÊS */}
       <BarberMonthlyEarningsSection
         barbersEarnings={barberEarningsList}
         currencyFormatter={currencyFormatter}
       />
 
-      {/* DESPESAS DO MÊS */}
       <div>
         <h2 className="text-subtitle text-content-primary">
           Cadastro de despesas (mês)
@@ -384,6 +393,7 @@ export default async function AdminFinancePage({
           avulsas.
         </p>
       </div>
+
       <section className="overflow-x-auto rounded-xl border border-border-primary bg-background-tertiary">
         <table className="min-w-full text-sm">
           <thead>
@@ -503,14 +513,20 @@ function NewExpenseDialog({ month }: { month: string }) {
         <form
           action={async (formData) => {
             "use server";
-            await createExpense(formData);
+            const result = await createExpense(formData);
+
+            if (!result.ok) {
+              // aqui não dá pra toast, mas também não quebra o submit
+              console.error("[NewExpenseDialog] createExpense:", result.error);
+              return;
+            }
+
+            const monthQuery = result.monthQuery ?? month;
+            redirect(`/admin/finance?month=${monthQuery}`);
           }}
           className="space-y-4"
         >
-          {/* mês atual da tela para as recorrentes */}
           <input type="hidden" name="month" value={month} />
-
-          {/* se o backend ainda exige categoria, mandamos OTHER por padrão */}
           <input type="hidden" name="category" value="OTHER" />
 
           <div className="space-y-1">
@@ -547,9 +563,7 @@ function NewExpenseDialog({ month }: { month: string }) {
             />
           </div>
 
-          {/* RECORRENTE + CAMPOS DE VENCIMENTO */}
           <div className="space-y-3">
-            {/* checkbox real (peer) */}
             <input
               id="isRecurring"
               name="isRecurring"
@@ -557,7 +571,6 @@ function NewExpenseDialog({ month }: { month: string }) {
               className="peer sr-only"
             />
 
-            {/* UI do checkbox customizado (roxo com check branco) */}
             <label
               htmlFor="isRecurring"
               className="
@@ -581,7 +594,6 @@ function NewExpenseDialog({ month }: { month: string }) {
               </span>
             </label>
 
-            {/* Dia de vencimento para recorrentes */}
             <div className="space-y-1 hidden peer-checked:block">
               <label
                 className="text-label-small text-content-secondary"
@@ -603,7 +615,6 @@ function NewExpenseDialog({ month }: { month: string }) {
               </p>
             </div>
 
-            {/* Data completa para não recorrentes */}
             <div className="space-y-1 peer-checked:hidden">
               <label
                 className="text-label-small text-content-secondary"

@@ -47,10 +47,21 @@ async function getCurrentBarberOrThrow() {
 
   const barber = await prisma.barber.findUnique({
     where: { email: payload.email },
+    select: {
+      id: true,
+      email: true,
+      unitId: true, // ✅ precisamos disso agora
+    },
   });
 
   if (!barber) {
     throw new Error("Barber não encontrado para o usuário logado.");
+  }
+
+  if (!barber.unitId) {
+    throw new Error(
+      "Barbeiro sem unidade vinculada (unitId). Não é possível salvar disponibilidade.",
+    );
   }
 
   return { barber, session: payload };
@@ -75,6 +86,7 @@ export async function saveWeeklyAvailability(
   input: SaveWeeklyAvailabilityInput,
 ) {
   const { barber } = await getCurrentBarberOrThrow();
+  const unitId = barber.unitId;
 
   if (!input?.days || !Array.isArray(input.days)) {
     throw new Error("Payload inválido ao salvar disponibilidade semanal.");
@@ -104,7 +116,6 @@ export async function saveWeeklyAvailability(
     // 👉 DIA INATIVO: mantém/cria registro com isActive = false e sem intervalos
     if (!day.active) {
       if (existingForDay) {
-        // zera intervals e marca como inativo
         await prisma.barberWeeklyTimeInterval.deleteMany({
           where: {
             weeklyAvailabilityId: existingForDay.id,
@@ -118,12 +129,14 @@ export async function saveWeeklyAvailability(
           },
         });
       } else {
-        // cria um registro só pra marcar o dia como inativo
         await prisma.barberWeeklyAvailability.create({
           data: {
             barberId: barber.id,
             weekday: day.weekday,
             isActive: false,
+
+            // ✅ obrigatório agora
+            unitId,
           },
         });
       }
@@ -153,6 +166,9 @@ export async function saveWeeklyAvailability(
           barberId: barber.id,
           weekday: day.weekday,
           isActive: true,
+
+          // ✅ obrigatório agora
+          unitId,
         },
       });
 
@@ -172,11 +188,12 @@ export async function saveWeeklyAvailability(
     });
   }
 
+  revalidatePath("/barber/availability");
   return { success: true };
 }
 
 /* =========================================================
- * EXCEÇÕES DIÁRIAS (IN-DI-SPONIBILIDADE)
+ * EXCEÇÕES DIÁRIAS (IN-DI-SPONibilIDADE)
  * =======================================================*/
 
 const dailyExceptionSchema = z.object({
@@ -226,7 +243,6 @@ function normalizeIntervals(intervals: IntervalMinutes[]): IntervalMinutes[] {
     const next = sorted[i];
 
     if (next.start <= current.end) {
-      // sobreposição ou colado → junta
       current.end = Math.max(current.end, next.end);
     } else {
       result.push(current);
@@ -238,14 +254,6 @@ function normalizeIntervals(intervals: IntervalMinutes[]): IntervalMinutes[] {
   return result;
 }
 
-/**
- * Subtrai blocos de indisponibilidade dos intervalos base de disponibilidade.
- *
- * base    = disponibilidade semanal (em minutos)
- * blocks  = intervalos INDISPONÍVEIS (o que o barbeiro bloqueou)
- *
- * Retorna nova lista de intervalos de disponibilidade.
- */
 function subtractIntervals(
   base: IntervalMinutes[],
   blocks: IntervalMinutes[],
@@ -257,18 +265,15 @@ function subtractIntervals(
     const nextResult: IntervalMinutes[] = [];
 
     for (const interval of result) {
-      // sem sobreposição
       if (block.end <= interval.start || block.start >= interval.end) {
         nextResult.push(interval);
         continue;
       }
 
-      // block cobre o intervalo todo → some
       if (block.start <= interval.start && block.end >= interval.end) {
         continue;
       }
 
-      // corta no começo
       if (block.start <= interval.start && block.end < interval.end) {
         nextResult.push({
           start: block.end,
@@ -277,7 +282,6 @@ function subtractIntervals(
         continue;
       }
 
-      // corta no final
       if (block.start > interval.start && block.end >= interval.end) {
         nextResult.push({
           start: interval.start,
@@ -286,7 +290,6 @@ function subtractIntervals(
         continue;
       }
 
-      // block está no meio → vira dois
       if (block.start > interval.start && block.end < interval.end) {
         nextResult.push(
           {
@@ -317,12 +320,22 @@ export async function createDailyException(input: DailyExceptionInput) {
   const parsed = dailyExceptionSchema.parse(input);
   const { barberId, dateISO, mode } = parsed;
 
+  const barber = await prisma.barber.findUnique({
+    where: { id: barberId },
+    select: { id: true, unitId: true },
+  });
+
+  if (!barber || !barber.unitId) {
+    return { error: "Barbeiro inválido ou sem unidade vinculada (unitId)" };
+  }
+
+  const unitId = barber.unitId;
+
   const date = new Date(dateISO);
   if (Number.isNaN(date.getTime())) {
     return { error: "Data inválida para exceção diária" };
   }
 
-  // sempre zerando pra início do dia
   const dayStart = new Date(
     date.getFullYear(),
     date.getMonth(),
@@ -335,7 +348,6 @@ export async function createDailyException(input: DailyExceptionInput) {
   );
   const weekday = date.getDay(); // 0..6
 
-  // procura se já existe alguma dailyAvailability pra esse dia
   const existingDaily = await prisma.barberDailyAvailability.findFirst({
     where: {
       barberId,
@@ -349,14 +361,12 @@ export async function createDailyException(input: DailyExceptionInput) {
     },
   });
 
-  // FULL_DAY ou sem intervals → vira DAY_OFF direto
   if (
     mode === "FULL_DAY" ||
     !parsed.intervals ||
     parsed.intervals.length === 0
   ) {
     if (existingDaily) {
-      // apaga intervalos antigos e marca como DAY_OFF
       await prisma.barberDailyTimeInterval.deleteMany({
         where: { dailyAvailabilityId: existingDaily.id },
       });
@@ -373,6 +383,9 @@ export async function createDailyException(input: DailyExceptionInput) {
           barberId,
           date: dayStart,
           type: "DAY_OFF",
+
+          // ✅ obrigatório agora
+          unitId,
         },
       });
     }
@@ -381,7 +394,6 @@ export async function createDailyException(input: DailyExceptionInput) {
     return { success: true };
   }
 
-  // PARTIAL → precisamos pegar o padrão semanal e subtrair os blocos
   const weekly = await prisma.barberWeeklyAvailability.findFirst({
     where: {
       barberId,
@@ -398,7 +410,6 @@ export async function createDailyException(input: DailyExceptionInput) {
     end: timeStringToMinutes(i.endTime),
   }));
 
-  // se não tem nada no semanal, na prática é como se fosse dia off
   if (weeklyIntervals.length === 0) {
     if (existingDaily) {
       await prisma.barberDailyTimeInterval.deleteMany({
@@ -417,6 +428,9 @@ export async function createDailyException(input: DailyExceptionInput) {
           barberId,
           date: dayStart,
           type: "DAY_OFF",
+
+          // ✅ obrigatório agora
+          unitId,
         },
       });
     }
@@ -425,7 +439,6 @@ export async function createDailyException(input: DailyExceptionInput) {
     return { success: true };
   }
 
-  // converte os intervalos INDISPONÍVEIS em minutos
   const blockIntervals: IntervalMinutes[] = (parsed.intervals ?? []).map(
     (i) => ({
       start: timeStringToMinutes(i.startTime),
@@ -435,7 +448,6 @@ export async function createDailyException(input: DailyExceptionInput) {
 
   const remaining = subtractIntervals(weeklyIntervals, blockIntervals);
 
-  // se não sobrou nada → DAY_OFF
   if (remaining.length === 0) {
     if (existingDaily) {
       await prisma.barberDailyTimeInterval.deleteMany({
@@ -454,6 +466,9 @@ export async function createDailyException(input: DailyExceptionInput) {
           barberId,
           date: dayStart,
           type: "DAY_OFF",
+
+          // ✅ obrigatório agora
+          unitId,
         },
       });
     }
@@ -462,9 +477,7 @@ export async function createDailyException(input: DailyExceptionInput) {
     return { success: true };
   }
 
-  // se sobrou alguma coisa → CUSTOM com os intervalos restantes
   if (existingDaily) {
-    // limpa intervals anteriores
     await prisma.barberDailyTimeInterval.deleteMany({
       where: { dailyAvailabilityId: existingDaily.id },
     });
@@ -489,6 +502,9 @@ export async function createDailyException(input: DailyExceptionInput) {
         barberId,
         date: dayStart,
         type: "CUSTOM",
+
+        // ✅ obrigatório agora
+        unitId,
       },
     });
 
@@ -536,7 +552,7 @@ export async function deleteDailyException(barberId: string, dateISO: string) {
   });
 
   if (!existingDaily) {
-    return { success: true }; // nada pra remover, mas tudo bem
+    return { success: true };
   }
 
   await prisma.barberDailyAvailability.delete({
