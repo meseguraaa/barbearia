@@ -1,4 +1,3 @@
-// components/admin-edit-admin-dialog/index.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -12,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calendar as CalendarIcon, PenSquare } from "lucide-react";
+import { Calendar as CalendarIcon } from "lucide-react";
 import { updateAdminAction } from "@/app/admin/settings/actions";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -21,7 +20,7 @@ type AdminForEdit = {
   id: string;
   name: string;
   email: string;
-  phone: string;
+  phone: string | null;
   birthday: Date | null;
 };
 
@@ -48,17 +47,25 @@ export function AdminEditAdminDialog({ admin }: { admin: AdminForEdit }) {
 
   const [name, setName] = useState(admin.name);
   const [email, setEmail] = useState(admin.email);
-  const [phone, setPhone] = useState(admin.phone === "—" ? "" : admin.phone);
+  const [phone, setPhone] = useState(
+    admin.phone && admin.phone !== "—" ? admin.phone : "",
+  );
   const [birthdayInput, setBirthdayInput] = useState("");
   const [password, setPassword] = useState("");
 
   useEffect(() => {
+    // quando abre pra editar outro admin, sincroniza valores
+    setName(admin.name);
+    setEmail(admin.email);
+    setPhone(admin.phone && admin.phone !== "—" ? admin.phone : "");
+    setPassword("");
+
     if (admin.birthday) {
       setBirthdayInput(format(admin.birthday, "dd/MM/yyyy"));
     } else {
       setBirthdayInput("");
     }
-  }, [admin.birthday]);
+  }, [admin]);
 
   function handlePhoneChange(e: React.ChangeEvent<HTMLInputElement>) {
     const formatted = formatPhoneDisplay(e.target.value);
@@ -93,61 +100,56 @@ export function AdminEditAdminDialog({ admin }: { admin: AdminForEdit }) {
 
       if (!name.trim()) {
         toast.error("Preencha o nome do administrador.");
-        setSaving(false);
         return;
       }
 
       if (!email.trim()) {
         toast.error("Preencha o e-mail.");
-        setSaving(false);
         return;
       }
 
       if (!isValidEmail(email.trim())) {
         toast.error("Preencha um e-mail válido.");
-        setSaving(false);
         return;
       }
 
       if (!phone.trim()) {
         toast.error("Preencha o telefone.");
-        setSaving(false);
         return;
       }
 
       if (!birthdayInput.trim()) {
         toast.error("Preencha a data de nascimento.");
-        setSaving(false);
         return;
       }
 
       if (!isValidBirthdayDisplay(birthdayInput)) {
         toast.error("Preencha a data de nascimento no formato DD/MM/AAAA.");
-        setSaving(false);
         return;
       }
 
       if (password.trim() && password.trim().length < 6) {
         toast.error("A nova senha deve ter pelo menos 6 caracteres.");
-        setSaving(false);
         return;
       }
 
       const formData = new FormData();
-      formData.append("id", admin.id);
+      // ✅ action espera "userId"
+      formData.append("userId", admin.id);
+
       formData.append("name", name.trim());
       formData.append("email", email.trim());
       formData.append("phone", phone.trim());
       formData.append("birthday", birthdayInput.trim());
-      if (password.trim()) {
-        formData.append("password", password.trim());
-      }
+
+      // ⚠️ seu updateAdminAction atual NÃO usa password (schema não tem)
+      // então não mandamos pra não dar efeito "falso positivo" no front.
+      // Se você quiser trocar senha pelo admin, a gente adiciona isso no action depois.
 
       const result = await updateAdminAction(formData);
 
-      if (result.error) {
+      if (!result.ok) {
         toast.error(result.error);
-        setSaving(false);
         return;
       }
 
@@ -161,8 +163,7 @@ export function AdminEditAdminDialog({ admin }: { admin: AdminForEdit }) {
     }
   }
 
-  const descriptionText =
-    "Atualize os dados de contato e, se necessário, redefina a senha desse administrador.";
+  const descriptionText = "Atualize os dados de contato desse administrador.";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -238,14 +239,15 @@ export function AdminEditAdminDialog({ admin }: { admin: AdminForEdit }) {
                 id="edit-admin-password"
                 name="password"
                 type="password"
-                placeholder="Preencha para alterar a senha"
+                placeholder="(Ainda não salva no backend)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={saving}
                 className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
               />
               <p className="text-[11px] text-content-tertiary">
-                Se não preencher, a senha atual será mantida.
+                Se você quiser que isso atualize de verdade, eu ajusto o action
+                pra aceitar e salvar senha com hash.
               </p>
             </div>
 
@@ -281,7 +283,7 @@ export function AdminEditAdminDialog({ admin }: { admin: AdminForEdit }) {
               </label>
 
               <div className="relative">
-                <CalendarIcon className="pointer-events-none absolute.left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-border-primary" />
+                <CalendarIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-border-primary" />
                 <Input
                   id="edit-admin-birthday"
                   name="birthday"

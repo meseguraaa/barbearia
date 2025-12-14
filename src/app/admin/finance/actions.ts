@@ -179,7 +179,6 @@ export async function updateExpense(formData: FormData): Promise<ActionResult> {
       select: {
         id: true,
         dueDate: true,
-        status: true,
         isRecurring: true,
         description: true,
         category: true,

@@ -1,4 +1,3 @@
-// components/admin-new-admin-dialog/index.tsx
 "use client";
 
 import { useState } from "react";
@@ -84,49 +83,41 @@ export function AdminNewAdminDialog() {
 
       if (!name.trim()) {
         toast.error("Preencha o nome do administrador.");
-        setSaving(false);
         return;
       }
 
       if (!email.trim()) {
         toast.error("Preencha o e-mail.");
-        setSaving(false);
         return;
       }
 
       if (!isValidEmail(email.trim())) {
         toast.error("Preencha um e-mail válido.");
-        setSaving(false);
         return;
       }
 
       if (!phone.trim()) {
         toast.error("Preencha o telefone.");
-        setSaving(false);
         return;
       }
 
       if (!birthdayInput.trim()) {
         toast.error("Preencha a data de nascimento.");
-        setSaving(false);
         return;
       }
 
       if (!isValidBirthdayDisplay(birthdayInput)) {
         toast.error("Preencha a data de nascimento no formato DD/MM/AAAA.");
-        setSaving(false);
         return;
       }
 
       if (!password.trim()) {
         toast.error("Preencha a senha.");
-        setSaving(false);
         return;
       }
 
       if (password.trim().length < 6) {
         toast.error("A senha deve ter pelo menos 6 caracteres.");
-        setSaving(false);
         return;
       }
 
@@ -139,9 +130,8 @@ export function AdminNewAdminDialog() {
 
       const result = await createAdminAction(formData);
 
-      if (result.error) {
+      if (!result.ok) {
         toast.error(result.error);
-        setSaving(false);
         return;
       }
 
