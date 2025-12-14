@@ -4,7 +4,6 @@ import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { saveWeeklyAvailability } from "@/app/barber/availability/actions";
 import {
   Select,
   SelectContent,
@@ -24,9 +23,19 @@ type DayState = {
 
 export type WeeklyAvailabilityState = Record<DayKey, DayState>;
 
+export type WeeklyAvailabilityDayPayload = {
+  weekday: number;
+  active: boolean;
+  startTime: string;
+  endTime: string;
+};
+
 type WeeklyAvailabilityFormProps = {
   initialValue?: WeeklyAvailabilityState;
   onChange?: (value: WeeklyAvailabilityState) => void;
+
+  // ✅ quem usa o componente decide como salvar (action server-side, api, etc.)
+  onSave: (payload: { days: WeeklyAvailabilityDayPayload[] }) => Promise<void>;
 };
 
 const defaultDayState: DayState = {
@@ -76,6 +85,7 @@ const TIME_OPTIONS = (() => {
 export function WeeklyAvailabilityForm({
   initialValue,
   onChange,
+  onSave,
 }: WeeklyAvailabilityFormProps) {
   const [state, setState] = useState<WeeklyAvailabilityState>(
     initialValue ?? createDefaultState(),
@@ -108,19 +118,21 @@ export function WeeklyAvailabilityForm({
 
   const handleSave = () => {
     // Verifica se há algum erro de horário em dias ativos
-    const hasAnyError = Object.entries(state).some(([_, dayState]) => {
+    const hasAnyErrorNow = Object.entries(state).some(([_, dayState]) => {
       const d = dayState as DayState;
       return d.active && d.startTime && d.endTime && d.startTime >= d.endTime;
     });
 
-    if (hasAnyError) {
+    if (hasAnyErrorNow) {
       toast.error(
         "Verifique os horários: em dias ativos, o horário inicial deve ser menor que o final.",
       );
       return;
     }
 
-    const daysPayload = Object.entries(state).map(([weekdayStr, dayState]) => {
+    const daysPayload: WeeklyAvailabilityDayPayload[] = Object.entries(
+      state,
+    ).map(([weekdayStr, dayState]) => {
       const weekday = Number(weekdayStr);
       const d = dayState as DayState;
       return {
@@ -133,7 +145,7 @@ export function WeeklyAvailabilityForm({
 
     startTransition(async () => {
       try {
-        await saveWeeklyAvailability({ days: daysPayload });
+        await onSave({ days: daysPayload });
         toast.success("Disponibilidade semanal salva com sucesso!");
       } catch (error) {
         console.error("Erro ao salvar disponibilidade semanal:", error);

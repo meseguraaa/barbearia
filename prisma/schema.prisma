@@ -153,6 +153,126 @@ model VerificationToken {
 }
 
 // =======================
+// 🏢 UNIDADES (FILIAIS)
+// =======================
+
+model Unit {
+  id String @id @default(cuid())
+
+  name     String
+  phone    String?
+  address  String?
+  isActive Boolean @default(true)
+
+  // 🔹 Horários da unidade (igual padrão do barbeiro)
+  weeklyAvailabilities UnitWeeklyAvailability[]
+  dailyAvailabilities  UnitDailyAvailability[]
+
+  // 🔹 Profissionais vinculados (N:N)
+  barbers BarberUnit[]
+
+  // 🔹 Entidades “particionadas” por unidade
+  appointments Appointment[]
+  services     Service[]
+  products     Product[]
+  orders       Order[]
+  expenses     Expense[]
+
+  createdAt                  DateTime                   @default(now())
+  updatedAt                  DateTime                   @updatedAt
+  barberWeeklyAvailabilities BarberWeeklyAvailability[]
+  barberDailyAvailabilities  BarberDailyAvailability[]
+
+  @@map("units")
+}
+
+// ⭐ Pivot: BARBEIRO x UNIDADE (N:N)
+model BarberUnit {
+  id String @id @default(cuid())
+
+  barberId String
+  barber   Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([barberId, unitId])
+  @@index([unitId])
+  @@map("barber_units")
+}
+
+// =======================
+// HORÁRIO DA UNIDADE (igual ao barbeiro)
+// =======================
+
+model UnitWeeklyAvailability {
+  id     String @id @default(cuid())
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  weekday  Int
+  isActive Boolean @default(true)
+
+  intervals UnitWeeklyTimeInterval[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([unitId, weekday])
+  @@map("unit_weekly_availabilities")
+}
+
+model UnitWeeklyTimeInterval {
+  id                   String                 @id @default(cuid())
+  weeklyAvailabilityId String
+  weeklyAvailability   UnitWeeklyAvailability @relation(fields: [weeklyAvailabilityId], references: [id], onDelete: Cascade)
+
+  startTime String
+  endTime   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("unit_weekly_time_intervals")
+}
+
+model UnitDailyAvailability {
+  id     String @id @default(cuid())
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  date     DateTime
+  isClosed Boolean  @default(false)
+
+  intervals UnitDailyTimeInterval[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([unitId, date])
+  @@map("unit_daily_availabilities")
+}
+
+model UnitDailyTimeInterval {
+  id                  String                @id @default(cuid())
+  dailyAvailabilityId String
+  dailyAvailability   UnitDailyAvailability @relation(fields: [dailyAvailabilityId], references: [id], onDelete: Cascade)
+
+  startTime String
+  endTime   String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("unit_daily_time_intervals")
+}
+
+// =======================
 // DOMÍNIO
 // =======================
 
@@ -167,6 +287,9 @@ model Barber {
 
   userId String? @unique
   user   User?   @relation(fields: [userId], references: [id])
+
+  // 🔹 vínculo do profissional em uma ou mais unidades
+  units BarberUnit[]
 
   appointments Appointment[]
 
@@ -193,7 +316,10 @@ model Barber {
 // =======================
 
 model Service {
-  id                  String   @id @default(cuid())
+  id     String @id @default(cuid())
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
   name                String
   price               Decimal  @db.Decimal(10, 2)
   durationMinutes     Int
@@ -212,6 +338,7 @@ model Service {
   // 🔹 Profissionais que fazem este serviço
   professionals ServiceProfessional[]
 
+  @@index([unitId])
   @@map("services")
 }
 
@@ -297,7 +424,10 @@ model ClientPlan {
 }
 
 model Appointment {
-  id          String   @id @default(cuid())
+  id     String @id @default(cuid())
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
   description String
   clientName  String
   phone       String
@@ -338,6 +468,7 @@ model Appointment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([unitId])
   @@index([clientId])
   @@index([barberId])
   @@index([scheduleAt])
@@ -351,7 +482,10 @@ model Appointment {
 // =======================
 
 model Product {
-  id               String  @id @default(cuid())
+  id     String @id @default(cuid())
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
   name             String
   imageUrl         String
   description      String
@@ -374,6 +508,8 @@ model Product {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
+
+  @@index([unitId])
 }
 
 // =======================
@@ -409,6 +545,9 @@ model ProductSale {
 model Order {
   id String @id @default(cuid())
 
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
   // CLIENTE (opcional – dá pra vender sem estar cadastrado)
   clientId String?
   client   User?   @relation(fields: [clientId], references: [id])
@@ -440,6 +579,7 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([unitId])
   @@index([clientId])
   @@index([appointmentId])
   @@index([barberId])
@@ -476,7 +616,10 @@ model OrderItem {
 // =======================
 
 model Expense {
-  id          String          @id @default(cuid())
+  id     String @id @default(cuid())
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
   description String
   category    ExpenseCategory
   amount      Decimal         @db.Decimal(10, 2)
@@ -487,18 +630,23 @@ model Expense {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 
+  @@index([unitId])
   @@index([dueDate])
   @@map("expenses")
 }
 
 // =======================
-// DISPONIBILIDADE
+// DISPONIBILIDADE (AGORA POR UNIDADE)
 // =======================
 
 model BarberWeeklyAvailability {
-  id        String                     @id @default(cuid())
-  barberId  String
-  barber    Barber                     @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  barberId String
+  barber   Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
   weekday   Int
   isActive  Boolean                    @default(true)
   intervals BarberWeeklyTimeInterval[]
@@ -506,7 +654,8 @@ model BarberWeeklyAvailability {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([barberId, weekday])
+  @@unique([barberId, unitId, weekday])
+  @@index([unitId])
   @@map("barber_weekly_availabilities")
 }
 
@@ -524,9 +673,13 @@ model BarberWeeklyTimeInterval {
 }
 
 model BarberDailyAvailability {
-  id        String                      @id @default(cuid())
-  barberId  String
-  barber    Barber                      @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  barberId String
+  barber   Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
   date      DateTime
   type      BarberDailyAvailabilityType
   intervals BarberDailyTimeInterval[]
@@ -534,7 +687,8 @@ model BarberDailyAvailability {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([barberId, date])
+  @@unique([barberId, unitId, date])
+  @@index([unitId])
   @@map("barber_daily_availabilities")
 }
 

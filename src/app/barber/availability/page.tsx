@@ -1,13 +1,16 @@
-// app/barber/availability/page.tsx
 import { Metadata } from "next";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
+
 import { WeeklyAvailabilityForm } from "@/components/weekly-availability-form/weekly-availability-form";
 import type { WeeklyAvailabilityState } from "@/components/weekly-availability-form/weekly-availability-form";
+
 import { DailyExceptionModal } from "../../../components/daily-exception-modal/daily-exception-modal";
 import { DailyExceptionsList } from "../../../components/daily-exceptions-list/daily-exceptions-list";
+
+import { saveWeeklyAvailability } from "@/app/barber/availability/actions";
 
 const SESSION_COOKIE_NAME = "painel_session";
 
@@ -26,13 +29,11 @@ function getJwtSecretKey() {
   return new TextEncoder().encode(secret);
 }
 
-async function getCurrentBarberOrThrow() {
+async function getCurrentBarberAndUnitOrThrow() {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
-  if (!token) {
-    redirect("/painel/login");
-  }
+  if (!token) redirect("/painel/login");
 
   let payload: PainelSessionPayload | null = null;
 
@@ -55,7 +56,20 @@ async function getCurrentBarberOrThrow() {
     throw new Error("Barber não encontrado para o usuário logado.");
   }
 
-  return { barber, session: payload };
+  const activeBarberUnit = await prisma.barberUnit.findFirst({
+    where: {
+      barberId: barber.id,
+      isActive: true,
+    },
+    select: { unitId: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (!activeBarberUnit?.unitId) {
+    throw new Error("Este profissional não possui unidade ativa vinculada.");
+  }
+
+  return { barber, unitId: activeBarberUnit.unitId, session: payload };
 }
 
 export const dynamic = "force-dynamic";
@@ -64,7 +78,6 @@ export const metadata: Metadata = {
   title: "Barbeiro | Disponibilidade",
 };
 
-// helper para criar o default (segunda–sábado ON, domingo OFF)
 function createDefaultWeeklyState(): WeeklyAvailabilityState {
   return {
     0: { active: false, startTime: "09:00", endTime: "21:00" }, // domingo
@@ -78,30 +91,22 @@ function createDefaultWeeklyState(): WeeklyAvailabilityState {
 }
 
 export default async function BarberAvailabilityPage() {
-  const { barber } = await getCurrentBarberOrThrow();
+  const { barber, unitId } = await getCurrentBarberAndUnitOrThrow();
 
-  // Busca padrão semanal salvo no banco para o barbeiro logado
   const weeklyAvailabilities = await prisma.barberWeeklyAvailability.findMany({
-    where: { barberId: barber.id },
-    include: {
-      intervals: true,
-    },
-    orderBy: {
-      weekday: "asc",
-    },
+    where: { barberId: barber.id, unitId },
+    include: { intervals: true },
+    orderBy: { weekday: "asc" },
   });
 
-  // Começa com o default (segunda–sábado on, domingo off)
   const initialState: WeeklyAvailabilityState = createDefaultWeeklyState();
 
-  // Aplica o que veio do banco em cima do default
   for (const item of weeklyAvailabilities) {
-    const weekday = item.weekday; // 0–6
+    const weekday = item.weekday;
     if (weekday < 0 || weekday > 6) continue;
 
-    const interval = item.intervals[0]; // por enquanto usamos só 1 intervalo
+    const interval = item.intervals[0];
     if (!interval) {
-      // se não tiver intervalo, só controla o active
       initialState[weekday as 0 | 1 | 2 | 3 | 4 | 5 | 6].active = item.isActive;
       continue;
     }
@@ -115,7 +120,6 @@ export default async function BarberAvailabilityPage() {
 
   return (
     <div className="space-y-6">
-      {/* HEADER */}
       <header className="flex items-center justify-between">
         <div className="space-y-1">
           <h1 className="text-title text-content-primary">Disponibilidade</h1>
@@ -128,14 +132,17 @@ export default async function BarberAvailabilityPage() {
         <DailyExceptionModal barberId={barber.id} />
       </header>
 
-      {/* CONTEÚDO PRINCIPAL */}
       <section className="space-y-6">
-        {/* PADRÃO SEMANAL */}
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-4 space-y-3">
-          <WeeklyAvailabilityForm initialValue={initialState} />
+          <WeeklyAvailabilityForm
+            initialValue={initialState}
+            // ✅ wrapper: o componente espera Promise<void>, action retorna { success: true }
+            onSave={async (payload) => {
+              await saveWeeklyAvailability(payload);
+            }}
+          />
         </div>
 
-        {/* EXCEÇÕES POR DIA */}
         <DailyExceptionsList barberId={barber.id} />
       </section>
     </div>

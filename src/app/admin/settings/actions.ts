@@ -1,323 +1,272 @@
-// app/admin/settings/actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
-import z from "zod";
-import { cookies } from "next/headers";
-import { jwtVerify } from "jose";
-import bcrypt from "bcryptjs";
+import { redirect } from "next/navigation";
+import { z } from "zod";
+import { Prisma } from "@prisma/client";
 
 const createAdminSchema = z.object({
-  name: z.string().min(1, "Nome é obrigatório"),
+  name: z.string().min(1, "Nome obrigatório"),
   email: z.string().email("E-mail inválido"),
-  phone: z.string().min(1, "Telefone é obrigatório"),
-  birthday: z.string().min(1, "Data de nascimento é obrigatória"),
-  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
+  phone: z.string().optional().nullable(),
+  birthday: z.string().optional().nullable(), // dd/MM/yyyy ou vazio
+  password: z.string().min(6, "Senha muito curta").optional().nullable(),
 });
 
 const updateAdminSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1, "Nome é obrigatório"),
+  userId: z.string().min(1),
+  name: z.string().min(1, "Nome obrigatório"),
   email: z.string().email("E-mail inválido"),
-  phone: z.string().min(1, "Telefone é obrigatório"),
-  birthday: z.string().nullable().optional(),
-  // senha opcional – se vier vazia, não troca
-  password: z.string().optional(),
+  phone: z.string().optional().nullable(),
+  birthday: z.string().optional().nullable(),
 });
 
-function parseBirthdayToDate(birthday: string | null | undefined): Date | null {
-  if (!birthday) return null;
+const permissionsSchema = z.object({
+  userId: z.string().min(1),
+  canAccessDashboard: z.coerce.boolean().optional(),
+  canAccessCheckout: z.coerce.boolean().optional(),
+  canAccessAppointments: z.coerce.boolean().optional(),
+  canAccessProfessionals: z.coerce.boolean().optional(),
+  canAccessServices: z.coerce.boolean().optional(),
+  canAccessReviews: z.coerce.boolean().optional(),
+  canAccessProducts: z.coerce.boolean().optional(),
+  canAccessClients: z.coerce.boolean().optional(),
+  canAccessFinance: z.coerce.boolean().optional(),
+});
 
-  const trimmed = birthday.trim();
-  if (!trimmed) return null;
+function normalizeOptionalText(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed ? trimmed : null;
+}
 
-  try {
-    if (trimmed.includes("-")) {
-      // yyyy-MM-dd
-      const [year, month, day] = trimmed.split("-");
-      return new Date(Number(year), Number(month) - 1, Number(day), 0, 0, 0);
-    }
+// Se você usa aniversário como Date no banco, aqui você pode manter simples.
+// Se vier "dd/MM/yyyy", você pode parsear depois (date-fns parse).
+function normalizeBirthday(raw: unknown): Date | null {
+  if (typeof raw !== "string") return null;
+  const v = raw.trim();
+  if (!v) return null;
 
-    if (trimmed.includes("/")) {
-      // dd/MM/yyyy
-      const [day, month, year] = trimmed.split("/");
-      return new Date(Number(year), Number(month) - 1, Number(day), 0, 0, 0);
-    }
-  } catch (e) {
-    console.error("Erro ao converter data de nascimento (admin):", e);
+  // tenta formatos básicos: yyyy-mm-dd (input type="date")
+  if (/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+    const d = new Date(`${v}T00:00:00`);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // se estiver dd/MM/yyyy
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) {
+    const [dd, mm, yyyy] = v.split("/");
+    const d = new Date(`${yyyy}-${mm}-${dd}T00:00:00`);
+    return isNaN(d.getTime()) ? null : d;
   }
 
   return null;
 }
 
-/* =======================================================
- * AUTH DO PAINEL (pega admin logado via cookie painel_session)
- * =======================================================
- */
-const SESSION_COOKIE_NAME = "painel_session";
-
-type PainelSessionPayload = {
-  sub: string;
-  role: "CLIENT" | "BARBER" | "ADMIN";
-  email: string;
-  name?: string | null;
-};
-
-function getJwtSecretKey() {
-  const secret = process.env.PAINEL_JWT_SECRET;
-  if (!secret) {
-    throw new Error("PAINEL_JWT_SECRET não definido no .env");
-  }
-  return new TextEncoder().encode(secret);
-}
-
-async function getCurrentAdminUser() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!token) return null;
-
-  try {
-    const { payload } = await jwtVerify(token, getJwtSecretKey());
-    const sessionPayload = payload as unknown as PainelSessionPayload;
-
-    if (sessionPayload.role !== "ADMIN") return null;
-
-    const admin = await prisma.user.findUnique({
-      where: { id: sessionPayload.sub },
-    });
-
-    return admin;
-  } catch (e) {
-    console.error("Erro ao validar sessão do painel:", e);
-    return null;
-  }
-}
-
-/* =======================================================
- * CRIAR ADMIN (APENAS DONO)
- * =======================================================
- */
-export async function createAdminAction(
-  formData: FormData,
-): Promise<{ error?: string; success?: true }> {
-  const currentAdmin = await getCurrentAdminUser();
-
-  if (!currentAdmin || !(currentAdmin as any).isOwner) {
-    return { error: "Apenas o dono pode criar novos administradores." };
-  }
-
-  const raw = {
-    name: formData.get("name"),
-    email: formData.get("email"),
-    phone: formData.get("phone"),
-    birthday: formData.get("birthday"),
-    password: formData.get("password"),
-  };
-
+/* ===========================
+ * CREATE ADMIN
+ * =========================== */
+export async function createAdminAction(formData: FormData) {
   const parsed = createAdminSchema.safeParse({
-    name: String(raw.name ?? ""),
-    email: String(raw.email ?? ""),
-    phone: String(raw.phone ?? ""),
-    birthday: String(raw.birthday ?? ""),
-    password: String(raw.password ?? ""),
-  });
-
-  if (!parsed.success) {
-    console.error(parsed.error.flatten().fieldErrors);
-    return { error: "Dados inválidos ao criar administrador." };
-  }
-
-  const { name, email, phone, birthday, password } = parsed.data;
-
-  const existing = await prisma.user.findUnique({
-    where: { email },
-  });
-
-  if (existing) {
-    return { error: "Já existe um usuário cadastrado com esse e-mail." };
-  }
-
-  const birthdayDate = parseBirthdayToDate(birthday);
-  const passwordHash = await bcrypt.hash(password, 10); // ajuste o campo abaixo conforme seu schema
-
-  await prisma.user.create({
-    data: {
-      name,
-      email,
-      phone,
-      birthday: birthdayDate,
-      role: "ADMIN",
-      isOwner: false,
-      isActive: true,
-      passwordHash, // se no seu schema for outro nome, troca aqui
-    },
-  });
-
-  revalidatePath("/admin/settings");
-
-  return { success: true };
-}
-
-/* =======================================================
- * EDITAR ADMIN (APENAS DONO)
- * =======================================================
- */
-export async function updateAdminAction(
-  formData: FormData,
-): Promise<{ error?: string; success?: true }> {
-  const currentAdmin = await getCurrentAdminUser();
-
-  if (!currentAdmin || !(currentAdmin as any).isOwner) {
-    return { error: "Apenas o dono pode editar administradores." };
-  }
-
-  const raw = {
-    id: formData.get("id"),
     name: formData.get("name"),
     email: formData.get("email"),
     phone: formData.get("phone"),
     birthday: formData.get("birthday"),
     password: formData.get("password"),
-  };
-
-  const parsed = updateAdminSchema.safeParse({
-    id: String(raw.id ?? ""),
-    name: String(raw.name ?? ""),
-    email: String(raw.email ?? ""),
-    phone: String(raw.phone ?? ""),
-    birthday:
-      raw.birthday != null && raw.birthday !== "" ? String(raw.birthday) : null,
-    password:
-      raw.password != null && String(raw.password).trim() !== ""
-        ? String(raw.password)
-        : undefined,
   });
 
   if (!parsed.success) {
-    console.error(parsed.error.flatten().fieldErrors);
-    return { error: "Dados inválidos ao atualizar administrador." };
-  }
-
-  const { id, name, email, phone, birthday, password } = parsed.data;
-
-  const birthdayDate = parseBirthdayToDate(birthday ?? null);
-
-  const dataToUpdate: any = {
-    name,
-    email,
-    phone,
-    birthday: birthdayDate,
-  };
-
-  if (password) {
-    dataToUpdate.passwordHash = await bcrypt.hash(password, 10);
-  }
-
-  await prisma.user.update({
-    where: { id },
-    data: dataToUpdate,
-  });
-
-  revalidatePath("/admin/settings");
-
-  return { success: true };
-}
-
-/* =======================================================
- * ATIVAR / INATIVAR ADMIN (APENAS DONO)
- * =======================================================
- */
-export async function toggleAdminStatusAction(
-  formData: FormData,
-): Promise<{ error?: string; success?: true }> {
-  const currentAdmin = await getCurrentAdminUser();
-
-  if (!currentAdmin || !(currentAdmin as any).isOwner) {
-    return { error: "Apenas o dono pode ativar ou inativar administradores." };
-  }
-
-  const userId = formData.get("userId") as string | null;
-  if (!userId) {
-    return { error: "Administrador inválido." };
-  }
-
-  const target = await prisma.user.findUnique({
-    where: { id: userId },
-  });
-
-  if (!target) {
-    return { error: "Administrador não encontrado." };
-  }
-
-  if ((target as any).isOwner) {
-    return { error: "Não é possível inativar o administrador dono." };
-  }
-
-  const isActive = (target as any).isActive ?? true;
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: {
-      isActive: !isActive,
-    },
-  });
-
-  revalidatePath("/admin/settings");
-
-  return { success: true };
-}
-
-/* =======================================================
- * ATUALIZAR PERMISSÕES
- * =======================================================
- */
-export async function updateAdminPermissions(
-  formData: FormData,
-): Promise<void> {
-  const userId = formData.get("userId") as string | null;
-  if (!userId) {
+    console.error("[createAdminAction] Validação:", parsed.error.flatten());
     return;
   }
 
-  const canAccessDashboard = formData.get("canAccessDashboard") === "on";
-  const canAccessCheckout = formData.get("canAccessCheckout") === "on";
-  const canAccessAppointments = formData.get("canAccessAppointments") === "on";
-  const canAccessProfessionals =
-    formData.get("canAccessProfessionals") === "on";
-  const canAccessServices = formData.get("canAccessServices") === "on";
-  const canAccessReviews = formData.get("canAccessReviews") === "on";
-  const canAccessProducts = formData.get("canAccessProducts") === "on";
-  const canAccessClients = formData.get("canAccessClients") === "on";
-  const canAccessFinance = formData.get("canAccessFinance") === "on";
+  const name = String(parsed.data.name).trim();
+  const email = String(parsed.data.email).trim().toLowerCase();
+  const phone = normalizeOptionalText(parsed.data.phone);
+  const birthday = normalizeBirthday(parsed.data.birthday);
 
-  await prisma.adminAccess.upsert({
-    where: { userId },
-    update: {
-      canAccessDashboard,
-      canAccessCheckout,
-      canAccessAppointments,
-      canAccessProfessionals,
-      canAccessServices,
-      canAccessReviews,
-      canAccessProducts,
-      canAccessClients,
-      canAccessFinance,
-    },
-    create: {
-      userId,
-      canAccessDashboard,
-      canAccessCheckout,
-      canAccessAppointments,
-      canAccessProfessionals,
-      canAccessServices,
-      canAccessReviews,
-      canAccessProducts,
-      canAccessClients,
-      canAccessFinance,
-    },
+  try {
+    await prisma.user.create({
+      data: {
+        name,
+        email,
+        phone,
+        birthday: birthday ?? undefined,
+        role: "ADMIN",
+        isActive: true,
+        isOwner: false,
+        adminAccess: {
+          create: {
+            canAccessDashboard: false,
+            canAccessCheckout: false,
+            canAccessAppointments: false,
+            canAccessProfessionals: false,
+            canAccessServices: false,
+            canAccessReviews: false,
+            canAccessProducts: false,
+            canAccessClients: false,
+            canAccessFinance: false,
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    revalidatePath("/admin/settings");
+    redirect("/admin/settings");
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      console.warn("[createAdminAction] Email já existe:", err.meta);
+      return;
+    }
+    console.error("[createAdminAction] Erro:", err);
+  }
+}
+
+/* ===========================
+ * UPDATE ADMIN
+ * =========================== */
+export async function updateAdminAction(formData: FormData) {
+  const parsed = updateAdminSchema.safeParse({
+    userId: formData.get("userId"),
+    name: formData.get("name"),
+    email: formData.get("email"),
+    phone: formData.get("phone"),
+    birthday: formData.get("birthday"),
   });
 
-  revalidatePath("/admin/settings");
+  if (!parsed.success) {
+    console.error("[updateAdminAction] Validação:", parsed.error.flatten());
+    return;
+  }
+
+  const userId = parsed.data.userId;
+  const name = String(parsed.data.name).trim();
+  const email = String(parsed.data.email).trim().toLowerCase();
+  const phone = normalizeOptionalText(parsed.data.phone);
+  const birthday = normalizeBirthday(parsed.data.birthday);
+
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        name,
+        email,
+        phone,
+        birthday: birthday ?? null,
+      },
+      select: { id: true },
+    });
+
+    revalidatePath("/admin/settings");
+    redirect("/admin/settings");
+  } catch (err) {
+    if (
+      err instanceof Prisma.PrismaClientKnownRequestError &&
+      err.code === "P2002"
+    ) {
+      console.warn("[updateAdminAction] Email já existe:", err.meta);
+      return;
+    }
+    console.error("[updateAdminAction] Erro:", err);
+  }
+}
+
+/* ===========================
+ * UPDATE ADMIN PERMISSIONS
+ * =========================== */
+export async function updateAdminPermissions(formData: FormData) {
+  const parsed = permissionsSchema.safeParse({
+    userId: formData.get("userId"),
+    canAccessDashboard: formData.get("canAccessDashboard"),
+    canAccessCheckout: formData.get("canAccessCheckout"),
+    canAccessAppointments: formData.get("canAccessAppointments"),
+    canAccessProfessionals: formData.get("canAccessProfessionals"),
+    canAccessServices: formData.get("canAccessServices"),
+    canAccessReviews: formData.get("canAccessReviews"),
+    canAccessProducts: formData.get("canAccessProducts"),
+    canAccessClients: formData.get("canAccessClients"),
+    canAccessFinance: formData.get("canAccessFinance"),
+  });
+
+  if (!parsed.success) {
+    console.error(
+      "[updateAdminPermissions] Validação:",
+      parsed.error.flatten(),
+    );
+    return;
+  }
+
+  const p = parsed.data;
+
+  try {
+    await prisma.adminAccess.upsert({
+      where: { userId: p.userId },
+      update: {
+        canAccessDashboard: !!p.canAccessDashboard,
+        canAccessCheckout: !!p.canAccessCheckout,
+        canAccessAppointments: !!p.canAccessAppointments,
+        canAccessProfessionals: !!p.canAccessProfessionals,
+        canAccessServices: !!p.canAccessServices,
+        canAccessReviews: !!p.canAccessReviews,
+        canAccessProducts: !!p.canAccessProducts,
+        canAccessClients: !!p.canAccessClients,
+        canAccessFinance: !!p.canAccessFinance,
+      },
+      create: {
+        userId: p.userId,
+        canAccessDashboard: !!p.canAccessDashboard,
+        canAccessCheckout: !!p.canAccessCheckout,
+        canAccessAppointments: !!p.canAccessAppointments,
+        canAccessProfessionals: !!p.canAccessProfessionals,
+        canAccessServices: !!p.canAccessServices,
+        canAccessReviews: !!p.canAccessReviews,
+        canAccessProducts: !!p.canAccessProducts,
+        canAccessClients: !!p.canAccessClients,
+        canAccessFinance: !!p.canAccessFinance,
+      },
+      select: { id: true },
+    });
+
+    revalidatePath("/admin/settings");
+  } catch (err) {
+    console.error("[updateAdminPermissions] Erro:", err);
+  }
+}
+
+/* ===========================
+ * TOGGLE ADMIN STATUS
+ * =========================== */
+export async function toggleAdminStatusAction(formData: FormData) {
+  const userId = String(formData.get("userId") || "");
+  if (!userId) return;
+
+  try {
+    const current = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { isActive: true, isOwner: true, role: true },
+    });
+
+    if (!current) return;
+
+    // Dono não desativa
+    if (current.isOwner) return;
+
+    // Só admin
+    if (current.role !== "ADMIN") return;
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { isActive: !current.isActive },
+      select: { id: true },
+    });
+
+    revalidatePath("/admin/settings");
+  } catch (err) {
+    console.error("[toggleAdminStatusAction] Erro:", err);
+  }
 }
