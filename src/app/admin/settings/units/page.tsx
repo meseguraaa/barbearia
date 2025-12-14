@@ -246,6 +246,13 @@ export default async function SettingsPage() {
     }),
   ]);
 
+  // ✅ formato que o AdminNewAdminDialog espera
+  const unitOptions = units.map((u) => ({
+    id: u.id,
+    name: u.name,
+    isActive: u.isActive,
+  }));
+
   const adminRows: AdminRow[] = admins.map((admin) => {
     const phone = (admin as any).phone as string | null | undefined;
 
@@ -563,7 +570,7 @@ export default async function SettingsPage() {
             </p>
           </div>
 
-          <AdminNewAdminDialog />
+          <AdminNewAdminDialog units={unitOptions} />
         </div>
 
         {adminRows.length === 0 ? (
@@ -575,7 +582,7 @@ export default async function SettingsPage() {
               Crie um admin para delegar acessos do painel.
             </p>
             <div className="mt-4">
-              <AdminNewAdminDialog />
+              <AdminNewAdminDialog units={unitOptions} />
             </div>
           </div>
         ) : (
