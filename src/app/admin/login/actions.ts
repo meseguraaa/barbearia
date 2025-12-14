@@ -2,28 +2,12 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { SignJWT } from "jose";
 import z from "zod";
 import bcrypt from "bcryptjs";
 import type { AdminPermissionKey } from "@/lib/admin-permissions";
 
-const SESSION_COOKIE_NAME = "painel_session";
-
-type PainelSessionPayload = {
-  sub: string;
-  role: "CLIENT" | "BARBER" | "ADMIN";
-  email: string;
-  name?: string | null;
-};
-
-function getJwtSecretKey() {
-  const secret = process.env.PAINEL_JWT_SECRET;
-  if (!secret) {
-    throw new Error("PAINEL_JWT_SECRET não definido no .env");
-  }
-  return new TextEncoder().encode(secret);
-}
+// ✅ agora o cookie/JWT é centralizado aqui
+import { createPainelSessionCookie } from "@/lib/painel-session";
 
 const loginSchema = z.object({
   email: z.string().email("E-mail inválido"),
@@ -39,20 +23,18 @@ const PERMISSION_REDIRECT_ORDER: { perm: AdminPermissionKey; path: string }[] =
     { perm: "canAccessProfessionals", path: "/admin/professionals" },
     { perm: "canAccessServices", path: "/admin/services" },
     { perm: "canAccessClients", path: "/admin/clients" },
+    { perm: "canAccessReviews", path: "/admin/reviews" },
+    { perm: "canAccessProducts", path: "/admin/products" },
     { perm: "canAccessFinance", path: "/admin/finance" },
+    { perm: "canAccessSettings", path: "/admin/settings" },
   ];
 
 export async function adminLoginAction(
   formData: FormData,
 ): Promise<{ error?: string; success?: true; redirectTo?: string }> {
-  const raw = {
-    email: formData.get("email"),
-    password: formData.get("password"),
-  };
-
   const parsed = loginSchema.safeParse({
-    email: String(raw.email ?? ""),
-    password: String(raw.password ?? ""),
+    email: String(formData.get("email") ?? ""),
+    password: String(formData.get("password") ?? ""),
   });
 
   if (!parsed.success) {
@@ -65,7 +47,7 @@ export async function adminLoginAction(
   const user = await prisma.user.findUnique({
     where: { email },
     include: {
-      adminAccess: true,
+      adminAccess: true, // ✅ aqui vem unitId (se você colocou no AdminAccess)
     },
   });
 
@@ -74,13 +56,13 @@ export async function adminLoginAction(
     return { error: "Credenciais inválidas." };
   }
 
-  // 🚫 Admin inativo não pode logar
-  if (!(user as any).isActive) {
+  // 🚫 Admin inativo não pode logar (se isActive não existir, assume ativo)
+  const isActive = (user as any).isActive;
+  if (isActive === false) {
     return { error: "Este administrador está inativo." };
   }
 
   const passwordHash = (user as any).passwordHash as string | null | undefined;
-
   if (!passwordHash) {
     return { error: "Credenciais inválidas." };
   }
@@ -91,37 +73,43 @@ export async function adminLoginAction(
   }
 
   // =====================================================
-  // JWT + COOKIE
+  // ✅ COOKIE DO PAINEL (com unitId + canSeeAllUnits)
+  // - centralizado no src/lib/painel-session.ts
+  // - para ADMIN, ele consegue resolver unitId via DB se necessário
   // =====================================================
-  const payload: PainelSessionPayload = {
-    sub: user.id,
-    role: "ADMIN",
+  const isOwner = (user as any).isOwner ?? false;
+
+  // ✅ trava: admin não-dono precisa ter unitId definido no AdminAccess
+  const unitId = (user as any)?.adminAccess?.unitId ?? null;
+
+  if (!isOwner && !unitId) {
+    return {
+      error: "Admin sem unidade vinculada. Vincule uma unidade no AdminAccess.",
+    };
+  }
+
+  // Monta um "AuthenticatedUser-like" (não precisa casar 100% no runtime)
+  await createPainelSessionCookie({
+    id: user.id,
+    role: user.role,
     email: user.email ?? "",
-    name: user.name,
-  };
+    name: user.name ?? null,
 
-  const token = await new SignJWT(payload)
-    .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime("7d")
-    .sign(getJwtSecretKey());
+    // se existir no teu schema/auth, isso ajuda na resolução
+    isOwner,
 
-  const cookieStore = await cookies();
-
-  cookieStore.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7, // 7 dias
-  });
+    // se adminAccess tiver unitId, já ajuda também (mas o painel-session consegue buscar no DB)
+    unitId,
+  } as any);
 
   // =====================================================
   // DEFINIR PRIMEIRA ROTA PERMITIDA
   // =====================================================
   let redirectTo = "/admin/dashboard";
 
-  const isOwner = (user as any).isOwner ?? false;
   const access = user.adminAccess;
 
+  // dono cai no dashboard (acesso total)
   if (!isOwner && access) {
     for (const item of PERMISSION_REDIRECT_ORDER) {
       if ((access as any)[item.perm]) {
@@ -130,8 +118,6 @@ export async function adminLoginAction(
       }
     }
   }
-
-  // dono cai no dashboard mesmo, que tem acesso total
 
   return { success: true, redirectTo };
 }

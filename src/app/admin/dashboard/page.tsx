@@ -11,6 +11,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 
 import { DatePicker } from "@/components/date-picker";
 import { DashboardDailySummary } from "@/components/dashboard-daily-summary";
@@ -33,6 +34,8 @@ type AdminDashboardPageProps = {
 };
 
 const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
+const UNIT_COOKIE_NAME = "admin_unit_context";
+const UNIT_ALL_VALUE = "all";
 
 function getSaoPauloToday(): Date {
   const now = new Date();
@@ -59,7 +62,111 @@ function parseDateParam(dateStr?: string): Date | null {
   return new Date(y, m - 1, d);
 }
 
-async function getAppointments(dateParam?: string) {
+/* =========================================================
+ * Multi-unidade: helpers de contexto + where
+ * ========================================================= */
+
+type AdminContext = {
+  id: string;
+  // compat com o que pode vir do requireAdminPermission
+  unitId?: string | null;
+  canSeeAllUnits?: boolean | null;
+  isOwner?: boolean | null;
+};
+
+/**
+ * ✅ Normaliza o contexto do admin para garantir:
+ * - saber se é dono/super admin (canSeeAllUnits)
+ * - saber unitId (admin de unidade)
+ *
+ * Faz fallback no DB caso requireAdminPermission não esteja devolvendo
+ * unitId/canSeeAllUnits ainda.
+ */
+async function normalizeAdminContext(admin: any): Promise<AdminContext> {
+  const ctx: AdminContext = {
+    id: String(admin?.id ?? ""),
+    unitId: (admin?.unitId ?? null) as string | null,
+    canSeeAllUnits:
+      typeof admin?.canSeeAllUnits === "boolean" ? admin.canSeeAllUnits : null,
+    isOwner: typeof admin?.isOwner === "boolean" ? admin.isOwner : null,
+  };
+
+  if (!ctx.id) return ctx;
+
+  const needsDb =
+    ctx.unitId == null || ctx.canSeeAllUnits == null || ctx.isOwner == null;
+
+  if (!needsDb) return ctx;
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: ctx.id },
+    select: {
+      isOwner: true,
+      adminAccess: {
+        select: {
+          // ✅ se seu schema já tem unitId em AdminAccess, vai preencher
+          // (se não tiver ainda, isso dá erro de types; mas seu schema final deve ter)
+          unitId: true as any,
+        } as any,
+      },
+    },
+  });
+
+  const dbIsOwner = dbUser?.isOwner ?? false;
+  const dbUnitId = (dbUser?.adminAccess as any)?.unitId ?? null;
+
+  return {
+    id: ctx.id,
+    isOwner: ctx.isOwner ?? dbIsOwner,
+    unitId: ctx.unitId ?? dbUnitId,
+    // regra: dono vê tudo, admin de unidade não
+    canSeeAllUnits: ctx.canSeeAllUnits ?? ctx.isOwner ?? dbIsOwner ?? false,
+  };
+}
+
+/**
+ * Resolve o "escopo" de unidade para as queries do admin.
+ * - Admin de unidade: ignora cookie e força unitId
+ * - Dono/Super admin: cookie decide (all = tudo)
+ */
+async function resolveUnitScope(admin: {
+  unitId: string | null;
+  canSeeAllUnits: boolean;
+}) {
+  // admin de unidade: sempre travado
+  if (!admin.canSeeAllUnits) {
+    return admin.unitId;
+  }
+
+  // dono: cookie decide
+  const cookieStore = await cookies();
+  const cookieValue =
+    cookieStore.get(UNIT_COOKIE_NAME)?.value ?? UNIT_ALL_VALUE;
+
+  if (!cookieValue || cookieValue === UNIT_ALL_VALUE) return null;
+  return cookieValue;
+}
+
+function whereAppointmentUnit(unitId: string | null) {
+  return unitId ? { unitId } : {};
+}
+
+// ⚠️ AppointmentReview NÃO tem unitId no seu schema.
+// Filtra via appointment.unitId.
+function whereReviewUnit(unitId: string | null) {
+  return unitId ? { appointment: { unitId } } : {};
+}
+
+// ⚠️ ProductSale NÃO tem unitId no seu schema.
+// Filtra via product.unitId.
+function whereProductSaleUnit(unitId: string | null) {
+  return unitId ? { product: { unitId } } : {};
+}
+
+async function getAppointments(
+  dateParam: string | undefined,
+  unitId: string | null,
+) {
   let baseDate: Date;
 
   if (dateParam) {
@@ -74,17 +181,11 @@ async function getAppointments(dateParam?: string) {
 
   const appointments = await prisma.appointment.findMany({
     where: {
-      scheduleAt: {
-        gte: start,
-        lte: end,
-      },
+      scheduleAt: { gte: start, lte: end },
+      ...whereAppointmentUnit(unitId),
     },
-    orderBy: {
-      scheduleAt: "asc",
-    },
-    include: {
-      service: true,
-    },
+    orderBy: { scheduleAt: "asc" },
+    include: { service: true },
   });
 
   return appointments;
@@ -94,7 +195,22 @@ export default async function AdminDashboardPage({
   searchParams,
 }: AdminDashboardPageProps) {
   // 🔐 Permissão: apenas quem tem "Dashboard" liberado (ou Dono)
-  await requireAdminPermission("canAccessDashboard");
+  const rawAdmin = await requireAdminPermission("canAccessDashboard");
+  const admin = await normalizeAdminContext(rawAdmin);
+
+  // ✅ Segurança: admin de unidade precisa ter unitId
+  if (!admin.canSeeAllUnits && !admin.unitId) {
+    // melhor falhar duro do que “vazar visão geral”
+    throw new Error(
+      "Admin de unidade sem unitId definido. Vincule este admin a uma unidade.",
+    );
+  }
+
+  // ✅ Resolve o escopo de unidade para TODAS as consultas desse dashboard
+  const activeUnitId = await resolveUnitScope({
+    unitId: admin.unitId ?? null,
+    canSeeAllUnits: !!admin.canSeeAllUnits,
+  });
 
   const resolvedSearchParams = await searchParams;
   const dateParam = resolvedSearchParams.date;
@@ -131,66 +247,58 @@ export default async function AdminDashboardPage({
     // 🔹 pedidos (Order + OrderItem) para o gráfico Produtos x Serviços
     monthOrdersPrisma,
   ] = await Promise.all([
-    getAppointments(dateParam),
+    getAppointments(dateParam, activeUnitId),
+
     prisma.appointment.findMany({
       where: {
         status: "DONE",
-        scheduleAt: {
-          gte: monthStart,
-          lte: monthEnd,
-        },
+        scheduleAt: { gte: monthStart, lte: monthEnd },
+        ...whereAppointmentUnit(activeUnitId),
       },
-      include: {
-        service: true,
-      },
+      include: { service: true },
     }),
+
     prisma.appointment.findMany({
       where: {
         status: "CANCELED",
-        scheduleAt: {
-          gte: monthStart,
-          lte: monthEnd,
-        },
+        scheduleAt: { gte: monthStart, lte: monthEnd },
+        ...whereAppointmentUnit(activeUnitId),
       },
     }),
+
     prisma.expense.findMany({
       where: {
-        dueDate: {
-          gte: monthStart,
-          lte: monthEnd,
-        },
+        dueDate: { gte: monthStart, lte: monthEnd },
+        ...(activeUnitId ? { unitId: activeUnitId } : {}),
       },
     }),
+
     prisma.productSale.findMany({
       where: {
-        soldAt: {
-          gte: dayStart,
-          lte: dayEnd,
-        },
+        soldAt: { gte: dayStart, lte: dayEnd },
+        ...whereProductSaleUnit(activeUnitId),
       },
       include: {
         product: true,
         barber: true,
       },
     }),
+
     prisma.productSale.findMany({
       where: {
-        soldAt: {
-          gte: monthStart,
-          lte: monthEnd,
-        },
+        soldAt: { gte: monthStart, lte: monthEnd },
+        ...whereProductSaleUnit(activeUnitId),
       },
       include: {
         product: true,
         barber: true,
       },
     }),
+
     prisma.appointmentReview.findMany({
       where: {
-        createdAt: {
-          gte: monthStart,
-          lte: monthEnd,
-        },
+        createdAt: { gte: monthStart, lte: monthEnd },
+        ...whereReviewUnit(activeUnitId),
       },
       include: {
         barber: true,
@@ -207,45 +315,42 @@ export default async function AdminDashboardPage({
         },
       },
     }),
+
     prisma.appointmentReview.findMany({
-      select: {
-        rating: true,
+      where: {
+        ...whereReviewUnit(activeUnitId),
       },
+      select: { rating: true },
     }),
+
     prisma.appointment.findMany({
       where: {
         status: "DONE",
-        scheduleAt: {
-          gte: previousMonthStart,
-          lte: previousMonthEnd,
-        },
+        scheduleAt: { gte: previousMonthStart, lte: previousMonthEnd },
+        ...whereAppointmentUnit(activeUnitId),
       },
-      include: {
-        service: true,
-      },
+      include: { service: true },
     }),
+
     prisma.productSale.findMany({
       where: {
-        soldAt: {
-          gte: previousMonthStart,
-          lte: previousMonthEnd,
-        },
+        soldAt: { gte: previousMonthStart, lte: previousMonthEnd },
+        ...whereProductSaleUnit(activeUnitId),
       },
       include: {
         product: true,
         barber: true,
       },
     }),
+
     prisma.order.findMany({
       where: {
         status: "COMPLETED",
-        createdAt: {
-          gte: monthStart,
-          lte: monthEnd,
-        },
+        createdAt: { gte: monthStart, lte: monthEnd },
+        ...(activeUnitId ? { unitId: activeUnitId } : {}),
       },
       include: {
-        items: true, // OrderItem[]
+        items: true,
       },
     }),
   ]);
@@ -562,7 +667,7 @@ export default async function AdminDashboardPage({
     .slice(0, 5);
 
   // 🔹 Distribuição de notas (1 a 5) no mês
-  const ratingBuckets = [0, 0, 0, 0, 0]; // índices 0–4 => notas 1–5
+  const ratingBuckets = [0, 0, 0, 0, 0];
 
   for (const review of allReviewsPrisma) {
     const r = review.rating;

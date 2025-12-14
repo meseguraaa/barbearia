@@ -1,6 +1,7 @@
 // app/admin/checkout/page.tsx
 import { prisma } from "@/lib/prisma";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 
 import { OrderStatusBadge } from "@/components/order-status-badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,9 @@ type AdminCheckoutPageProps = {
   }>;
 };
 
+const UNIT_COOKIE_NAME = "admin_unit_context";
+const UNIT_ALL_VALUE = "all";
+
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -78,11 +82,48 @@ function getOrderClientKey(order: {
   return order.appointment?.clientId ?? order.clientId ?? null;
 }
 
+/**
+ * Resolve o "escopo" de unidade para as queries do admin.
+ * - Dono: respeita cookie (all = tudo)
+ * - Admin de unidade: ignora cookie e força unitId do admin
+ */
+async function resolveUnitScope(admin: {
+  unitId: string | null;
+  canSeeAllUnits: boolean;
+}) {
+  if (!admin.canSeeAllUnits) return admin.unitId;
+
+  const cookieStore = await cookies();
+  const cookieValue =
+    cookieStore.get(UNIT_COOKIE_NAME)?.value ?? UNIT_ALL_VALUE;
+
+  if (!cookieValue || cookieValue === UNIT_ALL_VALUE) return null;
+  return cookieValue;
+}
+
+/**
+ * Helper pra aplicar unitId sem espalhar if em todo lugar.
+ * (Assumindo que os models já tenham unitId no schema multi-unidade.)
+ */
+function withUnitWhere<T extends Record<string, any>>(
+  base: T,
+  unitId: string | null,
+) {
+  if (!unitId) return base;
+  return { ...(base as any), unitId } as T;
+}
+
 export default async function AdminCheckoutPage({
   searchParams,
 }: AdminCheckoutPageProps) {
   // 🔐 Permissão: apenas quem tem "Checkout" liberado (ou Dono)
-  await requireAdminPermission("canAccessCheckout");
+  const admin = (await requireAdminPermission("canAccessCheckout")) as any;
+
+  // ✅ Unidade ativa para TODAS as queries do checkout
+  const activeUnitId = await resolveUnitScope({
+    unitId: admin?.unitId ?? null,
+    canSeeAllUnits: !!admin?.canSeeAllUnits,
+  });
 
   const resolvedSearchParams = await searchParams;
   const monthParam = resolvedSearchParams.month;
@@ -101,12 +142,22 @@ export default async function AdminCheckoutPage({
   const pageSize = clamp(rawPageSize, 5, 100);
 
   const ordersMonthWhere = {
-    createdAt: {
-      gte: monthStart,
-      lte: monthEnd,
-    },
+    createdAt: { gte: monthStart, lte: monthEnd },
     status: "COMPLETED",
-  } as const;
+
+    ...(activeUnitId
+      ? {
+          items: {
+            some: {
+              OR: [
+                { product: { unitId: activeUnitId } },
+                { service: { unitId: activeUnitId } },
+              ],
+            },
+          },
+        }
+      : {}),
+  };
 
   const [
     // 🔹 Pedidos de produtos aguardando retirada (fluxo antigo)
@@ -121,12 +172,12 @@ export default async function AdminCheckoutPage({
         status: "PENDING_CHECKIN",
         items: {
           some: {
-            productId: {
-              not: null,
-            },
+            productId: { not: null },
+            ...(activeUnitId ? { product: { unitId: activeUnitId } } : {}),
           },
         },
-      },
+      } as any,
+
       orderBy: {
         createdAt: "desc",
       },
@@ -145,12 +196,12 @@ export default async function AdminCheckoutPage({
         status: "PENDING",
         items: {
           some: {
-            serviceId: {
-              not: null,
-            },
+            serviceId: { not: null },
+            ...(activeUnitId ? { service: { unitId: activeUnitId } } : {}),
           },
         },
-      },
+      } as any,
+
       orderBy: {
         createdAt: "desc",
       },
@@ -173,12 +224,18 @@ export default async function AdminCheckoutPage({
     }),
 
     prisma.barber.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
+      where: {
+        isActive: true,
+        ...(activeUnitId
+          ? {
+              units: {
+                some: { unitId: activeUnitId, isActive: true },
+              },
+            }
+          : {}),
       },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
     }),
   ]);
 
@@ -186,7 +243,7 @@ export default async function AdminCheckoutPage({
 
   // ⭐ total count do mês (para paginação)
   const ordersForMonthCount = await prisma.order.count({
-    where: ordersMonthWhere,
+    where: ordersMonthWhere as any,
   });
 
   const totalPages = Math.max(1, Math.ceil(ordersForMonthCount / pageSize));
@@ -194,7 +251,7 @@ export default async function AdminCheckoutPage({
 
   // ⭐ pedidos do mês paginados (usando page já "safe")
   const ordersForMonth = await prisma.order.findMany({
-    where: ordersMonthWhere,
+    where: ordersMonthWhere as any,
     include: {
       client: true,
       barber: true,
@@ -565,10 +622,7 @@ export default async function AdminCheckoutPage({
                                   <p className="text-paragraph-small text-content-secondary">
                                     Criado em {createdAtStr}
                                   </p>
-                                  <p
-                                    className="text-paragraph-small text
-                                    text-content-secondary"
-                                  >
+                                  <p className="text-paragraph-small text-content-secondary">
                                     Produtos: {itemsLabel || "—"}
                                   </p>
                                 </div>
@@ -944,7 +998,6 @@ function OrdersSection({
   }
 
   function getClientKey(order: (typeof orders)[number]) {
-    // ✅ se for serviço, appointment manda na chave
     const key = getOrderClientKey(order);
     return key ?? `no-client:${getClientLabel(order)}`;
   }
@@ -1083,7 +1136,6 @@ function OrdersSection({
                       <span className="text-paragraph-small font-semibold text-content-primary">
                         Total no mês: {totalStr}
                       </span>
-                      {/* Status aqui é apenas visual do grupo */}
                       <OrderStatusBadge status={"COMPLETED" as OrderStatus} />
                     </div>
                   </div>

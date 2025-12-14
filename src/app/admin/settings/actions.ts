@@ -1,3 +1,4 @@
+// app/admin/settings/actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
@@ -10,6 +11,10 @@ type ActionResult = { ok: true } | { ok: false; error: string };
 const createAdminSchema = z.object({
   name: z.string().min(1, "Nome obrigatório"),
   email: z.string().email("E-mail inválido"),
+
+  // ✅ obrigatório para separar visões por unidade
+  unitId: z.string().min(1, "Unidade obrigatória"),
+
   phone: z.string().optional().nullable(),
   birthday: z.string().optional().nullable(), // dd/MM/yyyy ou yyyy-mm-dd
   password: z.string().min(6, "Senha muito curta").optional().nullable(),
@@ -74,18 +79,22 @@ function normalizeBirthday(raw: unknown): Date | null {
 function firstZodErrorMessage(err: z.ZodError): string {
   const flat = err.flatten();
 
-  // erro geral do formulário
   const formError = flat.formErrors.find(
     (m): m is string => typeof m === "string" && m.trim().length > 0,
   );
   if (formError) return formError;
 
-  // primeiro erro de campo
   const fieldError = Object.values(flat.fieldErrors)
     .flatMap((arr) => (Array.isArray(arr) ? arr : []))
     .find((m): m is string => typeof m === "string" && m.trim().length > 0);
 
   return fieldError ?? "Dados inválidos";
+}
+
+function looksLikeUnknownFieldError(err: unknown, field: string) {
+  const msg = String((err as any)?.message ?? "");
+  // Prisma varia a mensagem dependendo da versão
+  return msg.includes("Unknown arg") && msg.includes(`\`${field}\``);
 }
 
 /* =========================================================
@@ -98,6 +107,7 @@ export async function createAdminAction(
   const parsed = createAdminSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
+    unitId: formData.get("unitId"),
     phone: formData.get("phone"),
     birthday: formData.get("birthday"),
     password: formData.get("password"),
@@ -110,34 +120,72 @@ export async function createAdminAction(
 
   const name = String(parsed.data.name).trim();
   const email = String(parsed.data.email).trim().toLowerCase();
+  const unitId = String(parsed.data.unitId).trim();
+
   const phone = normalizeOptionalText(parsed.data.phone);
   const birthday = normalizeBirthday(parsed.data.birthday);
 
   try {
-    await prisma.user.create({
-      data: {
-        name,
-        email,
-        phone,
-        birthday: birthday ?? undefined,
-        role: "ADMIN",
-        isActive: true,
-        isOwner: false,
-        adminAccess: {
-          create: {
-            canAccessDashboard: false,
-            canAccessCheckout: false,
-            canAccessAppointments: false,
-            canAccessProfessionals: false,
-            canAccessServices: false,
-            canAccessReviews: false,
-            canAccessProducts: false,
-            canAccessClients: false,
-            canAccessFinance: false,
-          },
+    // ✅ garante que a unidade existe (evita salvar id lixo)
+    const unit = await prisma.unit.findUnique({
+      where: { id: unitId },
+      select: { id: true, isActive: true },
+    });
+
+    if (!unit) {
+      return { ok: false, error: "Unidade não encontrada." };
+    }
+
+    // Se você quiser proibir admin em unidade inativa:
+    // if (!unit.isActive) return { ok: false, error: "Unidade está inativa." };
+
+    await prisma.$transaction(async (tx) => {
+      // 1) cria o usuário ADMIN
+      const created = await tx.user.create({
+        data: {
+          name,
+          email,
+          phone,
+          birthday: birthday ?? undefined,
+          role: "ADMIN",
+          isActive: true,
+          isOwner: false,
         },
-      },
-      select: { id: true },
+        select: { id: true },
+      });
+
+      // 2) cria o adminAccess com permissões default
+      //    tenta gravar unitId junto (se teu schema tiver esse campo)
+      const baseAccess = {
+        userId: created.id,
+        canAccessDashboard: false,
+        canAccessCheckout: false,
+        canAccessAppointments: false,
+        canAccessProfessionals: false,
+        canAccessServices: false,
+        canAccessReviews: false,
+        canAccessProducts: false,
+        canAccessClients: false,
+        canAccessFinance: false,
+      };
+
+      try {
+        await tx.adminAccess.create({
+          data: {
+            ...baseAccess,
+            unitId, // ✅ vínculo (se existir)
+          } as any,
+          select: { id: true },
+        });
+      } catch (err) {
+        // fallback: se adminAccess não tem unitId ainda, não quebra o create
+        if (!looksLikeUnknownFieldError(err, "unitId")) throw err;
+
+        await tx.adminAccess.create({
+          data: baseAccess as any,
+          select: { id: true },
+        });
+      }
     });
 
     revalidatePath("/admin/settings");
@@ -298,10 +346,7 @@ export async function toggleAdminStatusAction(
     }
 
     if (current.role !== "ADMIN") {
-      return {
-        ok: false,
-        error: "Apenas usuários ADMIN podem ser alterados.",
-      };
+      return { ok: false, error: "Apenas usuários ADMIN podem ser alterados." };
     }
 
     await prisma.user.update({

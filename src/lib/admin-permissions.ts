@@ -1,28 +1,8 @@
 // src/lib/admin-permissions.ts
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
-import { jwtVerify } from "jose";
 
 import { prisma } from "./prisma";
-
-const SESSION_COOKIE_NAME = "painel_session";
-
-type PainelRole = "CLIENT" | "BARBER" | "ADMIN";
-
-type PainelSessionPayload = {
-  sub: string; // id do user
-  role: PainelRole;
-  email: string;
-  name?: string | null;
-};
-
-function getJwtSecretKey() {
-  const secret = process.env.PAINEL_JWT_SECRET;
-  if (!secret) {
-    throw new Error("PAINEL_JWT_SECRET não definido no .env");
-  }
-  return new TextEncoder().encode(secret);
-}
+import { getCurrentPainelUser } from "./painel-session";
 
 export type AdminModule =
   | "DASHBOARD"
@@ -31,7 +11,8 @@ export type AdminModule =
   | "CLIENTS"
   | "PROFESSIONALS"
   | "SERVICES"
-  | "PLANS"
+  | "REVIEWS"
+  | "PRODUCTS"
   | "FINANCE"
   | "SETTINGS";
 
@@ -39,8 +20,14 @@ export type AdminWithPermissions = {
   id: string;
   name: string;
   email: string;
+
+  // já existia
   isOwner: boolean;
   modules: AdminModule[];
+
+  // ✅ multi-unidade (novo)
+  unitId: string | null;
+  canSeeAllUnits: boolean;
 };
 
 export const ALL_ADMIN_MODULES: AdminModule[] = [
@@ -50,7 +37,8 @@ export const ALL_ADMIN_MODULES: AdminModule[] = [
   "CLIENTS",
   "PROFESSIONALS",
   "SERVICES",
-  "PLANS",
+  "REVIEWS",
+  "PRODUCTS",
   "FINANCE",
   "SETTINGS",
 ];
@@ -63,22 +51,26 @@ export type AdminPermissionKey =
   | "canAccessClients"
   | "canAccessProfessionals"
   | "canAccessServices"
-  | "canAccessPlans"
+  | "canAccessReviews"
+  | "canAccessProducts"
   | "canAccessFinance"
   | "canAccessSettings";
 
-// estrutura esperada do adminAccess (ajusta se tiver algum campo a mais)
 type AdminAccess = {
-  isActive: boolean;
+  // ✅ multi-unidade (se já tiver no schema/migration)
+  unitId?: string | null;
+
   canAccessDashboard?: boolean;
   canAccessAppointments?: boolean;
   canAccessCheckout?: boolean;
   canAccessClients?: boolean;
   canAccessProfessionals?: boolean;
   canAccessServices?: boolean;
-  canAccessPlans?: boolean;
   canAccessFinance?: boolean;
-  canAccessSettings?: boolean;
+
+  // (no seu schema atual existem também:)
+  canAccessReviews?: boolean;
+  canAccessProducts?: boolean;
 };
 
 /**
@@ -97,33 +89,13 @@ function deriveModulesFromAdminAccess(
   if (access.canAccessClients) modules.push("CLIENTS");
   if (access.canAccessProfessionals) modules.push("PROFESSIONALS");
   if (access.canAccessServices) modules.push("SERVICES");
-  if (access.canAccessPlans) modules.push("PLANS");
+  if (access.canAccessReviews) modules.push("REVIEWS");
+  if (access.canAccessProducts) modules.push("PRODUCTS");
   if (access.canAccessFinance) modules.push("FINANCE");
-  if (access.canAccessSettings) modules.push("SETTINGS");
+  // SETTINGS é regra “de sistema” (geralmente só dono ou admin especial)
+  // Se você quiser SETTINGS por permissão, aí a gente adiciona no schema depois.
 
   return modules;
-}
-
-/**
- * Lê o JWT do cookie painel_session.
- * Se não tiver cookie ou JWT inválido → null (versão "suave").
- */
-async function getPainelSessionPayloadSafe(): Promise<PainelSessionPayload | null> {
-  const cookieStore = await cookies();
-  const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!sessionToken) return null;
-
-  try {
-    const { payload } = await jwtVerify<PainelSessionPayload>(
-      sessionToken,
-      getJwtSecretKey(),
-    );
-    return payload;
-  } catch (err) {
-    console.error("Erro ao verificar painel_session:", err);
-    return null;
-  }
 }
 
 /**
@@ -131,14 +103,14 @@ async function getPainelSessionPayloadSafe(): Promise<PainelSessionPayload | nul
  * Usa painel_session (não NextAuth).
  */
 export async function requireAdminWithPermissions(): Promise<AdminWithPermissions> {
-  const payload = await getPainelSessionPayloadSafe();
+  const payload = await getCurrentPainelUser();
 
   if (!payload) {
-    redirect("/admin/login");
+    redirect("/painel/login");
   }
 
   if (payload.role !== "ADMIN") {
-    redirect("/admin/login");
+    redirect("/painel/login?error=permissao");
   }
 
   // Carrega o usuário + adminAccess
@@ -150,11 +122,19 @@ export async function requireAdminWithPermissions(): Promise<AdminWithPermission
   });
 
   if (!user || !user.isActive) {
-    redirect("/admin/login");
+    redirect("/painel/login");
   }
 
   const isOwner = !!user.isOwner;
-  const adminAccess = (user as any).adminAccess as AdminAccess | null;
+  const adminAccess = user.adminAccess as unknown as AdminAccess | null;
+  const unitId = adminAccess?.unitId ?? null;
+
+  // ✅ Regra multi-unidade:
+  // - Dono vê tudo
+  // - Admin não-dono precisa ter unitId (senão não entra no painel)
+  if (!isOwner && !unitId) {
+    redirect("/painel/login?error=permissao");
+  }
 
   // Dono SEMPRE tem acesso a tudo
   if (isOwner) {
@@ -164,12 +144,10 @@ export async function requireAdminWithPermissions(): Promise<AdminWithPermission
       email: user.email ?? payload.email,
       isOwner: true,
       modules: ALL_ADMIN_MODULES,
-    };
-  }
 
-  // Se existe registro de adminAccess e ele estiver marcado como inativo
-  if (adminAccess && adminAccess.isActive === false) {
-    redirect("/admin/login?error=inativo");
+      unitId: null,
+      canSeeAllUnits: true,
+    };
   }
 
   const modulesFromAccess = deriveModulesFromAdminAccess(adminAccess);
@@ -184,6 +162,9 @@ export async function requireAdminWithPermissions(): Promise<AdminWithPermission
     email: user.email ?? payload.email,
     isOwner: false,
     modules,
+
+    unitId,
+    canSeeAllUnits: false,
   };
 }
 
@@ -192,7 +173,8 @@ export async function requireAdminWithPermissions(): Promise<AdminWithPermission
  * Usada em layout/menu/cabeçalho. Se não tiver admin logado, retorna null.
  */
 export async function getOptionalAdminWithPermissions(): Promise<AdminWithPermissions | null> {
-  const payload = await getPainelSessionPayloadSafe();
+  const payload = await getCurrentPainelUser();
+
   if (!payload || payload.role !== "ADMIN") {
     return null;
   }
@@ -209,7 +191,12 @@ export async function getOptionalAdminWithPermissions(): Promise<AdminWithPermis
   }
 
   const isOwner = !!user.isOwner;
-  const adminAccess = (user as any).adminAccess as AdminAccess | null;
+  const adminAccess = user.adminAccess as unknown as AdminAccess | null;
+  const unitId = adminAccess?.unitId ?? null;
+
+  if (!isOwner && !unitId) {
+    return null;
+  }
 
   if (isOwner) {
     return {
@@ -218,11 +205,10 @@ export async function getOptionalAdminWithPermissions(): Promise<AdminWithPermis
       email: user.email ?? payload.email,
       isOwner: true,
       modules: ALL_ADMIN_MODULES,
-    };
-  }
 
-  if (adminAccess && adminAccess.isActive === false) {
-    return null;
+      unitId: null,
+      canSeeAllUnits: true,
+    };
   }
 
   const modulesFromAccess = deriveModulesFromAdminAccess(adminAccess);
@@ -236,6 +222,9 @@ export async function getOptionalAdminWithPermissions(): Promise<AdminWithPermis
     email: user.email ?? payload.email,
     isOwner: false,
     modules,
+
+    unitId,
+    canSeeAllUnits: false,
   };
 }
 
@@ -250,14 +239,16 @@ export function getAdminDefaultPath(admin: AdminWithPermissions): string {
     { module: "CLIENTS", path: "/admin/clients" },
     { module: "PROFESSIONALS", path: "/admin/professionals" },
     { module: "SERVICES", path: "/admin/services" },
-    { module: "PLANS", path: "/admin/plans" },
+    { module: "REVIEWS", path: "/admin/reviews" },
+    { module: "PRODUCTS", path: "/admin/products" },
     { module: "FINANCE", path: "/admin/finance" },
+
     { module: "SETTINGS", path: "/admin/settings" },
   ];
 
   const found = priority.find((item) => admin.modules.includes(item.module));
 
-  return found?.path ?? "/admin/login";
+  return found?.path ?? "/painel/login";
 }
 
 /**
@@ -286,7 +277,8 @@ export async function requireAdminPermission(permissionKey: string) {
     canAccessClients: "CLIENTS",
     canAccessProfessionals: "PROFESSIONALS",
     canAccessServices: "SERVICES",
-    canAccessPlans: "PLANS",
+    canAccessReviews: "REVIEWS",
+    canAccessProducts: "PRODUCTS",
     canAccessFinance: "FINANCE",
     canAccessSettings: "SETTINGS",
   };

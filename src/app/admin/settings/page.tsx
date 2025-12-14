@@ -16,9 +16,6 @@ import { AdminPermissionsForm } from "@/components/admin-permissions-form";
 import { AdminEditAdminDialog } from "@/components/admin-edit-admin-dialog";
 import { AdminToggleAdminStatusButton } from "@/components/admin-toggle-admin-status-button";
 
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-
 import { UnitNewDialog } from "@/components/unit-new-dialog";
 
 import type { UnitWeeklyAvailabilityState } from "@/components/unit-weekly-availability-form/unit-weekly-availability-form";
@@ -101,6 +98,13 @@ export default async function SettingsPage() {
 
   const activeUnits = units.filter((u) => u.isActive);
   const inactiveUnits = units.filter((u) => !u.isActive);
+
+  // ✅ opções de unidades para o modal de novo admin
+  const unitsForAdminDialog = units.map((u) => ({
+    id: u.id,
+    name: u.name,
+    isActive: u.isActive,
+  }));
 
   const adminRows: AdminRow[] = admins.map((admin) => {
     const phone = (admin as any).phone as string | null | undefined;
@@ -300,13 +304,13 @@ export default async function SettingsPage() {
                             </p>
                           </div>
 
+                          {/* Badge aqui já tá ok no seu código (verde) */}
                           <div className="hidden md:flex items-center gap-2">
-                            <Badge
-                              variant="outline"
+                            <span
                               className={
                                 openDaysCount > 0
-                                  ? "border border-green-500 bg-green-100/10 text-green-500"
-                                  : ""
+                                  ? "rounded-full border border-green-500 bg-green-100/10 px-2 py-1 text-xs text-green-500"
+                                  : "rounded-full border border-border-primary bg-background-secondary px-2 py-1 text-xs text-content-secondary"
                               }
                             >
                               {openDaysCount === 0
@@ -314,7 +318,7 @@ export default async function SettingsPage() {
                                 : openDaysCount === 1
                                   ? "1 dia com horário"
                                   : `${openDaysCount} dias com horário`}
-                            </Badge>
+                            </span>
                           </div>
                         </AccordionTrigger>
 
@@ -389,7 +393,7 @@ export default async function SettingsPage() {
               </Accordion>
             )}
 
-            {/* INATIVAS (igual “Profissionais inativos”) */}
+            {/* INATIVAS */}
             <div className="pt-6 space-y-3">
               <div>
                 <h3 className="text-paragraph-medium font-semibold text-content-primary">
@@ -455,7 +459,8 @@ export default async function SettingsPage() {
             </p>
           </div>
 
-          <AdminNewAdminDialog />
+          {/* ✅ passa units */}
+          <AdminNewAdminDialog units={unitsForAdminDialog} />
         </div>
 
         {adminRows.length === 0 ? (
@@ -467,7 +472,8 @@ export default async function SettingsPage() {
               Crie um admin para delegar acessos do painel.
             </p>
             <div className="mt-4">
-              <AdminNewAdminDialog />
+              {/* ✅ passa units */}
+              <AdminNewAdminDialog units={unitsForAdminDialog} />
             </div>
           </div>
         ) : (

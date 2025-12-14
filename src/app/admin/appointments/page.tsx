@@ -2,6 +2,7 @@
 import { prisma } from "@/lib/prisma";
 import { startOfDay, endOfDay } from "date-fns";
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 
 import { DatePicker } from "@/components/date-picker";
 import type { Appointment as AppointmentType } from "@/types/appointment";
@@ -26,6 +27,8 @@ type AdminAppointmentsPageProps = {
 };
 
 const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
+const UNIT_COOKIE_NAME = "admin_unit_context";
+const UNIT_ALL_VALUE = "all";
 
 function getSaoPauloToday(): Date {
   const now = new Date();
@@ -52,7 +55,41 @@ function parseDateParam(dateStr?: string): Date | null {
   return new Date(y, m - 1, d);
 }
 
-async function getAppointments(dateParam?: string) {
+/**
+ * Resolve o "escopo" de unidade para as queries do admin.
+ * - Dono: respeita cookie (all = tudo)
+ * - Admin de unidade: ignora cookie e força unitId do admin
+ */
+async function resolveUnitScope(admin: {
+  unitId: string | null;
+  canSeeAllUnits: boolean;
+}) {
+  if (!admin.canSeeAllUnits) return admin.unitId;
+
+  const cookieStore = await cookies();
+  const cookieValue =
+    cookieStore.get(UNIT_COOKIE_NAME)?.value ?? UNIT_ALL_VALUE;
+
+  if (!cookieValue || cookieValue === UNIT_ALL_VALUE) return null;
+  return cookieValue;
+}
+
+/**
+ * Helper pra aplicar unitId sem espalhar if em todo lugar.
+ * (Só use onde o model realmente tem unitId.)
+ */
+function withUnitWhere<T extends Record<string, any>>(
+  base: T,
+  unitId: string | null,
+) {
+  if (!unitId) return base;
+  return { ...(base as any), unitId } as T;
+}
+
+async function getAppointments(
+  dateParam: string | undefined,
+  unitId: string | null,
+) {
   let baseDate: Date;
 
   if (dateParam) {
@@ -66,12 +103,15 @@ async function getAppointments(dateParam?: string) {
   const end = endOfDay(baseDate);
 
   const appointments = await prisma.appointment.findMany({
-    where: {
-      scheduleAt: {
-        gte: start,
-        lte: end,
+    where: withUnitWhere(
+      {
+        scheduleAt: {
+          gte: start,
+          lte: end,
+        },
       },
-    },
+      unitId,
+    ) as any,
     orderBy: {
       scheduleAt: "asc",
     },
@@ -94,10 +134,24 @@ async function getAppointments(dateParam?: string) {
   return appointments;
 }
 
-async function getBarbers() {
+/**
+ * ✅ Barber NÃO tem unitId direto (ele é N:N via BarberUnit).
+ * Então o filtro por unidade é: units.some({ unitId, isActive:true })
+ */
+async function getBarbers(unitId: string | null) {
   const barbers = await prisma.barber.findMany({
     where: {
       isActive: true,
+      ...(unitId
+        ? {
+            units: {
+              some: {
+                unitId,
+                isActive: true,
+              },
+            },
+          }
+        : {}),
     },
     orderBy: { name: "asc" },
   });
@@ -105,9 +159,9 @@ async function getBarbers() {
   return barbers;
 }
 
-async function getServices(): Promise<Service[]> {
+async function getServices(unitId: string | null): Promise<Service[]> {
   const services = await prisma.service.findMany({
-    where: { isActive: true },
+    where: withUnitWhere({ isActive: true }, unitId) as any,
     orderBy: { name: "asc" },
   });
 
@@ -171,7 +225,13 @@ function mapToAppointmentType(prismaAppt: any): AppointmentType {
 export default async function AdminAppointmentsPage({
   searchParams,
 }: AdminAppointmentsPageProps) {
-  await requireAdminPermission("canAccessAppointments");
+  const admin = await requireAdminPermission("canAccessAppointments");
+
+  // ✅ Unidade ativa para todas as queries
+  const activeUnitId = await resolveUnitScope({
+    unitId: admin.unitId ?? null,
+    canSeeAllUnits: !!admin.canSeeAllUnits,
+  });
 
   const resolvedSearchParams = await searchParams;
   const dateParam = resolvedSearchParams.date;
@@ -192,15 +252,26 @@ export default async function AdminAppointmentsPage({
     dayProductSalesPrisma,
     clientsForAdmin,
   ] = await Promise.all([
-    getAppointments(dateParam),
-    getBarbers(),
-    getServices(),
+    getAppointments(dateParam, activeUnitId),
+    getBarbers(activeUnitId),
+    getServices(activeUnitId),
+
+    // ✅ ProductSale NÃO tem unitId direto (na modelagem original),
+    // então filtramos pela unidade via product.unitId.
     prisma.productSale.findMany({
       where: {
         soldAt: { gte: dayStart, lte: dayEnd },
-      },
+        ...(activeUnitId
+          ? {
+              product: {
+                unitId: activeUnitId,
+              },
+            }
+          : {}),
+      } as any,
       include: { product: true, barber: true },
     }),
+
     getClientsForAdminAppointments(),
   ]);
 
@@ -320,7 +391,6 @@ export default async function AdminAppointmentsPage({
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {/* ✅ Botão SEMPRE renderiza (não depende do DatePicker nem de hidratação frágil) */}
           <AdminNewAppointmentButton
             clients={clientsForAdmin}
             appointments={appointmentsForForm}

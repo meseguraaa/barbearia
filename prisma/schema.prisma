@@ -179,6 +179,9 @@ model Unit {
   orders       Order[]
   expenses     Expense[]
 
+  // ✅ NOVO: admins vinculados via AdminAccess
+  adminAccesses AdminAccess[]
+
   createdAt                  DateTime                   @default(now())
   updatedAt                  DateTime                   @updatedAt
   barberWeeklyAvailabilities BarberWeeklyAvailability[]
@@ -768,7 +771,7 @@ model AppointmentReviewTag {
   review   AppointmentReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
 
   tagId String
-  tag   ReviewTag @relation(fields: [tagId], references: [id])
+  tag   ReviewTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -786,7 +789,12 @@ model AdminAccess {
   id String @id @default(cuid())
 
   userId String @unique
-  user   User   @relation(fields: [userId], references: [id])
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // ✅ NOVO: unidade do admin (admin de unidade)
+  // - pode ser null pro DONO (User.isOwner = true) ver todas
+  unitId String?
+  unit   Unit?   @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
   // 🔹 Módulos principais do painel
   canAccessDashboard     Boolean @default(false)
@@ -801,4 +809,6 @@ model AdminAccess {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([unitId])
 }
