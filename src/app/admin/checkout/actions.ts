@@ -140,8 +140,8 @@ export async function finalizeClientOpenOrders(formData: FormData) {
           await tx.productSale.create({
             data: {
               productId: item.productId,
-              barberId: barberId!, // aqui já garantimos que existe
-              unitId: order.unitId, // ✅ essencial p/ filtros por unidade
+              barberId: barberId!,
+              unitId: order.unitId ?? undefined,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               totalPrice: item.totalPrice,
@@ -242,8 +242,8 @@ export async function finalizeProductOrder(formData: FormData) {
         await tx.productSale.create({
           data: {
             productId: item.productId,
-            barberId,
-            unitId: order.unitId, // ✅ multi-unidade
+            barberId: barberId!,
+            unitId: order.unitId ?? undefined,
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             totalPrice: item.totalPrice,

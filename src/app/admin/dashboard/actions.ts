@@ -515,7 +515,7 @@ export async function concludeAppointment(
       if (!looksLikeUnknownField) throw err;
 
       // fallback: sem campos extras, não faz update do appointment
-      appt = await prisma.appointment.findUnique({
+      const apptFallback = await prisma.appointment.findUnique({
         where: { id: appointmentId },
         select: {
           id: true,
@@ -527,7 +527,11 @@ export async function concludeAppointment(
         },
       });
 
-      if (!appt) throw new Error("Agendamento não encontrado após fallback");
+      if (!apptFallback) {
+        throw new Error("Agendamento não encontrado após fallback");
+      }
+
+      appt = apptFallback;
     }
 
     // 2) Depois: garantir Order/OrderItem pro checkout (transaction)

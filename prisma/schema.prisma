@@ -179,6 +179,9 @@ model Unit {
   orders       Order[]
   expenses     Expense[]
 
+  // ✅ vendas de produtos por unidade
+  productSales ProductSale[]
+
   // ✅ NOVO: admins vinculados via AdminAccess
   adminAccesses AdminAccess[]
 
@@ -525,6 +528,10 @@ model Product {
 model ProductSale {
   id String @id @default(cuid())
 
+  // ✅ multi-unidade
+  unitId String?
+  unit   Unit?   @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
   productId String
   product   Product @relation(fields: [productId], references: [id])
 
@@ -539,6 +546,7 @@ model ProductSale {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([unitId])
   @@index([productId])
   @@index([barberId])
   @@index([soldAt])

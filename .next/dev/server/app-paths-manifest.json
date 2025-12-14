@@ -1,8 +1,8 @@
 {
-  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
-  "/admin/checkout/page": "app/admin/checkout/page.js",
   "/admin/professional/page": "app/admin/professional/page.js",
-  "/client/schedule/page": "app/client/schedule/page.js",
+  "/admin/settings/page": "app/admin/settings/page.js",
   "/admin/review-tags/page": "app/admin/review-tags/page.js",
-  "/admin/finance/page": "app/admin/finance/page.js"
+  "/admin/finance/page": "app/admin/finance/page.js",
+  "/admin/products/page": "app/admin/products/page.js",
+  "/client/schedule/page": "app/client/schedule/page.js"
 }
