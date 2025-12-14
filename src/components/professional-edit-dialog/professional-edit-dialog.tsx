@@ -1,7 +1,7 @@
 // components/professional-edit-dialog.tsx
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 
 import {
   Dialog,
@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UploadImageField } from "@/components/upload-image-field/upload-image-field";
 import { updateBarber } from "@/app/admin/professional/actions";
+import { toast } from "sonner";
 
 type ProfessionalForEdit = {
   id: string;
@@ -27,16 +28,32 @@ type ProfessionalForEdit = {
   imageUrl: string | null;
 };
 
+type UnitOption = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
+
 export function ProfessionalEditDialog({
   barber,
+  units,
+  selectedUnitIds,
 }: {
   barber: ProfessionalForEdit;
+  units: UnitOption[];
+  selectedUnitIds: string[];
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [phone, setPhone] = useState(barber.phone ?? "");
+  const [unitIds, setUnitIds] = useState<string[]>(selectedUnitIds ?? []);
 
-  // 🔹 MÁSCARA TELEFONE
+  const selectedCountLabel = useMemo(() => {
+    if (unitIds.length === 0) return "Nenhuma selecionada";
+    if (unitIds.length === 1) return "1 unidade selecionada";
+    return `${unitIds.length} unidades selecionadas`;
+  }, [unitIds.length]);
+
   function handlePhoneChange(e: React.ChangeEvent<HTMLInputElement>) {
     let value = e.target.value.replace(/\D/g, "").slice(0, 11);
 
@@ -53,7 +70,22 @@ export function ProfessionalEditDialog({
     setPhone(value);
   }
 
+  function toggleUnit(id: string) {
+    setUnitIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
   function handleUpdate(formData: FormData) {
+    if (unitIds.length === 0) {
+      toast.error(
+        "O profissional precisa estar vinculado a pelo menos 1 unidade.",
+      );
+      return;
+    }
+
+    unitIds.forEach((id) => formData.append("unitIds", id));
+
     startTransition(async () => {
       await updateBarber(formData);
       setOpen(false);
@@ -82,6 +114,52 @@ export function ProfessionalEditDialog({
         <form action={handleUpdate} className="space-y-4 pb-2">
           <input type="hidden" name="id" value={barber.id} />
 
+          {/* UNIDADES (obrigatório) */}
+          <div className="space-y-2">
+            <label className="text-label-small text-content-secondary">
+              Unidades <span className="text-red-500">*</span>
+            </label>
+
+            <div className="rounded-xl border border-border-primary bg-background-tertiary p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-content-secondary">
+                  Selecione onde este profissional pode atuar.
+                </p>
+                <p className="text-xs text-content-secondary">
+                  {selectedCountLabel}
+                </p>
+              </div>
+
+              <div className="grid gap-2">
+                {units.map((u) => {
+                  const checked = unitIds.includes(u.id);
+                  return (
+                    <label
+                      key={u.id}
+                      className="flex items-center justify-between gap-3 rounded-lg border border-border-primary bg-background-secondary px-3 py-2 cursor-pointer"
+                    >
+                      <div className="flex flex-col">
+                        <span className="text-sm text-content-primary font-medium">
+                          {u.name}
+                        </span>
+                        <span className="text-[11px] text-content-secondary">
+                          Unidade ativa
+                        </span>
+                      </div>
+
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleUnit(u.id)}
+                        className="h-4 w-4 accent-current"
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
           {/* NOME */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
@@ -95,7 +173,7 @@ export function ProfessionalEditDialog({
             />
           </div>
 
-          {/* FOTO (opcional) */}
+          {/* FOTO */}
           <UploadImageField
             name="imageUrl"
             label="Foto do profissional"
@@ -132,7 +210,7 @@ export function ProfessionalEditDialog({
             />
           </div>
 
-          {/* SENHA (opcional) */}
+          {/* SENHA */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
               Nova senha

@@ -7,15 +7,17 @@ export const appointmentFormSchema = z
     clientName: z.string().min(3, "Seu nome é obrigatório"),
     phone: z.string().min(11, "O telefone é obrigatório"),
 
-    // ID do serviço escolhido (vem do admin)
+    // ✅ NOVO: unidade selecionada
+    unitId: z.string().min(1, "A unidade é obrigatória"),
+
+    // ID do serviço escolhido
     serviceId: z.string().min(1, "O serviço é obrigatório"),
 
-    // Nome do serviço (espelho, sempre string)
+    // Nome do serviço (espelho)
     description: z.string().min(1, "O serviço é obrigatório"),
 
     scheduleAt: z
       .date({
-        // ✅ compatível com a tua versão do Zod
         error: "A data é obrigatória",
       })
       .min(startOfToday(), {
@@ -32,6 +34,7 @@ export const appointmentFormSchema = z
         setHours(data.scheduleAt, Number(hour)),
         Number(minute),
       );
+
       return scheduleDateTime > new Date();
     },
     {

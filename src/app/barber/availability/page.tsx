@@ -4,13 +4,11 @@ import { redirect } from "next/navigation";
 import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 
-import { WeeklyAvailabilityForm } from "@/components/weekly-availability-form/weekly-availability-form";
 import type { WeeklyAvailabilityState } from "@/components/weekly-availability-form/weekly-availability-form";
 
-import { DailyExceptionModal } from "../../../components/daily-exception-modal/daily-exception-modal";
-import { DailyExceptionsList } from "../../../components/daily-exceptions-list/daily-exceptions-list";
-
-import { saveWeeklyAvailability } from "@/app/barber/availability/actions";
+import { DailyExceptionModal } from "@/components/daily-exception-modal/daily-exception-modal";
+import { DailyExceptionsList } from "@/components/daily-exceptions-list/daily-exceptions-list";
+import { WeeklyAvailabilityClient } from "@/components/weekly-availability-client/weekly-availability-client";
 
 const SESSION_COOKIE_NAME = "painel_session";
 
@@ -106,6 +104,7 @@ export default async function BarberAvailabilityPage() {
     if (weekday < 0 || weekday > 6) continue;
 
     const interval = item.intervals[0];
+
     if (!interval) {
       initialState[weekday as 0 | 1 | 2 | 3 | 4 | 5 | 6].active = item.isActive;
       continue;
@@ -134,13 +133,7 @@ export default async function BarberAvailabilityPage() {
 
       <section className="space-y-6">
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-4 space-y-3">
-          <WeeklyAvailabilityForm
-            initialValue={initialState}
-            // ✅ wrapper: o componente espera Promise<void>, action retorna { success: true }
-            onSave={async (payload) => {
-              await saveWeeklyAvailability(payload);
-            }}
-          />
+          <WeeklyAvailabilityClient initialValue={initialState} />
         </div>
 
         <DailyExceptionsList barberId={barber.id} />

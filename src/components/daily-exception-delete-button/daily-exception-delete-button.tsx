@@ -1,8 +1,8 @@
-// app/barber/availability/daily-exception-delete-button.tsx
 "use client";
 
 import { useTransition } from "react";
 import { toast } from "sonner";
+
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -52,7 +52,12 @@ export function DailyExceptionDeleteButton({
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
-        <Button type="button" variant="destructive" size="sm">
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          disabled={isPending}
+        >
           Excluir
         </Button>
       </AlertDialogTrigger>
@@ -69,12 +74,12 @@ export function DailyExceptionDeleteButton({
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isPending}>Cancelar</AlertDialogCancel>
 
-          {/* ⚠️ Aqui está o truque: usamos Button DENTRO do Action */}
           <AlertDialogAction asChild>
             <Button
               onClick={handleDelete}
               disabled={isPending}
               variant="destructive"
+              type="button"
             >
               {isPending ? "Removendo..." : "Remover exceção"}
             </Button>

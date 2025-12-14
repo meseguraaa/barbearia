@@ -19,6 +19,7 @@ import {
 import type { AppointmentStatus } from "@/types/appointment";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 
 type RoleForAction = "ADMIN" | "BARBER";
 
@@ -26,30 +27,22 @@ type AppointmentActionsProps = {
   appointmentId: string;
   status?: AppointmentStatus | null;
 
-  // dados para exibir no modal de conferência
   clientName: string;
   phone: string;
   description: string;
   scheduleAt: Date;
   barberName?: string | null;
 
-  // valor do serviço (já em número)
   servicePrice?: number | null;
 
-  // configuração da taxa de cancelamento vinda do serviço
   cancelFeePercentage?: number | null;
   cancelLimitHours?: number | null;
 
-  // quem está agindo (para log)
   cancelledByRole?: RoleForAction;
   concludedByRole?: RoleForAction;
 
-  // 🔹 infos de plano (opcionais)
-  // se for um atendimento usando crédito de plano
   isPlanCredit?: boolean;
-  // índice do crédito deste atendimento (1 = primeiro, 2 = segundo, etc.)
   planCreditIndex?: number | null;
-  // total de créditos do plano (ex.: 4)
   planTotalCredits?: number | null;
 };
 
@@ -78,26 +71,18 @@ export function AppointmentActions({
   const isDoneStatus = status === "DONE";
   const isCanceledStatus = status === "CANCELED";
 
-  // Pode interagir (conferir/cancelar) se não estiver concluído nem cancelado
   const canInteract = !isDoneStatus && !isCanceledStatus && !isPending;
 
   const dateStr = format(scheduleAt, "dd/MM/yyyy", { locale: ptBR });
   const timeStr = format(scheduleAt, "HH:mm", { locale: ptBR });
 
-  // formatador de moeda (valor do serviço)
   const currencyFormatter = new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
     minimumFractionDigits: 2,
   });
 
-  // 🔹 Derivados de plano (para saber se mostra valor e contagem de créditos)
-  const {
-    isPlanCreditEffective,
-    isFirstPlanCredit,
-    shouldShowServicePriceInReview,
-    planCreditsLabel,
-  } = useMemo(() => {
+  const { shouldShowServicePriceInReview, planCreditsLabel } = useMemo(() => {
     const hasPlanInfo =
       !!planTotalCredits && !!planCreditIndex && planCreditIndex > 0;
 
@@ -105,9 +90,6 @@ export function AppointmentActions({
     const isFirstPlanCredit =
       isPlanCreditEffective && planCreditIndex === 1 && !!servicePrice;
 
-    // Regra:
-    // - se NÃO é atendimento de plano → mostra valor se existir (comportamento antigo)
-    // - se É atendimento de plano → mostra valor apenas no 1º crédito
     const shouldShowServicePriceInReview = !isPlanCreditEffective
       ? servicePrice != null
       : isFirstPlanCredit;
@@ -118,14 +100,11 @@ export function AppointmentActions({
         : null;
 
     return {
-      isPlanCreditEffective,
-      isFirstPlanCredit,
       shouldShowServicePriceInReview,
       planCreditsLabel,
     };
   }, [isPlanCredit, planCreditIndex, planTotalCredits, servicePrice]);
 
-  // cálculo se ESTÁ dentro da janela onde pode cobrar taxa
   const { isInsideFeeWindow, estimatedFeeValue } = useMemo(() => {
     if (
       !servicePrice ||
@@ -143,10 +122,9 @@ export function AppointmentActions({
     const now = new Date().getTime();
     const scheduleTime = new Date(scheduleAt).getTime();
     const diffMs = scheduleTime - now;
-    const diffHours = diffMs / (1000 * 60 * 60); // horas para o horário agendado
+    const diffHours = diffMs / (1000 * 60 * 60);
 
     const isInside = diffHours < cancelLimitHours;
-
     const fee = (servicePrice * cancelFeePercentage) / 100;
 
     return {
@@ -155,52 +133,79 @@ export function AppointmentActions({
     };
   }, [servicePrice, cancelLimitHours, cancelFeePercentage, scheduleAt]);
 
-  /* ---------------------------
-   * CONCLUIR
-   * --------------------------- */
-  function handleConfirmConclude() {
+  function handleConfirmConclude(e?: React.MouseEvent) {
+    e?.preventDefault();
+    e?.stopPropagation();
+
+    if (!canInteract) return;
+
+    // ✅ se não vier, no admin normalmente é ADMIN mesmo
+    const roleToUse: RoleForAction =
+      concludedByRole ?? ("ADMIN" as RoleForAction);
+
+    console.log("[UI] Concluir click", { appointmentId, roleToUse });
+
     startTransition(async () => {
       const result = await concludeAppointment(appointmentId, {
-        concludedByRole,
+        concludedByRole: roleToUse,
       });
+
+      console.log("[UI] concludeAppointment result:", result);
 
       setIsReviewOpen(false);
 
-      // Se a action retornar erro, apenas atualiza a página (ou depois colocamos toast)
       if (result && typeof result === "object" && "error" in result) {
+        toast.error((result as any).error ?? "Erro ao concluir");
         router.refresh();
         return;
       }
 
-      const orderId =
-        result && typeof result === "object" && "orderId" in result
-          ? (result as any).orderId
-          : null;
+      toast.success("Atendimento concluído!");
 
-      // 🔹 Se for ADMIN e tiver orderId → vai pro checkout
-      if (concludedByRole === "ADMIN" && orderId) {
-        router.push(`/admin/checkout`);
-      } else {
-        // 🔹 Se for BARBER (ou sem orderId) → só atualiza tela
-        router.refresh();
+      // ✅ ADMIN sempre vai pro checkout (não depende de orderId)
+      if (roleToUse === "ADMIN") {
+        router.push("/admin/checkout");
+        return;
       }
+
+      router.refresh();
     });
   }
 
-  /* ---------------------------
-   * CANCELAR SEM / COM TAXA
-   * --------------------------- */
-  function handleOpenCancelDialog() {
+  function handleOpenCancelDialog(e?: React.MouseEvent) {
+    e?.preventDefault();
+    e?.stopPropagation();
+    if (!canInteract) return;
     setIsCancelDialogOpen(true);
   }
 
-  function runCancel(applyFee: boolean) {
+  function runCancel(applyFee: boolean, e?: React.MouseEvent) {
+    e?.preventDefault();
+    e?.stopPropagation();
+
+    if (!canInteract) return;
+
+    const roleToUse: RoleForAction =
+      cancelledByRole ?? ("ADMIN" as RoleForAction);
+
+    console.log("[UI] Cancelar click", { appointmentId, applyFee, roleToUse });
+
     startTransition(async () => {
-      await cancelAppointment(appointmentId, {
+      const result = await cancelAppointment(appointmentId, {
         applyFee,
-        cancelledByRole,
+        cancelledByRole: roleToUse,
       });
+
+      console.log("[UI] cancelAppointment result:", result);
+
       setIsCancelDialogOpen(false);
+
+      if (result && typeof result === "object" && "error" in result) {
+        toast.error((result as any).error ?? "Erro ao cancelar");
+      } else {
+        toast.success("Agendamento cancelado!");
+      }
+
       router.refresh();
     });
   }
@@ -211,9 +216,16 @@ export function AppointmentActions({
       <Dialog open={isReviewOpen} onOpenChange={setIsReviewOpen}>
         <DialogTrigger asChild>
           <Button
+            type="button"
             size="sm"
             className="bg-green-600 hover:bg-green-700 text-white"
             disabled={!canInteract}
+            onClick={(e) => {
+              // ✅ impede submit/reload fantasma
+              e.preventDefault();
+              e.stopPropagation();
+              setIsReviewOpen(true);
+            }}
           >
             Conferir
           </Button>
@@ -231,7 +243,6 @@ export function AppointmentActions({
             </DialogDescription>
           </DialogHeader>
 
-          {/* 🔹 Layout em grade: até 2 colunas em telas maiores */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
             <div>
               <p className="text-label-small text-content-secondary">Cliente</p>
@@ -265,7 +276,6 @@ export function AppointmentActions({
               </p>
             </div>
 
-            {/* VALOR DO SERVIÇO / PLANO  */}
             <div>
               <p className="text-label-small text-content-secondary">
                 Valor do serviço
@@ -291,7 +301,6 @@ export function AppointmentActions({
               </p>
             </div>
 
-            {/* 🔹 Créditos do plano (se for atendimento de plano) */}
             {planCreditsLabel && (
               <div className="md:col-span-2">
                 <p className="text-label-small text-content-secondary">
@@ -304,24 +313,22 @@ export function AppointmentActions({
             )}
           </div>
 
-          <p className="text-paragraph-small text-content-secondary mt-3">
-            Se alguma informação estiver errada, clique em{" "}
-            <span className="font-semibold">Editar</span> na tabela, ajuste os
-            dados e depois volte aqui para concluir.
-          </p>
-
           <DialogFooter className="mt-4">
             <Button
-              variant="outline"
               type="button"
-              onClick={() => setIsReviewOpen(false)}
+              variant="outline"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsReviewOpen(false);
+              }}
               disabled={isPending}
             >
               Voltar
             </Button>
             <Button
-              variant="brand"
               type="button"
+              variant="brand"
               onClick={handleConfirmConclude}
               disabled={!canInteract}
             >
@@ -331,10 +338,11 @@ export function AppointmentActions({
         </DialogContent>
       </Dialog>
 
-      {/* CANCELAR – abre modal próprio de cancelamento */}
+      {/* CANCELAR */}
       <Dialog open={isCancelDialogOpen} onOpenChange={setIsCancelDialogOpen}>
         <DialogTrigger asChild>
           <Button
+            type="button"
             size="sm"
             variant="destructive"
             onClick={handleOpenCancelDialog}
@@ -404,30 +412,32 @@ export function AppointmentActions({
 
           <DialogFooter className="mt-4">
             <Button
-              variant="outline"
               type="button"
-              onClick={() => setIsCancelDialogOpen(false)}
+              variant="outline"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsCancelDialogOpen(false);
+              }}
               disabled={isPending}
             >
               Voltar
             </Button>
 
-            {/* Cancelar SEM taxa */}
             <Button
               type="button"
               variant="outline"
-              onClick={() => runCancel(false)}
+              onClick={(e) => runCancel(false, e)}
               disabled={isPending}
             >
               {isPending ? "Cancelando..." : "Cancelar sem taxa"}
             </Button>
 
-            {/* Cancelar COM taxa (só faz sentido se estiver na janela) */}
             {isInsideFeeWindow && estimatedFeeValue > 0 && (
               <Button
                 type="button"
                 variant="brand"
-                onClick={() => runCancel(true)}
+                onClick={(e) => runCancel(true, e)}
                 disabled={isPending}
               >
                 {isPending ? "Aplicando taxa..." : "Cancelar com taxa"}

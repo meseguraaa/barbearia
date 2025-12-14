@@ -1,19 +1,39 @@
 // app/barber/availability/daily-exceptions-list.tsx
 import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
-import { ptBR } from "date-fns/locale/pt-BR";
+import { ptBR } from "date-fns/locale";
 import { DailyExceptionDeleteButton } from "@/components/daily-exception-delete-button";
 
 type DailyExceptionsListProps = {
   barberId: string;
 };
 
+async function getActiveUnitIdForBarberOrThrow(barberId: string) {
+  const activeBarberUnit = await prisma.barberUnit.findFirst({
+    where: {
+      barberId,
+      isActive: true,
+    },
+    select: { unitId: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (!activeBarberUnit?.unitId) {
+    throw new Error("Este profissional não possui unidade ativa vinculada.");
+  }
+
+  return activeBarberUnit.unitId;
+}
+
 export async function DailyExceptionsList({
   barberId,
 }: DailyExceptionsListProps) {
+  const unitId = await getActiveUnitIdForBarberOrThrow(barberId);
+
   const exceptions = await prisma.barberDailyAvailability.findMany({
     where: {
       barberId,
+      unitId, // ✅ CRÍTICO: evita listar exceção de outra unidade
     },
     include: {
       intervals: true,
@@ -89,7 +109,6 @@ export async function DailyExceptionsList({
                   )}
                 </div>
 
-                {/* Botão de excluir com modal de confirmação */}
                 <DailyExceptionDeleteButton
                   barberId={barberId}
                   dateISO={ex.date.toISOString()}

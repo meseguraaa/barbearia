@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 import { ProfessionalNewDialog } from "@/components/professional-new-dialog";
-import { ProfessionalEditDialog } from "@/components/professional-edit-dialog";
+import { ProfessionalEditDialog } from "@/components/professional-edit-dialog/professional-edit-dialog";
 import { ServiceStatusBadge } from "@/components/service-status-badge";
 import { toggleBarberStatus } from "@/app/admin/professional/actions";
 import { Button } from "@/components/ui/button";
@@ -63,6 +63,19 @@ type ProfessionalReviewStats = {
   topTags: { label: string; count: number }[];
 };
 
+type UnitOption = {
+  id: string;
+  name: string;
+  isActive: boolean;
+};
+
+type ProfessionalUnitRow = {
+  id: string;
+  name: string;
+  isActive: boolean;
+  linkIsActive: boolean;
+};
+
 type ProfessionalRow = {
   id: string;
   name: string;
@@ -76,6 +89,9 @@ type ProfessionalRow = {
   weeklyAvailabilities: WeeklyAvailabilityRow[];
   dailyAvailabilities: DailyAvailabilityRow[];
   reviewStats: ProfessionalReviewStats | null;
+
+  // ✅ unidades vinculadas
+  units: ProfessionalUnitRow[];
 };
 
 function buildWeeklySummaryLabel(weekly: WeeklyAvailabilityRow[]): string {
@@ -121,14 +137,40 @@ function buildExceptionsSummaryLabel(daily: DailyAvailabilityRow[]) {
   return parts.join(" • ") || "Exceções cadastradas";
 }
 
+function buildUnitsSummaryLabel(units: ProfessionalUnitRow[]): string {
+  const activeLinks = units.filter((u) => u.linkIsActive && u.isActive);
+  if (activeLinks.length === 0) return "Sem unidade";
+
+  if (activeLinks.length <= 2) {
+    return activeLinks.map((u) => u.name).join(" • ");
+  }
+
+  return `${activeLinks.length} unidades`;
+}
+
 export default async function ProfessionalsPage() {
   // 🔐 Permissão: precisa ter acesso a Profissionais (ou ser Dono)
   await requireAdminPermission("canAccessProfessionals");
+
+  // ✅ Units ativas para o onboarding (obrigatório ter pelo menos 1)
+  const units: UnitOption[] = await prisma.unit.findMany({
+    where: { isActive: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, isActive: true },
+  });
 
   const barbers = await prisma.barber.findMany({
     orderBy: { name: "asc" },
     include: {
       user: true,
+
+      // ✅ vínculos N:N com unidade
+      units: {
+        include: {
+          unit: true,
+        },
+      },
+
       weeklyAvailabilities: {
         include: { intervals: true },
       },
@@ -156,7 +198,6 @@ export default async function ProfessionalsPage() {
       const sumRatings = reviews.reduce((acc, r) => acc + r.rating, 0);
       const avgRating = sumRatings / totalReviews;
 
-      // distribuição de notas 1..5
       const ratingsCountMap = new Map<number, number>();
       for (let i = 1; i <= 5; i++) ratingsCountMap.set(i, 0);
       for (const r of reviews) {
@@ -166,7 +207,6 @@ export default async function ProfessionalsPage() {
         .map(([rating, count]) => ({ rating, count }))
         .sort((a, b) => b.rating - a.rating);
 
-      // tags mais usadas
       const tagMap = new Map<string, number>();
       for (const r of reviews) {
         for (const rt of r.tags ?? []) {
@@ -190,17 +230,26 @@ export default async function ProfessionalsPage() {
       };
     }
 
+    const unitsRow: ProfessionalUnitRow[] = (barber.units ?? []).map((bu) => ({
+      id: bu.unit.id,
+      name: bu.unit.name,
+      isActive: bu.unit.isActive,
+      linkIsActive: bu.isActive,
+    }));
+
     return {
       id: barber.id,
       name: barber.name,
       email: barber.email,
       phone: barber.phone ?? "—",
-      // 🔹 foto vem do User.image
       imageUrl: barber.user?.image ?? null,
       isActive: barber.isActive,
       createdAt: barber.createdAt,
       updatedAt: barber.updatedAt,
       userId: barber.userId,
+
+      units: unitsRow,
+
       weeklyAvailabilities: barber.weeklyAvailabilities.map((w) => ({
         weekday: w.weekday,
         isActive: w.isActive,
@@ -229,9 +278,15 @@ export default async function ProfessionalsPage() {
     const exceptionsSummary = buildExceptionsSummaryLabel(
       row.dailyAvailabilities,
     );
+    const unitsSummary = buildUnitsSummaryLabel(row.units);
 
     const review = row.reviewStats;
     const avgRatingDisplay = review ? review.avgRating.toFixed(2) : "—";
+
+    // ✅ ids das unidades vinculadas (somente vínculos ativos + unidade ativa)
+    const selectedUnitIds = row.units
+      .filter((u) => u.linkIsActive && u.isActive)
+      .map((u) => u.id);
 
     return (
       <AccordionItem
@@ -239,12 +294,11 @@ export default async function ProfessionalsPage() {
         value={row.id}
         className="border border-border-primary rounded-xl bg-background-tertiary"
       >
-        {/* LINHA SUPERIOR: tudo em uma linha / alinhado */}
+        {/* LINHA SUPERIOR */}
         <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)_minmax(0,2fr)_auto] items-center gap-6 px-4 py-3">
-          {/* COL 1: Trigger (avatar + nome + badge + email) */}
+          {/* COL 1: Trigger */}
           <AccordionTrigger className="flex items-center gap-3 min-w-0 hover:no-underline px-0 py-0">
             <div className="flex items-center gap-3 min-w-0">
-              {/* Avatar */}
               <div className="h-10 w-10 rounded-full bg-background-secondary border border-border-primary overflow-hidden flex items-center justify-center shrink-0">
                 {row.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -265,36 +319,36 @@ export default async function ProfessionalsPage() {
                 )}
               </div>
 
-              {/* Nome + badge + email */}
               <div className="flex flex-col min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
                   <p className="text-paragraph-medium-size font-semibold text-content-primary truncate">
                     {row.name}
                   </p>
-                  {/* BADGE DE STATUS */}
                   <ServiceStatusBadge isActive={row.isActive} />
                 </div>
 
                 <p className="text-xs text-content-secondary truncate">
-                  {row.email || "Sem e-mail"}
+                  {row.email || "Sem e-mail"}{" "}
+                  <span className="mx-1 text-content-tertiary">•</span>{" "}
+                  <span className="text-content-secondary">{unitsSummary}</span>
                 </p>
               </div>
             </div>
           </AccordionTrigger>
 
-          {/* COL 2: Escala semanal */}
+          {/* COL 2 */}
           <div className="hidden md:block min-w-0 whitespace-nowrap text-xs text-content-primary truncate">
             <span className="text-content-secondary mr-1">Escala semanal:</span>
             {weeklySummary}
           </div>
 
-          {/* COL 3: Exceções */}
+          {/* COL 3 */}
           <div className="hidden md:block min-w-0 whitespace-nowrap text-xs text-content-primary truncate">
             <span className="text-content-secondary mr-1">Exceções:</span>
             {exceptionsSummary}
           </div>
 
-          {/* COL 4: Ações */}
+          {/* COL 4 */}
           <div className="flex items-center justify-end gap-2 whitespace-nowrap">
             <ProfessionalEditDialog
               barber={{
@@ -308,6 +362,8 @@ export default async function ProfessionalsPage() {
                 userId: row.userId,
                 imageUrl: row.imageUrl,
               }}
+              units={units}
+              selectedUnitIds={selectedUnitIds}
             />
 
             <form action={toggleBarberStatus}>
@@ -324,10 +380,43 @@ export default async function ProfessionalsPage() {
           </div>
         </div>
 
-        {/* CONTEÚDO: REPUTAÇÃO + DISPONIBILIDADE (SOMENTE LEITURA) */}
+        {/* CONTEÚDO */}
         <AccordionContent className="border-t border-border-primary px-4 py-4">
           <div className="space-y-6">
-            {/* BLOCO: Reputação do profissional */}
+            {/* BLOCO: Unidades */}
+            <div className="rounded-2xl border border-border-primary bg-background-secondary p-4 space-y-3">
+              <div>
+                <h2 className="text-label-small text-content-primary">
+                  Unidades vinculadas
+                </h2>
+                <p className="text-paragraph-small text-content-secondary">
+                  Onde este profissional pode atuar (vínculos ativos).
+                </p>
+              </div>
+
+              {row.units.filter((u) => u.linkIsActive && u.isActive).length ===
+              0 ? (
+                <div className="rounded-xl border border-dashed border-border-primary bg-background-tertiary px-4 py-6 text-center text-paragraph-small text-content-secondary">
+                  Nenhuma unidade vinculada ainda.
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {row.units
+                    .filter((u) => u.linkIsActive && u.isActive)
+                    .sort((a, b) => a.name.localeCompare(b.name, "pt-BR"))
+                    .map((u) => (
+                      <span
+                        key={u.id}
+                        className="rounded-full border border-border-primary bg-background-tertiary px-3 py-1 text-[11px] text-content-secondary"
+                      >
+                        {u.name}
+                      </span>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {/* BLOCO: Reputação */}
             <div className="rounded-2xl border border-border-primary bg-background-secondary p-4 space-y-4">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                 <div>
@@ -364,7 +453,6 @@ export default async function ProfessionalsPage() {
                 </div>
               ) : (
                 <div className="grid gap-4 md:grid-cols-[2fr,3fr]">
-                  {/* Distribuição de notas */}
                   <div className="space-y-2">
                     <p className="text-label-small text-content-primary">
                       Distribuição de notas
@@ -386,7 +474,6 @@ export default async function ProfessionalsPage() {
                     </div>
                   </div>
 
-                  {/* Tags mais frequentes */}
                   <div className="space-y-2">
                     <p className="text-label-small text-content-primary">
                       Principais motivos citados
@@ -417,16 +504,14 @@ export default async function ProfessionalsPage() {
 
             {/* BLOCO: Disponibilidade semanal */}
             <div className="rounded-2xl border border-border-primary bg-background-secondary p-4 space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                <div>
-                  <h2 className="text-label-small text-content-primary">
-                    Disponibilidade
-                  </h2>
-                  <p className="text-paragraph-small text-content-secondary">
-                    Visualização dos horários salvos pelo profissional.
-                    Alterações devem ser feitas no painel dele.
-                  </p>
-                </div>
+              <div>
+                <h2 className="text-label-small text-content-primary">
+                  Disponibilidade
+                </h2>
+                <p className="text-paragraph-small text-content-secondary">
+                  Visualização dos horários salvos pelo profissional. Alterações
+                  devem ser feitas no painel dele.
+                </p>
               </div>
 
               <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
@@ -504,7 +589,7 @@ export default async function ProfessionalsPage() {
               </p>
             </div>
 
-            {/* BLOCO: Exceções por dia */}
+            {/* BLOCO: Exceções */}
             <div className="space-y-2">
               <h3 className="text-label-small text-content-primary">
                 Exceções por dia
@@ -531,9 +616,7 @@ export default async function ProfessionalsPage() {
                       >
                         <div className="space-y-1">
                           <p className="text-paragraph-small text-content-primary font-medium">
-                            {format(ex.date, "dd/MM/yyyy", {
-                              locale: ptBR,
-                            })}
+                            {format(ex.date, "dd/MM/yyyy", { locale: ptBR })}
                           </p>
                           <p className="text-[11px] text-content-secondary">
                             {ex.type === "DAY_OFF"
@@ -577,18 +660,19 @@ export default async function ProfessionalsPage() {
 
   return (
     <div className="space-y-8 max-w-7xl">
-      {/* HEADER GERAL */}
       <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-title text-content-primary">Profissionais</h1>
           <p className="text-paragraph-medium text-content-secondary">
-            Veja a disponibilidade e a reputação de cada profissional.
+            Veja a disponibilidade, reputação e as unidades vinculadas de cada
+            profissional.
           </p>
         </div>
-        <ProfessionalNewDialog />
+
+        {/* ✅ Agora é obrigatório passar units */}
+        <ProfessionalNewDialog units={units} />
       </header>
 
-      {/* PROFISSIONAIS ATIVOS */}
       <section className="space-y-4">
         <Accordion type="single" collapsible className="space-y-2">
           {activeRows.length === 0 ? (
@@ -601,7 +685,6 @@ export default async function ProfessionalsPage() {
         </Accordion>
       </section>
 
-      {/* PROFISSIONAIS INATIVOS */}
       <section className="space-y-3">
         <h2 className="text-content-secondary text-paragraph-medium">
           Profissionais inativos

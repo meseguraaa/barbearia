@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { format, startOfToday } from "date-fns";
-import { ptBR } from "date-fns/locale/pt-BR";
+import { ptBR } from "date-fns/locale";
 import { CalendarIcon, Clock, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -28,7 +28,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 import { createDailyException } from "../../app/barber/availability/actions";
@@ -59,16 +58,16 @@ type DailyExceptionModalProps = {
   barberId: string;
 };
 
+function isValidInterval(startTime: string, endTime: string) {
+  return !!startTime && !!endTime && startTime < endTime;
+}
+
 export function DailyExceptionModal({ barberId }: DailyExceptionModalProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [date, setDate] = useState<Date | undefined>();
   const [mode, setMode] = useState<"FULL_DAY" | "PARTIAL">("FULL_DAY");
   const [intervals, setIntervals] = useState<ExceptionInterval[]>([
-    {
-      id: "1",
-      startTime: "09:00",
-      endTime: "19:00",
-    },
+    { id: "1", startTime: "09:00", endTime: "19:00" },
   ]);
 
   const [isPending, startTransition] = useTransition();
@@ -76,13 +75,7 @@ export function DailyExceptionModal({ barberId }: DailyExceptionModalProps) {
   function resetState() {
     setDate(undefined);
     setMode("FULL_DAY");
-    setIntervals([
-      {
-        id: "1",
-        startTime: "09:00",
-        endTime: "19:00",
-      },
-    ]);
+    setIntervals([{ id: "1", startTime: "09:00", endTime: "19:00" }]);
   }
 
   function handleAddInterval() {
@@ -107,11 +100,35 @@ export function DailyExceptionModal({ barberId }: DailyExceptionModalProps) {
     );
   }
 
-  function handleSubmit() {
+  function validateBeforeSubmit(): boolean {
     if (!date) {
       toast.error("Selecione uma data para criar a exceção.");
-      return;
+      return false;
     }
+
+    if (mode === "PARTIAL") {
+      if (!intervals.length) {
+        toast.error("Adicione pelo menos 1 intervalo.");
+        return false;
+      }
+
+      const anyInvalid = intervals.some(
+        (i) => !isValidInterval(i.startTime, i.endTime),
+      );
+
+      if (anyInvalid) {
+        toast.error(
+          "Verifique os intervalos: o horário inicial deve ser menor que o final.",
+        );
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function handleSubmit() {
+    if (!validateBeforeSubmit()) return;
 
     startTransition(async () => {
       try {
@@ -119,13 +136,13 @@ export function DailyExceptionModal({ barberId }: DailyExceptionModalProps) {
           mode === "FULL_DAY"
             ? {
                 barberId,
-                dateISO: date.toISOString(),
+                dateISO: date!.toISOString(),
                 mode: "FULL_DAY" as const,
                 intervals: [],
               }
             : {
                 barberId,
-                dateISO: date.toISOString(),
+                dateISO: date!.toISOString(),
                 mode: "PARTIAL" as const,
                 intervals: intervals.map((i) => ({
                   startTime: i.startTime,
@@ -187,6 +204,7 @@ export function DailyExceptionModal({ barberId }: DailyExceptionModalProps) {
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
+                  disabled={isSaving}
                   className={cn(
                     "w-full justify-between text-left font-normal bg-background-tertiary border-border-primary text-content-primary hover:bg-background-tertiary hover:border-border-secondary hover:text-content-primary focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand focus:border-border-brand focus-visible:border-border-brand",
                     !date && "text-content-secondary",
@@ -224,6 +242,7 @@ export function DailyExceptionModal({ barberId }: DailyExceptionModalProps) {
             <Select
               value={mode}
               onValueChange={(v: "FULL_DAY" | "PARTIAL") => setMode(v)}
+              disabled={isSaving}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -251,86 +270,106 @@ export function DailyExceptionModal({ barberId }: DailyExceptionModalProps) {
                   variant="ghost"
                   size="sm"
                   onClick={handleAddInterval}
+                  disabled={isSaving}
                 >
                   + Adicionar intervalo
                 </Button>
               </div>
 
               <div className="space-y-2">
-                {intervals.map((interval, index) => (
-                  <div
-                    key={interval.id}
-                    className="grid grid-cols-[1fr,1fr,auto] items-center gap-2"
-                  >
-                    <div className="space-y-1">
-                      <span className="text-label-small text-content-secondary">
-                        Início
-                      </span>
-                      <Select
-                        value={interval.startTime}
-                        onValueChange={(v) =>
-                          updateInterval(interval.id, "startTime", v)
-                        }
-                      >
-                        <SelectTrigger>
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-content-brand" />
-                            <SelectValue placeholder="Horário inicial" />
-                          </div>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TIME_OPTIONS.map((t) => (
-                            <SelectItem key={t} value={t}>
-                              {t}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                {intervals.map((interval) => {
+                  const hasError = !isValidInterval(
+                    interval.startTime,
+                    interval.endTime,
+                  );
 
-                    <div className="space-y-1">
-                      <span className="text-label-small text-content-secondary">
-                        Fim
-                      </span>
-                      <Select
-                        value={interval.endTime}
-                        onValueChange={(v) =>
-                          updateInterval(interval.id, "endTime", v)
-                        }
-                      >
-                        <SelectTrigger>
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-content-brand" />
-                            <SelectValue placeholder="Horário final" />
-                          </div>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TIME_OPTIONS.map((t) => (
-                            <SelectItem key={t} value={t}>
-                              {t}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex items-end justify-end pb-0.5">
-                      {intervals.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleRemoveInterval(interval.id)}
+                  return (
+                    <div
+                      key={interval.id}
+                      className="grid grid-cols-[1fr,1fr,auto] items-center gap-2"
+                    >
+                      <div className="space-y-1">
+                        <span className="text-label-small text-content-secondary">
+                          Início
+                        </span>
+                        <Select
+                          value={interval.startTime}
+                          onValueChange={(v) =>
+                            updateInterval(interval.id, "startTime", v)
+                          }
+                          disabled={isSaving}
                         >
-                          ✕
-                        </Button>
-                      )}
+                          <SelectTrigger
+                            className={cn(
+                              hasError &&
+                                "border-destructive focus-visible:ring-destructive/40",
+                            )}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-content-brand" />
+                              <SelectValue placeholder="Horário inicial" />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TIME_OPTIONS.map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {t}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <span className="text-label-small text-content-secondary">
+                          Fim
+                        </span>
+                        <Select
+                          value={interval.endTime}
+                          onValueChange={(v) =>
+                            updateInterval(interval.id, "endTime", v)
+                          }
+                          disabled={isSaving}
+                        >
+                          <SelectTrigger
+                            className={cn(
+                              hasError &&
+                                "border-destructive focus-visible:ring-destructive/40",
+                            )}
+                          >
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-content-brand" />
+                              <SelectValue placeholder="Horário final" />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TIME_OPTIONS.map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {t}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="flex items-end justify-end pb-0.5">
+                        {intervals.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRemoveInterval(interval.id)}
+                            disabled={isSaving}
+                          >
+                            ✕
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
-              {/* Só pra deixar claro pro barbeiro */}
               <p className="text-paragraph-small-size text-content-secondary">
                 Esses horários serão <strong>bloqueados</strong>. O restante do
                 dia ainda poderá receber agendamentos, seguindo o padrão
@@ -344,6 +383,7 @@ export function DailyExceptionModal({ barberId }: DailyExceptionModalProps) {
             <Button
               type="button"
               variant="ghost"
+              disabled={isSaving}
               onClick={() => {
                 resetState();
                 setIsOpen(false);
