@@ -11,7 +11,7 @@ const createAdminSchema = z.object({
   name: z.string().min(1, "Nome obrigatório"),
   email: z.string().email("E-mail inválido"),
   phone: z.string().optional().nullable(),
-  birthday: z.string().optional().nullable(), // dd/MM/yyyy ou vazio
+  birthday: z.string().optional().nullable(), // dd/MM/yyyy ou yyyy-mm-dd
   password: z.string().min(6, "Senha muito curta").optional().nullable(),
 });
 
@@ -35,6 +35,10 @@ const permissionsSchema = z.object({
   canAccessClients: z.coerce.boolean().optional(),
   canAccessFinance: z.coerce.boolean().optional(),
 });
+
+/* =========================================================
+ * Helpers
+ * =======================================================*/
 
 function normalizeOptionalText(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -63,15 +67,31 @@ function normalizeBirthday(raw: unknown): Date | null {
   return null;
 }
 
+/**
+ * ✅ Helper tipado corretamente
+ * Evita TS2322 e sempre retorna string
+ */
 function firstZodErrorMessage(err: z.ZodError): string {
   const flat = err.flatten();
-  const fieldErrors = Object.values(flat.fieldErrors).flat().filter(Boolean);
-  return fieldErrors[0] ?? "Dados inválidos";
+
+  // erro geral do formulário
+  const formError = flat.formErrors.find(
+    (m): m is string => typeof m === "string" && m.trim().length > 0,
+  );
+  if (formError) return formError;
+
+  // primeiro erro de campo
+  const fieldError = Object.values(flat.fieldErrors)
+    .flatMap((arr) => (Array.isArray(arr) ? arr : []))
+    .find((m): m is string => typeof m === "string" && m.trim().length > 0);
+
+  return fieldError ?? "Dados inválidos";
 }
 
-/* ===========================
+/* =========================================================
  * CREATE ADMIN
- * =========================== */
+ * =======================================================*/
+
 export async function createAdminAction(
   formData: FormData,
 ): Promise<ActionResult> {
@@ -127,17 +147,18 @@ export async function createAdminAction(
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === "P2002"
     ) {
-      console.warn("[createAdminAction] Email já existe:", err.meta);
       return { ok: false, error: "Já existe um usuário com esse e-mail." };
     }
+
     console.error("[createAdminAction] Erro:", err);
     return { ok: false, error: "Erro ao criar admin. Tente novamente." };
   }
 }
 
-/* ===========================
+/* =========================================================
  * UPDATE ADMIN
- * =========================== */
+ * =======================================================*/
+
 export async function updateAdminAction(
   formData: FormData,
 ): Promise<ActionResult> {
@@ -179,17 +200,18 @@ export async function updateAdminAction(
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === "P2002"
     ) {
-      console.warn("[updateAdminAction] Email já existe:", err.meta);
       return { ok: false, error: "Já existe um usuário com esse e-mail." };
     }
+
     console.error("[updateAdminAction] Erro:", err);
     return { ok: false, error: "Erro ao atualizar admin. Tente novamente." };
   }
 }
 
-/* ===========================
+/* =========================================================
  * UPDATE ADMIN PERMISSIONS
- * =========================== */
+ * =======================================================*/
+
 export async function updateAdminPermissions(
   formData: FormData,
 ): Promise<ActionResult> {
@@ -253,9 +275,10 @@ export async function updateAdminPermissions(
   }
 }
 
-/* ===========================
+/* =========================================================
  * TOGGLE ADMIN STATUS
- * =========================== */
+ * =======================================================*/
+
 export async function toggleAdminStatusAction(
   formData: FormData,
 ): Promise<ActionResult> {
@@ -270,13 +293,16 @@ export async function toggleAdminStatusAction(
 
     if (!current) return { ok: false, error: "Usuário não encontrado." };
 
-    // Dono não desativa
-    if (current.isOwner)
+    if (current.isOwner) {
       return { ok: false, error: "Não é possível desativar o admin dono." };
+    }
 
-    // Só admin
-    if (current.role !== "ADMIN")
-      return { ok: false, error: "Apenas usuários ADMIN podem ser alterados." };
+    if (current.role !== "ADMIN") {
+      return {
+        ok: false,
+        error: "Apenas usuários ADMIN podem ser alterados.",
+      };
+    }
 
     await prisma.user.update({
       where: { id: userId },

@@ -1,4 +1,3 @@
-// components/admin-toggle-admin-status-button.tsx
 "use client";
 
 import { useState } from "react";
@@ -23,9 +22,9 @@ export function AdminToggleAdminStatusButton({ userId, isActive }: Props) {
 
       const result = await toggleAdminStatusAction(formData);
 
-      if (result?.error) {
+      // ✅ padrão correto com ActionResult
+      if (!result.ok) {
         toast.error(result.error);
-        setLoading(false);
         return;
       }
 
