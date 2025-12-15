@@ -30,7 +30,9 @@ import {
   Store,
   User,
   UserCircle,
-  Users,
+  X,
+  Search,
+  Check,
 } from "lucide-react";
 import { IMaskInput } from "react-imask";
 import { addMinutes, format, isSameDay, startOfToday } from "date-fns";
@@ -51,7 +53,7 @@ import {
   getAvailabilityWindowsForBarberOnDateAction,
   getAvailableBarbersForDateAndServiceAction,
 } from "@/app/admin/dashboard/actions";
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import { ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Appointment } from "@/types/appointment";
 import {
   appointmentFormSchema,
@@ -525,7 +527,12 @@ export const AppointmentForm = ({
 
     resetFormToInitial();
 
-    if (isAdminMode) setSelectedClientId("");
+    if (isAdminMode) {
+      setSelectedClientId("");
+      setClientQuery("");
+      setClientResults([]);
+      setIsClientPickerOpen(false);
+    }
   };
 
   const handleSubmit = form.handleSubmit(onSubmit as any, (errors) => {
@@ -542,6 +549,9 @@ export const AppointmentForm = ({
     if (!dialogOpen) {
       if (isAdminMode && !isEdit) {
         setSelectedClientId("");
+        setClientQuery("");
+        setClientResults([]);
+        setIsClientPickerOpen(false);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -795,6 +805,191 @@ export const AppointmentForm = ({
     availableTimes = [];
   }
 
+  /* ======================================================================
+   *  ✅ ADMIN: Busca de cliente (single input + dropdown)
+   * ====================================================================== */
+  const [isClientPickerOpen, setIsClientPickerOpen] = useState(false);
+  const [clientQuery, setClientQuery] = useState("");
+  const [clientResults, setClientResults] = useState<AppointmentClientOption[]>(
+    [],
+  );
+  const [isSearchingClients, setIsSearchingClients] = useState(false);
+
+  const lastClientSearchAbortRef = useRef<AbortController | null>(null);
+
+  const resetDependentFlowAfterClientChange = () => {
+    form.setValue("serviceId", "");
+    form.setValue("description", "");
+    form.setValue("scheduleAt", undefined as any);
+    form.setValue("time", "");
+    form.setValue("barberId", "");
+
+    // ✅ admin com unidade forçada NÃO perde unitId ao trocar cliente
+    if (adminHasForcedUnit) {
+      form.setValue("unitId", forcedUnitId as string, {
+        shouldDirty: false,
+      });
+    } else {
+      form.setValue("unitId", "");
+    }
+  };
+
+  const handleSelectClient = (client: AppointmentClientOption) => {
+    setSelectedClientId(client.id);
+
+    // Mostra no input: "nome • telefone"
+    const label = client.name + (client.phone ? ` • ${client.phone}` : "");
+
+    setClientQuery(label);
+    setIsClientPickerOpen(false);
+
+    resetDependentFlowAfterClientChange();
+  };
+
+  const clearSelectedClient = () => {
+    setSelectedClientId("");
+    setClientQuery("");
+    setClientResults([]);
+    setIsClientPickerOpen(false);
+
+    form.setValue("clientName", "");
+    form.setValue("phone", "");
+
+    resetDependentFlowAfterClientChange();
+  };
+
+  const clearSelectionButKeepTyping = () => {
+    if (!selectedClientId) return;
+    setSelectedClientId("");
+    form.setValue("clientName", "");
+    form.setValue("phone", "");
+    resetDependentFlowAfterClientChange();
+  };
+
+  // Quando abre o modal, não mostra clientes automaticamente.
+  // Só mostra resultados depois que o admin digitar.
+  useEffect(() => {
+    if (!isAdminMode) return;
+    if (isEdit) return;
+    if (!dialogOpen) return;
+
+    setClientResults([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialogOpen, isAdminMode, isEdit]);
+
+  // Busca com debounce: local (lista pequena) ou API (lista grande)
+  useEffect(() => {
+    if (!isAdminMode) return;
+    if (isEdit) return;
+    if (!dialogOpen) return;
+
+    const q = clientQuery.trim();
+
+    // se está selecionado, e o input está exibindo o label, não re-busca
+    if (selectedClientId && selectedClient && q) {
+      const label =
+        selectedClient.name +
+        (selectedClient.phone ? ` • ${selectedClient.phone}` : "");
+      if (q === label) return;
+    }
+
+    // vazio => não mostra nada (só mostra após digitar)
+    if (!q) {
+      setClientResults([]);
+      return;
+    }
+
+    // menos de 2 caracteres => só filtra local (se der) ou mostra vazio
+    if (q.length < 2) {
+      const local = clients
+        .filter((c) => {
+          const name = (c.name ?? "").toLowerCase();
+          const phone = (c.phone ?? "").toLowerCase();
+          const qq = q.toLowerCase();
+          return name.includes(qq) || phone.includes(qq);
+        })
+        .slice(0, 20);
+
+      setClientResults(local);
+      return;
+    }
+
+    const debounce = setTimeout(async () => {
+      const useLocalFilter = clients.length > 0 && clients.length <= 250;
+
+      if (useLocalFilter) {
+        const local = clients
+          .filter((c) => {
+            const name = (c.name ?? "").toLowerCase();
+            const phone = (c.phone ?? "").toLowerCase();
+            const qq = q.toLowerCase();
+            return name.includes(qq) || phone.includes(qq);
+          })
+          .slice(0, 20);
+
+        setClientResults(local);
+        return;
+      }
+
+      try {
+        setIsSearchingClients(true);
+
+        if (lastClientSearchAbortRef.current) {
+          lastClientSearchAbortRef.current.abort();
+        }
+        const ac = new AbortController();
+        lastClientSearchAbortRef.current = ac;
+
+        const params = new URLSearchParams();
+        params.set("q", q);
+        params.set("take", "20");
+
+        const res = await fetch(
+          `/api/admin/clients/search?${params.toString()}`,
+          {
+            method: "GET",
+            signal: ac.signal,
+            headers: {
+              "Content-Type": "application/json",
+            },
+          },
+        );
+
+        if (!res.ok) {
+          setClientResults([]);
+          return;
+        }
+
+        const data = (await res.json()) as {
+          clients?: AppointmentClientOption[];
+        };
+
+        const list = Array.isArray(data?.clients) ? data.clients : [];
+        setClientResults(list);
+      } catch (err: any) {
+        if (err?.name === "AbortError") return;
+        setClientResults([]);
+      } finally {
+        setIsSearchingClients(false);
+      }
+    }, 320);
+
+    return () => clearTimeout(debounce);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientQuery, clients.length, isAdminMode, isEdit, dialogOpen]);
+
+  // Fecha o dropdown ao clicar fora do input/dropdown
+  useEffect(() => {
+    if (!isClientPickerOpen) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsClientPickerOpen(false);
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isClientPickerOpen]);
+
   return (
     <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
@@ -832,7 +1027,7 @@ export const AppointmentForm = ({
         <Form {...form}>
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* ===========================
-             *  MODO ADMIN: SELECIONAR CLIENTE
+             *  MODO ADMIN: BUSCAR CLIENTE (SINGLE INPUT)
              * =========================== */}
             {isAdminMode && !isEdit && (
               <div className="space-y-2">
@@ -840,70 +1035,112 @@ export const AppointmentForm = ({
                   Cliente
                 </FormLabel>
 
-                <Select
-                  value={selectedClientId}
-                  onValueChange={(value) => {
-                    setSelectedClientId(value);
-
-                    form.setValue("serviceId", "");
-                    form.setValue("description", "");
-                    form.setValue("scheduleAt", undefined as any);
-                    form.setValue("time", "");
-                    form.setValue("barberId", "");
-
-                    // ✅ admin com unidade forçada NÃO perde unitId ao trocar cliente
-                    if (adminHasForcedUnit) {
-                      form.setValue("unitId", forcedUnitId as string, {
-                        shouldDirty: false,
-                      });
-                    } else {
-                      form.setValue("unitId", "");
-                    }
-                  }}
+                <Popover
+                  open={isClientPickerOpen}
+                  onOpenChange={setIsClientPickerOpen}
                 >
-                  <SelectTrigger>
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-content-brand" />
-                      <SelectValue placeholder="Selecione um cliente" />
+                  <PopoverTrigger asChild>
+                    <div className="relative">
+                      <Search
+                        className="absolute left-3 top-1/2 -translate-y-1/2 transform text-content-brand"
+                        size={18}
+                      />
+
+                      <Input
+                        value={clientQuery}
+                        onFocus={() => {
+                          // abre dropdown ao focar
+                          setIsClientPickerOpen(true);
+
+                          // se estiver vazio, mantém lista vazia (sem sugestão automática)
+                          if (!clientQuery.trim()) {
+                            setClientResults([]);
+                          }
+                        }}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          setClientQuery(next);
+
+                          // Se começar a digitar com cliente selecionado, limpa seleção.
+                          if (selectedClientId) {
+                            clearSelectionButKeepTyping();
+                          }
+                        }}
+                        placeholder="Digite para buscar um cliente"
+                        className="pl-10 pr-10"
+                      />
+
+                      {selectedClientId || clientQuery ? (
+                        <button
+                          type="button"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 transform rounded-md p-1 text-content-secondary hover:text-content-primary"
+                          onClick={() => clearSelectedClient()}
+                          aria-label="Limpar cliente"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      ) : null}
                     </div>
-                  </SelectTrigger>
+                  </PopoverTrigger>
 
-                  <SelectContent>
-                    {clients.length === 0 ? (
-                      <SelectItem disabled value="no-clients">
-                        Nenhum cliente cadastrado
-                      </SelectItem>
-                    ) : (
-                      clients.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name} {c.phone ? `• ${c.phone}` : ""}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+                  <PopoverContent
+                    className="w-[--radix-popover-trigger-width] p-2"
+                    align="start"
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                  >
+                    <div className="max-h-64 overflow-auto rounded-md border border-border-primary bg-background-secondary">
+                      {!clientQuery.trim() ? null : isSearchingClients ? (
+                        <div className="flex items-center gap-2 px-3 py-3 text-sm text-content-secondary">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Buscando clientes...
+                        </div>
+                      ) : clientQuery.trim().length < 2 ? (
+                        <div className="px-3 py-3 text-sm text-content-secondary">
+                          Dica: digite pelo menos <b>2 letras</b> para buscar
+                          melhor.
+                        </div>
+                      ) : clientResults.length === 0 ? (
+                        <div className="px-3 py-3 text-sm text-content-secondary">
+                          Nenhum cliente encontrado
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-border-primary">
+                          {clientResults.map((c) => {
+                            const active = selectedClientId === c.id;
+                            return (
+                              <button
+                                key={c.id}
+                                type="button"
+                                className={cn(
+                                  "w-full px-3 py-2 text-left text-sm hover:bg-background-tertiary",
+                                  "flex items-center justify-between gap-3",
+                                  active && "bg-background-tertiary",
+                                )}
+                                onClick={() => handleSelectClient(c)}
+                              >
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium text-content-primary">
+                                    {c.name}
+                                  </p>
+                                  {c.phone ? (
+                                    <p className="truncate text-xs text-content-secondary">
+                                      {c.phone}
+                                    </p>
+                                  ) : null}
+                                </div>
 
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-xs text-content-secondary">
-                    Não encontrou? Cadastre em <b>Clientes</b> e volte para
-                    concluir.
-                  </p>
-
-                  <Button asChild variant="outline" size="sm">
-                    <Link href="/admin/clients">Cadastrar cliente</Link>
-                  </Button>
-                </div>
-
-                {!!selectedClient && (
-                  <div className="rounded-lg border border-border-primary bg-background-tertiary p-3">
-                    <p className="text-sm text-content-primary font-medium">
-                      {selectedClient.name}
-                    </p>
-                    <p className="text-xs text-content-secondary">
-                      {selectedClient.phone}
-                    </p>
-                  </div>
-                )}
+                                {active ? (
+                                  <Check className="h-4 w-4 text-content-brand shrink-0" />
+                                ) : null}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             )}
 
