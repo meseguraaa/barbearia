@@ -220,32 +220,35 @@ export function AdminNav({
   return (
     <nav
       className={cn(
-        "group fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border-primary bg-background-primary",
-        "w-14 hover:w-56 transition-[width] duration-200 ease-in-out",
+        "group fixed left-0 top-0 z-40 flex h-screen flex-col",
+        "border-r border-border-primary bg-background-primary",
+        "w-14 hover:w-55 transition-[width] duration-200 ease-in-out",
         "pt-20",
+        "overflow-hidden", // ✅ evita qualquer reflow/overflow visual
       )}
     >
-      {/* Topo: contexto de unidade (só dono) */}
+      {/* ✅ Header com altura fixa (não empurra os links quando abre) */}
       <div className="px-2">
         <div
           className={cn(
-            "flex items-center gap-2 px-3 py-2 rounded-lg",
+            "flex items-center gap-2 px-3 rounded-lg",
             "text-content-secondary",
             "bg-transparent",
+            "h-11", // ✅ altura fixa do header (ajuste se quiser)
           )}
         >
           <Building2 className="h-4 w-4 shrink-0 text-content-secondary" />
 
-          <div
-            className={cn(
-              "min-w-0 flex-1",
-              "opacity-0 -translate-x-1",
-              "transition-all duration-200",
-              "group-hover:opacity-100 group-hover:translate-x-0",
-            )}
-          >
-            {shouldShowUnitSelector ? (
-              <div className="space-y-1">
+          {/* ✅ área do texto sempre reservada, mas só aparece no hover */}
+          <div className="min-w-0 flex-1 overflow-hidden">
+            <div
+              className={cn(
+                "opacity-0 -translate-x-1 pointer-events-none",
+                "transition-all duration-200",
+                "group-hover:opacity-100 group-hover:translate-x-0 group-hover:pointer-events-auto",
+              )}
+            >
+              {shouldShowUnitSelector ? (
                 <select
                   value={selectedUnit}
                   onChange={(e) => handleChangeUnit(e.target.value)}
@@ -263,12 +266,12 @@ export function AdminNav({
                     </option>
                   ))}
                 </select>
-              </div>
-            ) : (
-              <div className="text-[11px] text-content-tertiary">
-                {canSeeAllUnits ? "Todas as unidades" : "Unidade fixa"}
-              </div>
-            )}
+              ) : (
+                <div className="text-[11px] text-content-tertiary">
+                  {canSeeAllUnits ? "Todas as unidades" : "Unidade fixa"}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

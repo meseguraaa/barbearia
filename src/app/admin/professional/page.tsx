@@ -324,7 +324,6 @@ export default async function ProfessionalsPage() {
                   <p className="text-paragraph-medium-size font-semibold text-content-primary truncate">
                     {row.name}
                   </p>
-                  <ServiceStatusBadge isActive={row.isActive} />
                 </div>
 
                 <p className="text-xs text-content-secondary truncate">
