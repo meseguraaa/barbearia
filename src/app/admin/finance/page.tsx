@@ -28,14 +28,16 @@ export const metadata: Metadata = {
 
 type AdminFinancePageProps = {
   searchParams: Promise<{
-    month?: string; // formato "yyyy-MM"
+    month?: string; // yyyy-MM
   }>;
 };
 
 const UNIT_COOKIE_NAME = "admin_unit_context";
 const UNIT_ALL_VALUE = "all";
 
-// ====== TIPO AUXILIAR: FATURAMENTO POR BARBEIRO ======
+/* ======================================================
+ * TIPOS
+ * ======================================================*/
 type BarberMonthlyEarnings = {
   barberId: string;
   name: string;
@@ -45,16 +47,15 @@ type BarberMonthlyEarnings = {
   productsEarnings: number;
 };
 
-// ============ UNIDADE (MESMA REGRA DO CHECKOUT) ============
-
+/* ======================================================
+ * UNIDADE (MESMA REGRA DO CHECKOUT)
+ * ======================================================*/
 async function resolveUnitScope(admin: {
   unitId: string | null;
   canSeeAllUnits: boolean;
 }) {
-  // Admin de unidade: força a unidade dele
   if (!admin.canSeeAllUnits) return admin.unitId;
 
-  // Dono: respeita cookie (all = todas)
   const cookieStore = await cookies();
   const cookieValue =
     cookieStore.get(UNIT_COOKIE_NAME)?.value ?? UNIT_ALL_VALUE;
@@ -71,8 +72,9 @@ function withUnitWhere<T extends Record<string, any>>(
   return { ...(base as any), unitId } as T;
 }
 
-// ============ LÓGICA DE RECORRÊNCIA (AGORA POR UNIDADE) ============
-
+/* ======================================================
+ * RECORRÊNCIA DE DESPESAS (POR UNIDADE)
+ * ======================================================*/
 async function seedRecurringExpensesForMonth(
   monthStart: Date,
   monthEnd: Date,
@@ -81,7 +83,6 @@ async function seedRecurringExpensesForMonth(
   const previousMonthStart = startOfMonth(addMonths(monthStart, -1));
   const previousMonthEnd = endOfMonth(previousMonthStart);
 
-  // ✅ traz unitId (pra replicar na mesma unidade)
   const lastMonthRecurringExpenses = await prisma.expense.findMany({
     where: withUnitWhere(
       {
@@ -94,7 +95,6 @@ async function seedRecurringExpensesForMonth(
       activeUnitId,
     ) as any,
     select: {
-      id: true,
       description: true,
       category: true,
       amount: true,
@@ -106,30 +106,25 @@ async function seedRecurringExpensesForMonth(
   if (lastMonthRecurringExpenses.length === 0) return;
 
   const year = monthStart.getFullYear();
-  const monthIndex = monthStart.getMonth(); // 0..11
+  const monthIndex = monthStart.getMonth();
 
   for (const expense of lastMonthRecurringExpenses) {
     const day = expense.dueDate.getDate();
 
-    const sameSeriesThisMonth = await prisma.expense.findMany({
+    const exists = await prisma.expense.findFirst({
       where: {
         isRecurring: true,
         description: expense.description,
         category: expense.category,
-        unitId: expense.unitId, // ✅ série por unidade
+        unitId: expense.unitId,
         dueDate: {
           gte: monthStart,
           lte: monthEnd,
         },
       },
-      select: { id: true, dueDate: true },
     });
 
-    const alreadyExists = sameSeriesThisMonth.some(
-      (e) => e.dueDate.getDate() === day,
-    );
-
-    if (alreadyExists) continue;
+    if (exists) continue;
 
     await prisma.expense.create({
       data: {
@@ -139,18 +134,18 @@ async function seedRecurringExpensesForMonth(
         isRecurring: true,
         isPaid: false,
         dueDate: new Date(year, monthIndex, day),
-
-        // ✅ obrigatório
         unitId: expense.unitId,
       },
     });
   }
 }
 
+/* ======================================================
+ * PAGE
+ * ======================================================*/
 export default async function AdminFinancePage({
   searchParams,
 }: AdminFinancePageProps) {
-  // 🔐 Permissão: apenas quem tem "Financeiro" liberado (ou Dono)
   const admin = (await requireAdminPermission("canAccessFinance")) as any;
 
   const activeUnitId = await resolveUnitScope({
@@ -158,8 +153,7 @@ export default async function AdminFinancePage({
     canSeeAllUnits: !!admin?.canSeeAllUnits,
   });
 
-  const resolvedSearchParams = await searchParams;
-  const monthParam = resolvedSearchParams.month;
+  const { month: monthParam } = await searchParams;
 
   const referenceDate = monthParam
     ? parse(monthParam, "yyyy-MM", new Date())
@@ -168,52 +162,29 @@ export default async function AdminFinancePage({
   const monthStart = startOfMonth(referenceDate);
   const monthEnd = endOfMonth(referenceDate);
 
-  // ✅ garante recorrência respeitando unidade (ou todas se dono estiver em "all")
   await seedRecurringExpensesForMonth(monthStart, monthEnd, activeUnitId);
 
-  /**
-   * ✅ REGRA DE OURO (do que você falou):
-   * Financeiro só pode considerar o que foi "Marcar como pago".
-   *
-   * Então aqui a gente NÃO usa appointment DONE como base de faturamento.
-   * A gente usa Orders COMPLETED (pagas) do mês.
-   */
+  /* ======================================================
+   * 🔒 REGRA DE OURO
+   * Financeiro = SOMENTE Order COMPLETED
+   * ======================================================*/
   const paidOrdersWhere = {
     status: "COMPLETED" as const,
     createdAt: { gte: monthStart, lte: monthEnd },
-
-    ...(activeUnitId
-      ? {
-          items: {
-            some: {
-              OR: [
-                { product: { unitId: activeUnitId } },
-                { service: { unitId: activeUnitId } },
-              ],
-            },
-          },
-        }
-      : {}),
+    ...(activeUnitId ? { unitId: activeUnitId } : {}),
   };
 
   const [expenses, paidOrders, productSales, barbers] = await Promise.all([
-    // Despesas do mês (por unidade)
     prisma.expense.findMany({
       where: withUnitWhere(
         {
-          dueDate: {
-            gte: monthStart,
-            lte: monthEnd,
-          },
+          dueDate: { gte: monthStart, lte: monthEnd },
         },
         activeUnitId,
       ) as any,
-      orderBy: {
-        dueDate: "asc",
-      },
+      orderBy: { dueDate: "asc" },
     }),
 
-    // ✅ Pedidos pagos (serviços + produtos) do mês (base oficial do financeiro)
     prisma.order.findMany({
       where: paidOrdersWhere as any,
       include: {
@@ -223,35 +194,19 @@ export default async function AdminFinancePage({
             product: true,
           },
         },
-        // para calcular comissão de serviço corretamente (barberEarningValue / snapshot)
         appointment: {
           include: {
-            service: true,
             barber: true,
+            service: true,
           },
         },
-        barber: true,
-      },
-      orderBy: {
-        createdAt: "desc",
       },
     }),
 
-    // ✅ Vendas de produtos do mês (somente as efetivamente geradas no checkout)
-    // Se productSale já nasce apenas quando paga, isso fica certinho.
     prisma.productSale.findMany({
       where: {
         soldAt: { gte: monthStart, lte: monthEnd },
-
-        ...(activeUnitId
-          ? {
-              // ✅ ProductSale não tem unitId → filtra pela unidade do PRODUCT
-              product: { unitId: activeUnitId },
-
-              // (opcional, mas ajuda a manter coerência caso tenha venda “solta”)
-              // barber: { units: { some: { unitId: activeUnitId, isActive: true } } },
-            }
-          : {}),
+        ...(activeUnitId ? { unitId: activeUnitId } : {}),
       },
       include: {
         product: true,
@@ -259,134 +214,104 @@ export default async function AdminFinancePage({
       },
     }),
 
-    // Barbeiros ATIVOS (por unidade)
     prisma.barber.findMany({
       where: {
         isActive: true,
         ...(activeUnitId
-          ? {
-              units: {
-                some: { unitId: activeUnitId, isActive: true },
-              },
-            }
+          ? { units: { some: { unitId: activeUnitId, isActive: true } } }
           : {}),
       },
       orderBy: { name: "asc" },
     }),
   ]);
 
-  // ===== DESPESAS DO MÊS =====
-  const totalExpenses = expenses.reduce((acc, expense) => {
-    return acc + Number(expense.amount);
-  }, 0);
+  /* ======================================================
+   * DESPESAS
+   * ======================================================*/
+  const totalExpenses = expenses.reduce((sum, e) => sum + Number(e.amount), 0);
 
-  // ============================
-  // FATURAMENTO (SÓ PEDIDOS PAGOS)
-  // ============================
-
-  // Serviços pagos (por orders)
-  let servicesGrossMonth = 0;
-  let servicesCommissionMonth = 0;
+  /* ======================================================
+   * SERVIÇOS (PEDIDOS PAGOS)
+   * ======================================================*/
   let servicesNetMonth = 0;
+  let servicesCommissionMonth = 0;
 
   for (const order of paidOrders) {
-    // soma itens de serviço
-    const serviceItems = (order.items ?? []).filter((i: any) => i.serviceId);
-    if (serviceItems.length === 0) continue;
-
-    const gross = serviceItems.reduce(
-      (sum: number, i: any) => sum + Number(i.totalPrice ?? 0),
-      0,
-    );
-
-    // comissão do barbeiro: prioridade para snapshot do appointment (mais confiável)
-    // fallback: percent do service
     const appt: any = order.appointment;
+    if (!appt) continue;
+
     let commission = 0;
 
-    if (appt) {
-      const earningSnapshot = appt.barberEarningValue;
-      if (earningSnapshot != null) {
-        commission = Number(earningSnapshot);
-      } else {
-        const priceSnapshot = appt.servicePriceAtTheTime;
-        const priceService = appt.service?.price ?? 0;
-        const priceNumber =
-          priceSnapshot != null ? Number(priceSnapshot) : Number(priceService);
-
-        const percentSnapshot = appt.barberPercentageAtTheTime;
-        const percentService = appt.service?.barberPercentage ?? 0;
-        const percentNumber =
-          percentSnapshot != null
-            ? Number(percentSnapshot)
-            : Number(percentService);
-
-        commission = (priceNumber * percentNumber) / 100;
-      }
+    if (appt.barberEarningValue != null) {
+      commission = Number(appt.barberEarningValue);
     } else {
-      // fallback: tenta inferir por item.service.barberPercentage (se existir)
-      // (melhor do que nada; em geral o correto é vir pelo appointment)
-      commission = serviceItems.reduce((sum: number, it: any) => {
-        const total = Number(it.totalPrice ?? 0);
-        const percent = it.service?.barberPercentage ?? 0;
-        return sum + (total * Number(percent)) / 100;
-      }, 0);
+      const price = appt.servicePriceAtTheTime ?? appt.service?.price ?? 0;
+
+      const percent =
+        appt.barberPercentageAtTheTime ?? appt.service?.barberPercentage ?? 0;
+
+      commission = (Number(price) * Number(percent)) / 100;
     }
 
-    servicesGrossMonth += gross;
     servicesCommissionMonth += commission;
-    servicesNetMonth += gross - commission;
   }
 
-  // Produtos (lucro líquido = total - comissão do barbeiro)
+  const servicesGrossMonth = paidOrders.reduce((sum, order) => {
+    const serviceItems = order.items.filter((i) => i.serviceId);
+    return (
+      sum + serviceItems.reduce((s, i) => s + Number(i.totalPrice ?? 0), 0)
+    );
+  }, 0);
+
+  servicesNetMonth = servicesGrossMonth - servicesCommissionMonth;
+
+  /* ======================================================
+   * PRODUTOS
+   * ======================================================*/
   const productsGrossMonth = productSales.reduce(
-    (acc, sale) => acc + Number(sale.totalPrice),
+    (sum, s) => sum + Number(s.totalPrice),
     0,
   );
 
-  const productsCommissionMonth = productSales.reduce((acc, sale) => {
-    const total = Number(sale.totalPrice);
-    const percent = sale.product?.barberPercentage ?? 0;
-    return acc + (total * percent) / 100;
+  const productsCommissionMonth = productSales.reduce((sum, s) => {
+    const percent = s.product?.barberPercentage ?? 0;
+    return sum + (Number(s.totalPrice) * percent) / 100;
   }, 0);
 
   const productsNetMonth = productsGrossMonth - productsCommissionMonth;
 
-  // Faturamento líquido (serviços + produtos) e lucro final
+  /* ======================================================
+   * RESULTADOS
+   * ======================================================*/
   const netRevenueMonth = servicesNetMonth + productsNetMonth;
+
   const netIncome = netRevenueMonth - totalExpenses;
 
   const currencyFormatter = new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
-    minimumFractionDigits: 2,
   });
 
-  const rawMonthLabel = format(referenceDate, "MMMM 'de' yyyy", {
+  const monthLabel = format(referenceDate, "MMMM 'de' yyyy", {
     locale: ptBR,
-  });
-  const monthLabel =
-    rawMonthLabel.charAt(0).toUpperCase() + rawMonthLabel.slice(1);
+  }).replace(/^./, (c) => c.toUpperCase());
 
-  const monthForForm = format(referenceDate, "yyyy-MM");
-
-  // ============================
-  // FATURAMENTO POR BARBEIRO
-  // ============================
+  /* ======================================================
+   * FATURAMENTO POR BARBEIRO
+   * ======================================================*/
   const barberEarningsMap = new Map<string, BarberMonthlyEarnings>();
 
-  barbers.forEach((barber: any) => {
-    barberEarningsMap.set(barber.id, {
-      barberId: barber.id,
-      name: barber.name ?? "Barbeiro",
-      email: barber.email ?? null,
-      phone: barber.phone ?? null,
+  barbers.forEach((b) => {
+    barberEarningsMap.set(b.id, {
+      barberId: b.id,
+      name: b.name ?? "Barbeiro",
+      email: b.email ?? null,
+      phone: b.phone ?? null,
       servicesEarnings: 0,
       productsEarnings: 0,
     });
   });
 
-  // Serviços (pelos pedidos pagos)
   for (const order of paidOrders) {
     const appt: any = order.appointment;
     if (!appt?.barberId) continue;
@@ -396,76 +321,47 @@ export default async function AdminFinancePage({
 
     let commission = 0;
 
-    const earningSnapshot = appt.barberEarningValue;
-    if (earningSnapshot != null) {
-      commission = Number(earningSnapshot);
+    if (appt.barberEarningValue != null) {
+      commission = Number(appt.barberEarningValue);
     } else {
-      const priceSnapshot = appt.servicePriceAtTheTime;
-      const priceService = appt.service?.price ?? 0;
-      const priceNumber =
-        priceSnapshot != null ? Number(priceSnapshot) : Number(priceService);
+      const price = appt.servicePriceAtTheTime ?? appt.service?.price ?? 0;
 
-      const percentSnapshot = appt.barberPercentageAtTheTime;
-      const percentService = appt.service?.barberPercentage ?? 0;
-      const percentNumber =
-        percentSnapshot != null
-          ? Number(percentSnapshot)
-          : Number(percentService);
+      const percent =
+        appt.barberPercentageAtTheTime ?? appt.service?.barberPercentage ?? 0;
 
-      commission = (priceNumber * percentNumber) / 100;
+      commission = (Number(price) * Number(percent)) / 100;
     }
 
     entry.servicesEarnings += commission;
   }
 
-  // Produtos (comissões do mês)
-  productSales.forEach((sale: any) => {
+  productSales.forEach((sale) => {
     if (!sale.barberId) return;
     const entry = barberEarningsMap.get(sale.barberId);
     if (!entry) return;
 
-    const total = Number(sale.totalPrice);
     const percent = sale.product?.barberPercentage ?? 0;
-    const commission = (total * percent) / 100;
-
-    entry.productsEarnings += commission;
+    entry.productsEarnings += (Number(sale.totalPrice) * percent) / 100;
   });
 
-  const barberEarningsList: BarberMonthlyEarnings[] = Array.from(
-    barberEarningsMap.values(),
-  ).sort((a, b) => a.name.localeCompare(b.name));
+  const barberEarningsList = Array.from(barberEarningsMap.values()).sort(
+    (a, b) => a.name.localeCompare(b.name),
+  );
 
-  const canCreateExpense = !!activeUnitId;
-
+  /* ======================================================
+   * RENDER
+   * ======================================================*/
   return (
     <div className="space-y-6 max-w-7xl">
-      {/* HEADER + SELETOR DE MÊS */}
       <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-title text-content-primary">Financeiro</h1>
-          <p className="text-paragraph-medium-size text-content-secondary">
-            Visão geral do faturamento, despesas e lucro da barbearia.
-          </p>
           <p className="text-paragraph-small text-content-secondary">
             Mês selecionado: <span className="font-medium">{monthLabel}</span>
           </p>
-
-          {!canCreateExpense && (
-            <p className="mt-1 text-paragraph-small text-content-tertiary">
-              Para cadastrar despesas, selecione uma unidade (você está em
-              “Todas”).
-            </p>
-          )}
         </div>
 
-        <div className="flex items-center gap-4">
-          <MonthPicker />
-          <NewExpenseDialog
-            month={monthForForm}
-            unitId={activeUnitId}
-            disabled={!canCreateExpense}
-          />
-        </div>
+        <MonthPicker />
       </header>
 
       {/* RESUMO FINANCEIRO DO MÊS */}

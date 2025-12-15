@@ -154,14 +154,25 @@ async function getBarbers(unitId: string | null) {
         : {}),
     },
     orderBy: { name: "asc" },
+    include: {
+      // pivot BarberUnit -> precisamos só do unitId
+      units: {
+        where: { isActive: true },
+        select: { unitId: true, isActive: true },
+      },
+      // pivot ServiceProfessional -> precisamos só do serviceId
+      services: {
+        select: { serviceId: true },
+      },
+    },
   });
 
   return barbers;
 }
 
-async function getServices(unitId: string | null): Promise<Service[]> {
+async function getServices(): Promise<Service[]> {
   const services = await prisma.service.findMany({
-    where: withUnitWhere({ isActive: true }, unitId) as any,
+    where: { isActive: true },
     orderBy: { name: "asc" },
   });
 
@@ -171,8 +182,7 @@ async function getServices(unitId: string | null): Promise<Service[]> {
     price: Number(s.price),
     durationMinutes: s.durationMinutes,
     isActive: s.isActive,
-    barberPercentage: s.barberPercentage ? Number(s.barberPercentage) : 0,
-  })) as Service[];
+  }));
 }
 
 // Clientes = Users com role CLIENT (porque prisma.client não existe no seu schema)
@@ -233,6 +243,9 @@ export default async function AdminAppointmentsPage({
     canSeeAllUnits: !!admin.canSeeAllUnits,
   });
 
+  // ✅ scope do FORM: dono vê tudo (null), admin de unidade fica travado
+  const formScopeUnitId = admin.canSeeAllUnits ? null : activeUnitId;
+
   const resolvedSearchParams = await searchParams;
   const dateParam = resolvedSearchParams.date;
 
@@ -247,17 +260,18 @@ export default async function AdminAppointmentsPage({
 
   const [
     appointmentsPrisma,
-    barbersPrisma,
-    services,
+    barbersPrismaForForm,
+    servicesForForm,
     dayProductSalesPrisma,
     clientsForAdmin,
   ] = await Promise.all([
+    // ✅ A TELA segue o contexto de unidade ativo
     getAppointments(dateParam, activeUnitId),
-    getBarbers(activeUnitId),
-    getServices(activeUnitId),
 
-    // ✅ ProductSale NÃO tem unitId direto (na modelagem original),
-    // então filtramos pela unidade via product.unitId.
+    // ✅ O MODAL precisa poder trocar unidade (quando dono)
+    getBarbers(formScopeUnitId),
+    getServices(),
+
     prisma.productSale.findMany({
       where: {
         soldAt: { gte: dayStart, lte: dayEnd },
@@ -277,14 +291,29 @@ export default async function AdminAppointmentsPage({
 
   const appointmentsForForm = appointmentsPrisma.map(mapToAppointmentType);
 
-  const barbersForForm = barbersPrisma.map((barber) => ({
+  const barbersForForm = barbersPrismaForForm.map((barber: any) => ({
     id: barber.id,
     name: barber.name ?? "",
     email: barber.email ?? "",
     phone: barber.phone ?? "",
     isActive: barber.isActive,
     role: "BARBER" as const,
+
+    unitIds: (barber.units ?? [])
+      .filter((u: any) => u.isActive !== false)
+      .map((u: any) => u.unitId),
+
+    serviceIds: (barber.services ?? []).map((s: any) => s.serviceId),
   }));
+
+  // ✅ só filtra se for admin de unidade (travado). Dono recebe lista global.
+  const safeBarbersForForm = admin.canSeeAllUnits
+    ? barbersForForm
+    : activeUnitId
+      ? barbersForForm.filter((b: any) =>
+          (b.unitIds ?? []).includes(String(activeUnitId)),
+        )
+      : barbersForForm;
 
   type AppointmentWithBarberPrisma = (typeof appointmentsPrisma)[number];
   type DayProductSale = (typeof dayProductSalesPrisma)[number];
@@ -394,8 +423,9 @@ export default async function AdminAppointmentsPage({
           <AdminNewAppointmentButton
             clients={clientsForAdmin}
             appointments={appointmentsForForm}
-            barbers={barbersForForm}
-            services={services}
+            barbers={safeBarbersForForm}
+            services={servicesForForm}
+            unitId={formScopeUnitId}
           />
 
           <DatePicker />
@@ -424,7 +454,7 @@ export default async function AdminAppointmentsPage({
                 salesCount={salesForBarber.length}
                 appointmentsForForm={appointmentsForForm}
                 barbersForForm={barbersForForm}
-                services={services}
+                services={servicesForForm}
                 planCreditInfoByAppointmentId={planCreditInfoByAppointmentId}
               />
             );

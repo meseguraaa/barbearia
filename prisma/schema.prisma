@@ -174,7 +174,6 @@ model Unit {
 
   // 🔹 Entidades “particionadas” por unidade
   appointments Appointment[]
-  services     Service[]
   products     Product[]
   orders       Order[]
   expenses     Expense[]
@@ -189,6 +188,7 @@ model Unit {
   updatedAt                  DateTime                   @updatedAt
   barberWeeklyAvailabilities BarberWeeklyAvailability[]
   barberDailyAvailabilities  BarberDailyAvailability[]
+  services                   Service[]
 
   @@map("units")
 }
@@ -324,9 +324,7 @@ model Barber {
 // =======================
 
 model Service {
-  id     String @id @default(cuid())
-  unitId String
-  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  id String @id @default(cuid())
 
   name                String
   price               Decimal  @db.Decimal(10, 2)
@@ -338,15 +336,16 @@ model Service {
 
   appointments Appointment[]
   planServices PlanService[]
-
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
-  orderItems OrderItem[]
+  orderItems   OrderItem[]
 
   // 🔹 Profissionais que fazem este serviço
   professionals ServiceProfessional[]
 
-  @@index([unitId])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  unit      Unit?    @relation(fields: [unitId], references: [id])
+  unitId    String?
+
   @@map("services")
 }
 

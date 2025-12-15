@@ -459,8 +459,8 @@ export async function concludeAppointment(
     select: {
       id: true,
       status: true,
-      concludedAt: true, // pode existir OU não no schema (usamos as any abaixo)
-    } as any,
+      concludedByRole: true, // existe no schema ✅
+    },
   });
 
   if (!existing) return { error: "Agendamento não encontrado" };
@@ -477,8 +477,7 @@ export async function concludeAppointment(
     // 1) "Concluir" sem mudar status.
     // Tenta setar concludedAt/concludedByRole (se existirem no schema).
     const tryData: Record<string, any> = {
-      concludedAt: new Date(),
-      concludedByRole,
+      concludedByRole, // ✅ mantém rastreio sem depender de concludedAt
       // ⚠️ NÃO setamos status aqui.
     };
 
@@ -661,7 +660,7 @@ export async function cancelAppointment(
     select: {
       id: true,
       status: true,
-      concludedAt: true, // pode existir OU não
+      concludedByRole: true, // ✅ existe
       servicePriceAtTheTime: true,
       cancelFeePercentageAtTheTime: true,
       serviceId: true,
@@ -676,8 +675,13 @@ export async function cancelAppointment(
     return { error: "Não é possível cancelar um agendamento concluído" };
   }
 
-  // ✅ Se tiver concludedAt no schema e estiver preenchido, trava cancelamento
-  if ((existing as any).concludedAt) {
+  // ✅ Regra segura: se já gerou pedido (concluído no fluxo), não pode cancelar
+  const hasOrder = await prisma.order.findFirst({
+    where: { appointmentId },
+    select: { id: true },
+  });
+
+  if (hasOrder) {
     return { error: "Não é possível cancelar um atendimento já concluído" };
   }
 
@@ -772,6 +776,16 @@ export async function cancelAppointment(
  * ---------------------------------------------------------*/
 export async function createAppointment(data: AppointmentData) {
   const parsed = appointmentSchema.parse(data);
+  console.log("[createAppointment] parsed:", {
+    unitId: parsed.unitId ?? null,
+    serviceId: parsed.serviceId,
+    barberId: parsed.barberId,
+    clientId: parsed.clientId ?? null,
+    scheduleAt: parsed.scheduleAt,
+    phone: parsed.phone,
+    description: parsed.description,
+  });
+
   const { scheduleAt, barberId, serviceId } = parsed;
 
   const pastError = validateNotInPast(scheduleAt);
@@ -788,18 +802,39 @@ export async function createAppointment(data: AppointmentData) {
       barberPercentage: true,
       isActive: true,
       durationMinutes: true,
-      unitId: true,
     },
+  });
+
+  console.log("[createAppointment] service:", {
+    id: service?.id ?? null,
+    isActive: service?.isActive ?? null,
+    durationMinutes: service?.durationMinutes ?? null,
   });
 
   if (!service) return { error: "Serviço não encontrado" };
   if (!service.isActive) return { error: "Serviço inativo" };
 
-  const unitId = parsed.unitId ?? service.unitId;
+  // ✅ Agora a unidade vem DO FORM/CONTEXTO, não do service
+  const unitId = parsed.unitId;
 
   if (!unitId) {
     return { error: "Unidade é obrigatória para este agendamento" };
   }
+
+  // (opcional, mas recomendado) garante que a unidade existe/ativa
+  const unit = await prisma.unit.findUnique({
+    where: { id: unitId },
+    select: { id: true, isActive: true },
+  });
+
+  if (!unit) return { error: "Unidade não encontrada" };
+  if (unit.isActive === false) return { error: "Unidade inativa" };
+
+  console.log("[createAppointment] ✅ unit ok", {
+    unitId,
+    serviceId: service.id,
+    barberId,
+  });
 
   const linkError = await ensureBarberLinkedToUnit(barberId, unitId);
   if (linkError) return { error: linkError };
@@ -947,7 +982,6 @@ export async function updateAppointment(id: string, data: AppointmentData) {
       id: true,
       price: true,
       barberPercentage: true,
-      unitId: true,
       durationMinutes: true,
       isActive: true,
     },
@@ -967,11 +1001,28 @@ export async function updateAppointment(id: string, data: AppointmentData) {
       .div(new Prisma.Decimal(100));
   }
 
-  const unitId = parsed.unitId ?? existing.unitId ?? targetService.unitId;
+  // ✅ Unidade vem do form (se permitir trocar) ou mantém a do appointment
+  const unitId = parsed.unitId ?? existing.unitId;
 
   if (!unitId) {
     return { error: "Unidade é obrigatória para este agendamento" };
   }
+
+  // (opcional) garante unidade existente/ativa
+  const unit = await prisma.unit.findUnique({
+    where: { id: unitId },
+    select: { id: true, isActive: true },
+  });
+
+  if (!unit) return { error: "Unidade não encontrada" };
+  if (unit.isActive === false) return { error: "Unidade inativa" };
+
+  console.log("[updateAppointment] ✅ unit ok", {
+    appointmentId: id,
+    unitId,
+    serviceId: targetService.id,
+    barberId,
+  });
 
   const linkError = await ensureBarberLinkedToUnit(barberId, unitId);
   if (linkError) return { error: linkError };

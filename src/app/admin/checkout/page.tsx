@@ -145,18 +145,7 @@ export default async function AdminCheckoutPage({
     createdAt: { gte: monthStart, lte: monthEnd },
     status: "COMPLETED",
 
-    ...(activeUnitId
-      ? {
-          items: {
-            some: {
-              OR: [
-                { product: { unitId: activeUnitId } },
-                { service: { unitId: activeUnitId } },
-              ],
-            },
-          },
-        }
-      : {}),
+    ...(activeUnitId ? { unitId: activeUnitId } : {}),
   };
 
   const [
@@ -170,10 +159,10 @@ export default async function AdminCheckoutPage({
     prisma.order.findMany({
       where: {
         status: "PENDING_CHECKIN",
+        ...(activeUnitId ? { unitId: activeUnitId } : {}),
         items: {
           some: {
             productId: { not: null },
-            ...(activeUnitId ? { product: { unitId: activeUnitId } } : {}),
           },
         },
       } as any,
@@ -194,10 +183,10 @@ export default async function AdminCheckoutPage({
     prisma.order.findMany({
       where: {
         status: "PENDING",
+        ...(activeUnitId ? { unitId: activeUnitId } : {}),
         items: {
           some: {
             serviceId: { not: null },
-            ...(activeUnitId ? { service: { unitId: activeUnitId } } : {}),
           },
         },
       } as any,

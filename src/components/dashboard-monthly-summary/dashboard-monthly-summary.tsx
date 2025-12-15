@@ -20,6 +20,11 @@ type DashboardMonthlySummaryProps = {
   totalAppointmentsCanceledMonth: number;
   totalCanceledWithFeeDay: number;
   totalCanceledWithFeeMonth: number;
+
+  // ✅ NOVO: PRODUTOS
+  productsInStock: number;
+  productsSoldMonth: number;
+  productsReservedMonth: number;
 };
 
 export function DashboardMonthlySummary({
@@ -42,6 +47,11 @@ export function DashboardMonthlySummary({
   totalAppointmentsCanceledMonth,
   totalCanceledWithFeeDay,
   totalCanceledWithFeeMonth,
+
+  // ✅ NOVO
+  productsInStock,
+  productsSoldMonth,
+  productsReservedMonth,
 }: DashboardMonthlySummaryProps) {
   return (
     <section className="grid gap-4 md:grid-cols-4">
@@ -96,60 +106,106 @@ export function DashboardMonthlySummary({
         </p>
       </DashboardStatCard>
 
-      {/* 5. Atendimentos (igual antes) */}
-      <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3">
-        <p className="text-label-small text-content-secondary">Atendimentos</p>
+      {/* 5 + 6: ATENDIMENTOS + PRODUTOS (lado a lado) */}
+      <div className="md:col-span-4 grid gap-4 md:grid-cols-2">
+        {/* 5. Atendimentos */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3">
+          <p className="text-label-small text-content-secondary">
+            Atendimentos
+          </p>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {/* Concluídos */}
-          <div className="space-y-1">
-            <p className="text-paragraph-small text-content-secondary">
-              Concluídos
-            </p>
-            <p className="text-paragraph-medium text-content-primary">
-              Dia:{" "}
-              <span className="font-semibold">{totalAppointmentsDoneDay}</span>
-            </p>
-            <p className="text-paragraph-medium text-content-primary">
-              Mês:{" "}
-              <span className="font-semibold">
-                {totalAppointmentsDoneMonth}
-              </span>
-            </p>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {/* Concluídos */}
+            <div className="space-y-1">
+              <p className="text-paragraph-small text-content-secondary">
+                Concluídos
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Dia:{" "}
+                <span className="font-semibold">
+                  {totalAppointmentsDoneDay}
+                </span>
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Mês:{" "}
+                <span className="font-semibold">
+                  {totalAppointmentsDoneMonth}
+                </span>
+              </p>
+            </div>
+
+            {/* Cancelados */}
+            <div className="space-y-1">
+              <p className="text-paragraph-small text-content-secondary">
+                Cancelados
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Dia:{" "}
+                <span className="font-semibold">
+                  {totalAppointmentsCanceledDay}
+                </span>
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Mês:{" "}
+                <span className="font-semibold">
+                  {totalAppointmentsCanceledMonth}
+                </span>
+              </p>
+            </div>
+
+            {/* Com taxa */}
+            <div className="space-y-1">
+              <p className="text-paragraph-small text-content-secondary">
+                Com taxa
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Dia:{" "}
+                <span className="font-semibold">{totalCanceledWithFeeDay}</span>
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                Mês:{" "}
+                <span className="font-semibold">
+                  {totalCanceledWithFeeMonth}
+                </span>
+              </p>
+            </div>
           </div>
+        </div>
 
-          {/* Cancelados */}
-          <div className="space-y-1">
-            <p className="text-paragraph-small text-content-secondary">
-              Cancelados
-            </p>
-            <p className="text-paragraph-medium text-content-primary">
-              Dia:{" "}
-              <span className="font-semibold">
-                {totalAppointmentsCanceledDay}
-              </span>
-            </p>
-            <p className="text-paragraph-medium text-content-primary">
-              Mês:{" "}
-              <span className="font-semibold">
-                {totalAppointmentsCanceledMonth}
-              </span>
-            </p>
-          </div>
+        {/* 6. Produtos (NOVO) */}
+        <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3">
+          <p className="text-label-small text-content-secondary">Produtos</p>
 
-          {/* Com taxa */}
-          <div className="space-y-1">
-            <p className="text-paragraph-small text-content-secondary">
-              Com taxa
-            </p>
-            <p className="text-paragraph-medium text-content-primary">
-              Dia:{" "}
-              <span className="font-semibold">{totalCanceledWithFeeDay}</span>
-            </p>
-            <p className="text-paragraph-medium text-content-primary">
-              Mês:{" "}
-              <span className="font-semibold">{totalCanceledWithFeeMonth}</span>
-            </p>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {/* Estoque */}
+            <div className="space-y-1">
+              <p className="text-paragraph-small text-content-secondary">
+                Em estoque
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                <span className="font-semibold">{productsInStock}</span>
+              </p>
+            </div>
+
+            {/* Vendidos */}
+            <div className="space-y-1">
+              <p className="text-paragraph-small text-content-secondary">
+                Vendidos (mês)
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                <span className="font-semibold">{productsSoldMonth}</span>
+              </p>
+            </div>
+
+            {/* Em reserva */}
+            <div className="space-y-1">
+              <p className="text-paragraph-small text-content-secondary">
+                Em reserva (mês)
+              </p>
+              <p className="text-paragraph-medium text-content-primary">
+                <span className="font-semibold">{productsReservedMonth}</span>
+              </p>
+            </div>
           </div>
         </div>
       </div>

@@ -49,7 +49,7 @@ import {
   createAppointment,
   updateAppointment,
   getAvailabilityWindowsForBarberOnDateAction,
-  getAvailableBarbersForDateAndServiceAction, // ✅ TROCA AQUI
+  getAvailableBarbersForDateAndServiceAction,
 } from "@/app/admin/dashboard/actions";
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { Appointment } from "@/types/appointment";
@@ -279,6 +279,13 @@ type AppointmentFormProps = {
    */
   units?: UnitOption[];
 
+  /**
+   * ✅ ADMIN: unidade "forçada" pelo contexto (cookie/escopo do admin).
+   * - quando definida, o modal NÃO precisa renderizar select de unidade
+   * - o form mantém unitId estável e injeta automaticamente
+   */
+  forcedUnitId?: string | null;
+
   children?: ReactNode;
 
   defaultClientName?: string;
@@ -297,6 +304,7 @@ export const AppointmentForm = ({
   barbers,
   services,
   units = [],
+  forcedUnitId,
   children,
   defaultClientName,
   clientPlan,
@@ -365,6 +373,27 @@ export const AppointmentForm = ({
 
   const canProceedAdmin = !isAdminMode || !!selectedClientId;
 
+  const adminHasForcedUnit = isAdminMode && !!forcedUnitId;
+
+  // ✅ ADMIN: injeta unitId automaticamente (sem UI de unidade)
+  useEffect(() => {
+    if (!adminHasForcedUnit) return;
+    if (isEdit) return;
+
+    const currentUnitId = form.getValues("unitId");
+    if (currentUnitId !== forcedUnitId) {
+      form.setValue("unitId", forcedUnitId as string, { shouldDirty: false });
+
+      // ✅ unidade mudou (contexto admin), então reseta seleção dependente
+      form.setValue("serviceId", "");
+      form.setValue("description", "");
+      form.setValue("scheduleAt", undefined as any);
+      form.setValue("time", "");
+      form.setValue("barberId", "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminHasForcedUnit, forcedUnitId, isEdit]);
+
   // ✅ FIX A: sessão pode chegar depois, então injeta nome/telefone (modo client, novo)
   useEffect(() => {
     if (isAdminMode) return;
@@ -422,7 +451,36 @@ export const AppointmentForm = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appointment?.id]);
 
+  const resetFormToInitial = () => {
+    form.reset({
+      clientName: initialClientName,
+      phone: initialPhone,
+      unitId: adminHasForcedUnit ? (forcedUnitId as string) : "",
+      serviceId: "",
+      description: "",
+      scheduleAt: undefined as any,
+      time: "",
+      barberId: "",
+    });
+  };
+
   const onSubmit = async (data: FormValues) => {
+    console.log("[AppointmentForm] submit data:", {
+      mode: isAdminMode ? "admin" : "client",
+      isEdit,
+      forcedUnitId,
+      selectedClientId: isAdminMode ? selectedClientId : null,
+
+      unitId: data.unitId,
+      serviceId: data.serviceId,
+      barberId: data.barberId,
+
+      scheduleAt: data.scheduleAt,
+      time: data.time,
+
+      activeUnitsCount: activeUnits.length,
+    });
+
     if (isAdminMode && !selectedClientId) {
       toast.error("Selecione um cliente para continuar.");
       return;
@@ -448,6 +506,8 @@ export const AppointmentForm = ({
       serviceId: data.serviceId,
     };
 
+    console.log("[AppointmentForm] payload -> server:", payload);
+
     const result = isEdit
       ? await updateAppointment((appointment as any).id, payload as any)
       : await createAppointment(payload as any);
@@ -463,16 +523,7 @@ export const AppointmentForm = ({
 
     handleOpenChange(false);
 
-    form.reset({
-      clientName: initialClientName,
-      phone: initialPhone,
-      unitId: "",
-      serviceId: "",
-      description: "",
-      scheduleAt: undefined as any,
-      time: "",
-      barberId: "",
-    });
+    resetFormToInitial();
 
     if (isAdminMode) setSelectedClientId("");
   };
@@ -498,16 +549,7 @@ export const AppointmentForm = ({
 
   useEffect(() => {
     if (!appointment) {
-      form.reset({
-        clientName: initialClientName,
-        phone: initialPhone,
-        unitId: "",
-        serviceId: "",
-        description: "",
-        scheduleAt: undefined as any,
-        time: "",
-        barberId: "",
-      });
+      resetFormToInitial();
       return;
     }
 
@@ -529,7 +571,9 @@ export const AppointmentForm = ({
     form.reset({
       clientName: (appointment as any).clientName,
       phone: (appointment as any).phone,
-      unitId: ((appointment as any)?.unitId ?? "") as string,
+      unitId:
+        (((appointment as any)?.unitId ?? "") as string) ||
+        (adminHasForcedUnit ? (forcedUnitId as string) : ""),
       serviceId: finalService?.id ?? (appointment as any).serviceId ?? "",
       description: (appointment as any).description ?? finalService?.name ?? "",
       scheduleAt: date as any,
@@ -553,19 +597,28 @@ export const AppointmentForm = ({
   const servicesForUnit = useMemo(() => {
     if (!selectedUnitId) return servicesList;
 
+    // ✅ 1) trava por unitId do serviço (a regra real do schema)
+    const servicesFromThisUnit = servicesList.filter((s: any) => {
+      // se vier unitId no objeto, filtra
+      if (s?.unitId) return s.unitId === selectedUnitId;
+      // fallback: se o tipo Service ainda não tem unitId, não quebra
+      return true;
+    });
+
+    // ✅ 2) opcional: ainda restringe pelos serviços que os profissionais da unidade executam
     const barbersInSelectedUnit = filterProfessionalsByUnit(
       barbers,
       selectedUnitId,
     );
-
     const allowedServiceIds = new Set(
       barbersInSelectedUnit.flatMap((b) => b.serviceIds ?? []),
     );
 
-    // legado: se não temos serviceIds, não trava a lista
-    if (allowedServiceIds.size === 0) return servicesList;
+    // legado: se não temos serviceIds, retorna só os serviços da unidade
+    if (allowedServiceIds.size === 0) return servicesFromThisUnit;
 
-    return servicesList.filter((s) => allowedServiceIds.has(s.id));
+    // regra final: tem que ser da unidade E estar no set
+    return servicesFromThisUnit.filter((s) => allowedServiceIds.has(s.id));
   }, [servicesList, barbers, selectedUnitId]);
 
   const selectedServiceData = servicesForUnit.find(
@@ -797,7 +850,15 @@ export const AppointmentForm = ({
                     form.setValue("scheduleAt", undefined as any);
                     form.setValue("time", "");
                     form.setValue("barberId", "");
-                    form.setValue("unitId", "");
+
+                    // ✅ admin com unidade forçada NÃO perde unitId ao trocar cliente
+                    if (adminHasForcedUnit) {
+                      form.setValue("unitId", forcedUnitId as string, {
+                        shouldDirty: false,
+                      });
+                    } else {
+                      form.setValue("unitId", "");
+                    }
                   }}
                 >
                   <SelectTrigger>
@@ -990,9 +1051,6 @@ export const AppointmentForm = ({
                         form.setValue("scheduleAt", undefined as any);
                         form.setValue("time", "");
                         form.setValue("barberId", "");
-
-                        // 🔥 NÃO inferir unitId pelo service.unitId
-                        // Unidade é sempre o combo do usuário.
                       }}
                       value={field.value}
                       disabled={

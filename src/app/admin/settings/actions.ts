@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -17,7 +18,9 @@ const createAdminSchema = z.object({
 
   phone: z.string().optional().nullable(),
   birthday: z.string().optional().nullable(), // dd/MM/yyyy ou yyyy-mm-dd
-  password: z.string().min(6, "Senha muito curta").optional().nullable(),
+
+  // ✅ AGORA: senha obrigatória (e vamos gerar hash)
+  password: z.string().min(6, "Senha muito curta"),
 });
 
 const updateAdminSchema = z.object({
@@ -97,6 +100,11 @@ function looksLikeUnknownFieldError(err: unknown, field: string) {
   return msg.includes("Unknown arg") && msg.includes(`\`${field}\``);
 }
 
+async function hashPassword(raw: string) {
+  // 12 é um bom “equilíbrio” (segurança vs performance) pra painel
+  return bcrypt.hash(raw, 12);
+}
+
 /* =========================================================
  * CREATE ADMIN
  * =======================================================*/
@@ -125,6 +133,9 @@ export async function createAdminAction(
   const phone = normalizeOptionalText(parsed.data.phone);
   const birthday = normalizeBirthday(parsed.data.birthday);
 
+  // ✅ senha obrigatória (schema já garante min 6)
+  const password = String(parsed.data.password);
+
   try {
     // ✅ garante que a unidade existe (evita salvar id lixo)
     const unit = await prisma.unit.findUnique({
@@ -139,8 +150,10 @@ export async function createAdminAction(
     // Se você quiser proibir admin em unidade inativa:
     // if (!unit.isActive) return { ok: false, error: "Unidade está inativa." };
 
+    const passwordHash = await hashPassword(password);
+
     await prisma.$transaction(async (tx) => {
-      // 1) cria o usuário ADMIN
+      // 1) cria o usuário ADMIN (AGORA com passwordHash ✅)
       const created = await tx.user.create({
         data: {
           name,
@@ -150,7 +163,10 @@ export async function createAdminAction(
           role: "ADMIN",
           isActive: true,
           isOwner: false,
-        },
+
+          // ✅ ESSENCIAL pro login funcionar
+          passwordHash,
+        } as any,
         select: { id: true },
       });
 

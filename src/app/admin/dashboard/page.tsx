@@ -1,7 +1,6 @@
 // app/admin/dashboard/page.tsx
 import { prisma } from "@/lib/prisma";
 import { subMonths, getDaysInMonth, format } from "date-fns";
-
 import { ptBR } from "date-fns/locale";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
@@ -99,20 +98,11 @@ function endOfMonthSP(date: Date): Date {
 
 type AdminContext = {
   id: string;
-  // compat com o que pode vir do requireAdminPermission
   unitId?: string | null;
   canSeeAllUnits?: boolean | null;
   isOwner?: boolean | null;
 };
 
-/**
- * ✅ Normaliza o contexto do admin para garantir:
- * - saber se é dono/super admin (canSeeAllUnits)
- * - saber unitId (admin de unidade)
- *
- * Faz fallback no DB caso requireAdminPermission não esteja devolvendo
- * unitId/canSeeAllUnits ainda.
- */
 async function normalizeAdminContext(admin: any): Promise<AdminContext> {
   const ctx: AdminContext = {
     id: String(admin?.id ?? ""),
@@ -135,8 +125,6 @@ async function normalizeAdminContext(admin: any): Promise<AdminContext> {
       isOwner: true,
       adminAccess: {
         select: {
-          // ✅ se seu schema já tem unitId em AdminAccess, vai preencher
-          // (se não tiver ainda, isso dá erro de types; mas seu schema final deve ter)
           unitId: true as any,
         } as any,
       },
@@ -150,26 +138,18 @@ async function normalizeAdminContext(admin: any): Promise<AdminContext> {
     id: ctx.id,
     isOwner: ctx.isOwner ?? dbIsOwner,
     unitId: ctx.unitId ?? dbUnitId,
-    // regra: dono vê tudo, admin de unidade não
     canSeeAllUnits: ctx.canSeeAllUnits ?? ctx.isOwner ?? dbIsOwner ?? false,
   };
 }
 
-/**
- * Resolve o "escopo" de unidade para as queries do admin.
- * - Admin de unidade: ignora cookie e força unitId
- * - Dono/Super admin: cookie decide (all = tudo)
- */
 async function resolveUnitScope(admin: {
   unitId: string | null;
   canSeeAllUnits: boolean;
 }) {
-  // admin de unidade: sempre travado
   if (!admin.canSeeAllUnits) {
     return admin.unitId;
   }
 
-  // dono: cookie decide
   const cookieStore = await cookies();
   const cookieValue =
     cookieStore.get(UNIT_COOKIE_NAME)?.value ?? UNIT_ALL_VALUE;
@@ -182,13 +162,12 @@ function whereAppointmentUnit(unitId: string | null) {
   return unitId ? { unitId } : {};
 }
 
-// ⚠️ AppointmentReview NÃO tem unitId no seu schema.
-// Filtra via appointment.unitId.
+// AppointmentReview não tem unitId: filtra via appointment.unitId.
 function whereReviewUnit(unitId: string | null) {
   return unitId ? { appointment: { unitId } } : {};
 }
 
-// ✅ ProductSale TEM unitId (e agora é obrigatório).
+// ProductSale tem unitId.
 function whereProductSaleUnit(unitId: string | null) {
   return unitId ? { unitId } : {};
 }
@@ -224,19 +203,17 @@ async function getAppointments(
 export default async function AdminDashboardPage({
   searchParams,
 }: AdminDashboardPageProps) {
-  // 🔐 Permissão: apenas quem tem "Dashboard" liberado (ou Dono)
+  // 🔐 Permissão
   const rawAdmin = await requireAdminPermission("canAccessDashboard");
   const admin = await normalizeAdminContext(rawAdmin);
 
-  // ✅ Segurança: admin de unidade precisa ter unitId
   if (!admin.canSeeAllUnits && !admin.unitId) {
-    // melhor falhar duro do que “vazar visão geral”
     throw new Error(
       "Admin de unidade sem unitId definido. Vincule este admin a uma unidade.",
     );
   }
 
-  // ✅ Resolve o escopo de unidade para TODAS as consultas desse dashboard
+  // ✅ Escopo final de unidade para TUDO no dashboard
   const activeUnitId = await resolveUnitScope({
     unitId: admin.unitId ?? null,
     canSeeAllUnits: !!admin.canSeeAllUnits,
@@ -267,15 +244,15 @@ export default async function AdminDashboardPage({
     monthExpensesPrisma,
     dayProductSalesPrisma,
     monthProductSalesPrisma,
-    // ⭐ avaliações filtradas pelo mês selecionado (createdAt)
     allReviewsPrisma,
-    // ⭐ todas as avaliações históricas (para média geral)
     allReviewsOverallPrisma,
-    // 🔹 dados do mês anterior para o gráfico de faturamento
     previousMonthAppointmentsPrisma,
     previousMonthProductSalesPrisma,
-    // 🔹 pedidos (Order + OrderItem) para o gráfico Produtos x Serviços
     monthOrdersPrisma,
+
+    // ✅ NOVOS: estoque e reservas
+    productsStockAggPrisma,
+    reservedOrdersPrisma,
   ] = await Promise.all([
     getAppointments(dateParam, activeUnitId),
 
@@ -383,6 +360,28 @@ export default async function AdminDashboardPage({
         items: true,
       },
     }),
+
+    // ✅ Estoque total (AGORA), respeitando filtro de unidade
+    prisma.product.aggregate({
+      where: {
+        ...(activeUnitId ? { unitId: activeUnitId } : {}),
+      } as any,
+      _sum: {
+        stockQuantity: true as any,
+      },
+    }),
+
+    // ✅ Reservas do mês (quantidade de produtos em pedidos “RESERVED”)
+    prisma.order.findMany({
+      where: {
+        createdAt: { gte: monthStart, lte: monthEnd },
+        ...(activeUnitId ? { unitId: activeUnitId } : {}),
+      },
+      select: {
+        status: true,
+        items: true,
+      },
+    }),
   ]);
 
   // ====== FORMATADOR DE MOEDA ======
@@ -442,7 +441,6 @@ export default async function AdminDashboardPage({
   );
   const totalAppointmentsCanceledDay = canceledAppointmentsDay.length;
 
-  // 🔹 Taxas de cancelamento do dia
   const canceledWithFeeDay = canceledAppointmentsDay.filter(
     (appt) => appt.cancelFeeApplied,
   );
@@ -478,7 +476,7 @@ export default async function AdminDashboardPage({
     0,
   );
 
-  // 🔹 GERAL DO DIA (SERVIÇOS + PRODUTOS)
+  // 🔹 GERAL DO DIA
   const totalGrossDay = totalGrossDayServices + totalProductsRevenueDay;
   const totalCommissionDay =
     totalCommissionDayServices + totalProductsCommissionDay;
@@ -526,7 +524,6 @@ export default async function AdminDashboardPage({
   const totalAppointmentsDoneMonth = monthAppointmentsPrisma.length;
   const totalAppointmentsCanceledMonth = monthCanceledAppointmentsPrisma.length;
 
-  // 🔹 Taxas de cancelamento do mês
   const canceledWithFeeMonth = monthCanceledAppointmentsPrisma.filter(
     (appt) => appt.cancelFeeApplied,
   );
@@ -562,18 +559,43 @@ export default async function AdminDashboardPage({
     0,
   );
 
-  // 🔹 GERAL DO MÊS (SERVIÇOS + PRODUTOS)
+  // ================================
+  // ✅ PRODUTOS (CARD NOVO)
+  // ================================
+  const totalProductsInStock = Number(
+    (productsStockAggPrisma as any)?._sum?.stockQuantity ?? 0,
+  );
+
+  const totalProductsReservedMonth = (reservedOrdersPrisma ?? []).reduce(
+    (acc, order) => {
+      // ✅ Reserva = pendente (não concluído e não cancelado)
+      if (order.status === "COMPLETED") return acc;
+      if (order.status === "CANCELED") return acc;
+
+      const items = (order as any)?.items ?? [];
+      const productItems = items.filter((it: any) => !!it.productId);
+
+      const qty = productItems.reduce((a: number, it: any) => {
+        const q = typeof it.quantity === "number" ? it.quantity : 1;
+        return a + q;
+      }, 0);
+
+      return acc + qty;
+    },
+    0,
+  );
+
+  // 🔹 GERAL DO MÊS
   const totalGrossMonth = totalGrossMonthServices + totalProductsRevenueMonth;
   const totalCommissionMonth =
     totalCommissionMonthServices + totalProductsCommissionMonth;
   const totalNetMonth = totalNetMonthServices + totalProductsNetMonth;
 
-  // ====== DESPESAS DO MÊS (Financeiro) ======
+  // ====== DESPESAS DO MÊS ======
   const totalExpensesMonth = monthExpensesPrisma.reduce((acc, expense) => {
     return acc + Number(expense.amount);
   }, 0);
 
-  // 🔹 Lucro real: líquido do mês (serviços + produtos) - despesas
   const realNetMonth = totalNetMonth - totalExpensesMonth;
 
   // ================================
@@ -638,17 +660,14 @@ export default async function AdminDashboardPage({
 
   const barberReviewsRanking = Array.from(barberReviewsMap.values()).sort(
     (a, b) => {
-      if (b.avgRating !== a.avgRating) {
-        return b.avgRating - a.avgRating;
-      }
-      if (b.totalReviews !== a.totalReviews) {
+      if (b.avgRating !== a.avgRating) return b.avgRating - a.avgRating;
+      if (b.totalReviews !== a.totalReviews)
         return b.totalReviews - a.totalReviews;
-      }
       return a.barberName.localeCompare(b.barberName);
     },
   );
 
-  // 🔹 Tags positivas x negativas (por mês, baseado na nota)
+  // 🔹 Tags positivas x negativas
   const positiveTagMap = new Map<string, number>();
   const negativeTagMap = new Map<string, number>();
 
@@ -658,33 +677,27 @@ export default async function AdminDashboardPage({
 
     for (const rt of review.tags ?? []) {
       const label = rt.tag.label;
-
-      if (isPositive) {
+      if (isPositive)
         positiveTagMap.set(label, (positiveTagMap.get(label) ?? 0) + 1);
-      }
-      if (isNegative) {
+      if (isNegative)
         negativeTagMap.set(label, (negativeTagMap.get(label) ?? 0) + 1);
-      }
     }
   }
 
   const topPositiveTags = Array.from(positiveTagMap.entries())
     .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => {
-      if (b.count !== a.count) return b.count - a.count;
-      return a.label.localeCompare(b.label);
-    })
+    .sort((a, b) =>
+      b.count !== a.count ? b.count - a.count : a.label.localeCompare(b.label),
+    )
     .slice(0, 8);
 
   const topNegativeTags = Array.from(negativeTagMap.entries())
     .map(([label, count]) => ({ label, count }))
-    .sort((a, b) => {
-      if (b.count !== a.count) return b.count - a.count;
-      return a.label.localeCompare(b.label);
-    })
+    .sort((a, b) =>
+      b.count !== a.count ? b.count - a.count : a.label.localeCompare(b.label),
+    )
     .slice(0, 8);
 
-  // 🔹 Feedbacks positivos (3–5 estrelas no mês) e negativos (1–2)
   const positiveReviews = allReviewsPrisma.filter((r) => r.rating >= 3);
   const negativeReviews = allReviewsPrisma.filter((r) => r.rating <= 2);
 
@@ -696,14 +709,10 @@ export default async function AdminDashboardPage({
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .slice(0, 5);
 
-  // 🔹 Distribuição de notas (1 a 5) no mês
   const ratingBuckets = [0, 0, 0, 0, 0];
-
   for (const review of allReviewsPrisma) {
     const r = review.rating;
-    if (r >= 1 && r <= 5) {
-      ratingBuckets[r - 1] += 1;
-    }
+    if (r >= 1 && r <= 5) ratingBuckets[r - 1] += 1;
   }
 
   const ratingsDistributionData = ratingBuckets.map((count, index) => ({
@@ -712,15 +721,13 @@ export default async function AdminDashboardPage({
   }));
 
   // ================================
-  // DADOS PARA O GRÁFICO DE FATURAMENTO
+  // GRÁFICO FATURAMENTO (MÊS ATUAL VS ANTERIOR)
   // ================================
   const currentMonthRevenueByDay = new Map<number, number>();
   const previousMonthRevenueByDay = new Map<number, number>();
 
-  // mês atual: serviços
   for (const appt of monthAppointmentsPrisma) {
     const day = appt.scheduleAt.getDate();
-
     const priceSnapshot = appt.servicePriceAtTheTime;
     const priceService = appt.service?.price ?? 0;
     const priceNumber = priceSnapshot
@@ -733,23 +740,19 @@ export default async function AdminDashboardPage({
     );
   }
 
-  // mês atual: produtos
   for (const sale of monthProductSalesPrisma) {
     const day = sale.soldAt.getDate();
     const total = Number(sale.totalPrice);
-
     currentMonthRevenueByDay.set(
       day,
       (currentMonthRevenueByDay.get(day) ?? 0) + total,
     );
   }
 
-  // mês anterior: serviços
   let previousMonthTotalGross = 0;
 
   for (const appt of previousMonthAppointmentsPrisma) {
     const day = appt.scheduleAt.getDate();
-
     const priceSnapshot = appt.servicePriceAtTheTime;
     const priceService = appt.service?.price ?? 0;
     const priceNumber = priceSnapshot
@@ -760,11 +763,9 @@ export default async function AdminDashboardPage({
       day,
       (previousMonthRevenueByDay.get(day) ?? 0) + priceNumber,
     );
-
     previousMonthTotalGross += priceNumber;
   }
 
-  // mês anterior: produtos
   for (const sale of previousMonthProductSalesPrisma) {
     const day = sale.soldAt.getDate();
     const total = Number(sale.totalPrice);
@@ -773,7 +774,6 @@ export default async function AdminDashboardPage({
       day,
       (previousMonthRevenueByDay.get(day) ?? 0) + total,
     );
-
     previousMonthTotalGross += total;
   }
 
@@ -784,7 +784,6 @@ export default async function AdminDashboardPage({
 
   const revenueChartData = Array.from({ length: maxDays }, (_, index) => {
     const day = index + 1;
-
     return {
       day,
       currentMonth: currentMonthRevenueByDay.get(day) ?? 0,
@@ -799,10 +798,7 @@ export default async function AdminDashboardPage({
         100
       : null;
 
-  const currentMonthLabel = format(selectedDate, "MMM/yyyy", {
-    locale: ptBR,
-  });
-
+  const currentMonthLabel = format(selectedDate, "MMM/yyyy", { locale: ptBR });
   const previousMonthLabel = format(previousMonthDate, "MMM/yyyy", {
     locale: ptBR,
   });
@@ -827,7 +823,10 @@ export default async function AdminDashboardPage({
 
     const bucket: ProductsVsServicesBucket = revenueByDayFromOrders.get(
       day,
-    ) ?? { services: 0, products: 0 };
+    ) ?? {
+      services: 0,
+      products: 0,
+    };
 
     for (const item of order.items ?? []) {
       const total = item.totalPrice ? Number(item.totalPrice) : 0;
@@ -898,7 +897,7 @@ export default async function AdminDashboardPage({
         totalCanceledWithFeeDay={totalCanceledWithFeeDay}
       />
 
-      {/* RESUMO FINANCEIRO DO MÊS + ATENDIMENTOS */}
+      {/* RESUMO FINANCEIRO DO MÊS + ATENDIMENTOS + (NOVO) PRODUTOS */}
       <DashboardMonthlySummary
         totalGrossMonth={currencyFormatter.format(totalGrossMonth)}
         totalGrossMonthServices={currencyFormatter.format(
@@ -919,6 +918,10 @@ export default async function AdminDashboardPage({
         totalAppointmentsCanceledMonth={totalAppointmentsCanceledMonth}
         totalCanceledWithFeeDay={totalCanceledWithFeeDay}
         totalCanceledWithFeeMonth={totalCanceledWithFeeMonth}
+        // ✅ NOVOS (para a caixa Produtos ao lado de Atendimento)
+        productsInStock={totalProductsInStock}
+        productsSoldMonth={totalProductsSoldMonth}
+        productsReservedMonth={totalProductsReservedMonth}
       />
 
       {/* GRÁFICO DE FATURAMENTO (MÊS ATUAL VS ANTERIOR) */}
@@ -937,7 +940,7 @@ export default async function AdminDashboardPage({
         totalProducts={totalOrdersProductsMonth}
       />
 
-      {/* AVALIAÇÕES DE CLIENTES (POR MÊS + HISTÓRICO) */}
+      {/* AVALIAÇÕES DE CLIENTES */}
       <section className="space-y-4 rounded-xl border border-border-primary bg-background-tertiary p-4">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
@@ -1023,9 +1026,8 @@ export default async function AdminDashboardPage({
               </table>
             </div>
 
-            {/* MOTIVOS POSITIVOS / NEGATIVOS MAIS CITADOS */}
+            {/* MOTIVOS POSITIVOS / NEGATIVOS */}
             <div className="grid gap-4 border-t border-border-primary/60 pt-4 md:grid-cols-2">
-              {/* POSITIVOS */}
               <div className="space-y-2">
                 <p className="text-label-small text-content-primary">
                   Motivos positivos mais citados (no mês)
@@ -1050,7 +1052,6 @@ export default async function AdminDashboardPage({
                 )}
               </div>
 
-              {/* NEGATIVOS */}
               <div className="space-y-2">
                 <p className="text-label-small text-content-primary">
                   Motivos negativos mais citados (no mês)
@@ -1076,10 +1077,9 @@ export default async function AdminDashboardPage({
               </div>
             </div>
 
-            {/* FEEDBACKS POSITIVOS / NEGATIVOS RECENTES */}
+            {/* FEEDBACKS RECENTES */}
             <div className="border-t border-border-primary/60 pt-4">
               <div className="grid gap-4 md:grid-cols-2">
-                {/* POSITIVOS */}
                 <div className="space-y-2">
                   <p className="text-label-small text-content-primary">
                     Feedbacks positivos recentes (3–5 estrelas no mês)
@@ -1143,7 +1143,6 @@ export default async function AdminDashboardPage({
                   )}
                 </div>
 
-                {/* NEGATIVOS */}
                 <div className="space-y-2">
                   <p className="text-label-small text-content-primary">
                     Feedbacks negativos recentes (1–2 estrelas no mês)
@@ -1212,7 +1211,7 @@ export default async function AdminDashboardPage({
         )}
       </section>
 
-      {/* GRÁFICO 4 · SATISFAÇÃO: DISTRIBUIÇÃO DE NOTAS */}
+      {/* GRÁFICO 4 · SATISFAÇÃO */}
       <DashboardRatingsDistributionChart
         data={ratingsDistributionData}
         monthLabel={currentMonthLabel}
