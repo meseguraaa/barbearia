@@ -558,10 +558,7 @@ export const AppointmentForm = ({
   }, [dialogOpen]);
 
   useEffect(() => {
-    if (!appointment) {
-      resetFormToInitial();
-      return;
-    }
+    if (!appointment) return;
 
     const date = new Date((appointment as any).scheduleAt);
     const time = format(date, "HH:mm");
@@ -597,6 +594,13 @@ export const AppointmentForm = ({
   const selectedServiceId = form.watch("serviceId");
   const selectedDate = form.watch("scheduleAt");
   const selectedBarberId = form.watch("barberId");
+
+  console.log("[AppointmentForm] render state", {
+    selectedUnitId,
+    selectedServiceId,
+    selectedDate,
+    selectedBarberId,
+  });
 
   /**
    * ✅ B.2: Serviços filtrados pela unidade, mas pela regra correta:
@@ -754,6 +758,13 @@ export const AppointmentForm = ({
           iso,
           effectiveUnitId,
         );
+
+        console.log("[availability windows]", {
+          selectedBarberId,
+          iso,
+          effectiveUnitId,
+          windows,
+        });
 
         if (!cancelled) {
           if (!windows) setAvailabilityWindows(undefined);
@@ -993,13 +1004,15 @@ export const AppointmentForm = ({
   return (
     <Dialog open={dialogOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        {children ? (
-          children
-        ) : (
-          <Button variant={isEdit ? "edit2" : "brand"} size="sm">
-            {isEdit ? "Editar" : "Agendar"}
-          </Button>
-        )}
+        <span className="inline-flex">
+          {children ? (
+            children
+          ) : (
+            <Button variant={isEdit ? "edit2" : "brand"} size="sm">
+              {isEdit ? "Editar" : "Agendar"}
+            </Button>
+          )}
+        </span>
       </DialogTrigger>
 
       <DialogContent

@@ -152,6 +152,7 @@ export default async function Home({ searchParams }: HomeProps) {
 
   const rawAppointments = await prisma.appointment.findMany({
     where: {
+      clientId: userId, // ✅ AQUI É A TRAVA: só agendamentos do cliente logado
       scheduleAt: {
         gte: dayStart,
         lte: dayEnd,
