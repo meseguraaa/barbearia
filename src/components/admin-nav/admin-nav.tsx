@@ -78,13 +78,11 @@ const adminLinks: AdminLink[] = [
     href: "/admin/review-tags",
     label: "Avaliação",
     icon: Tag,
-    // se quiser permissionar depois, coloca um module aqui
   },
   {
     href: "/admin/products",
     label: "Produtos",
     icon: Package,
-    // idem
   },
   {
     href: "/admin/clients",
@@ -108,9 +106,9 @@ function setClientCookie(
   value: string,
   maxAgeSeconds = 60 * 60 * 24 * 30,
 ) {
-  // cookie normal (não httpOnly) só pra contexto de UI/queries
-  // path=/ pra valer no admin inteiro
-  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax`;
+  document.cookie = `${encodeURIComponent(name)}=${encodeURIComponent(
+    value,
+  )}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax`;
 }
 
 function getClientCookie(name: string): string | null {
@@ -143,21 +141,45 @@ export function AdminNav({
     });
   }, [allowedModules]);
 
+  // ✅ Se dono tiver somente 1 unidade, não faz sentido combo
+  const ownerHasMultipleUnits = useMemo(() => {
+    if (!canSeeAllUnits) return false;
+    return (units ?? []).length > 1;
+  }, [canSeeAllUnits, units]);
+
+  const ownerSingleUnitName = useMemo(() => {
+    if (!canSeeAllUnits) return null;
+    if ((units ?? []).length !== 1) return null;
+    return units?.[0]?.name ?? null;
+  }, [canSeeAllUnits, units]);
+
+  // Nome da unidade fixa (quando não pode ver todas)
+  const fixedUnitName = useMemo(() => {
+    if (canSeeAllUnits) return null;
+    if (!unitId) return null;
+    const found = (units ?? []).find((u) => u.id === unitId);
+    return found?.name ?? null;
+  }, [canSeeAllUnits, unitId, units]);
+
   // Unidade selecionada (client-side)
   const [selectedUnit, setSelectedUnit] = useState<string>(() => {
     const fromCookie =
       typeof window !== "undefined" ? getClientCookie(UNIT_COOKIE_NAME) : null;
 
     if (canSeeAllUnits) {
-      // dono: aceita "all" ou uma unidade válida (se units já vierem)
       const allowedIds = new Set((units ?? []).map((u) => u.id));
+
+      // ✅ Se só existe 1 unidade, força nela (sem "all")
+      if ((units ?? []).length === 1) {
+        return units?.[0]?.id ?? UNIT_ALL_VALUE;
+      }
+
       if (!fromCookie) return UNIT_ALL_VALUE;
 
       if (fromCookie === UNIT_ALL_VALUE) return UNIT_ALL_VALUE;
       if (allowedIds.size > 0 && !allowedIds.has(fromCookie))
         return UNIT_ALL_VALUE;
 
-      // se units ainda não carregou (allowedIds.size === 0), deixa passar por enquanto
       return fromCookie;
     }
 
@@ -165,20 +187,38 @@ export function AdminNav({
     return unitId ?? "";
   });
 
-  // Regra forte:
-  // - admin de unidade: força cookie = unitId e travado (não mostra seletor)
-  // - dono: se não tiver cookie ainda, seta "all"
   useEffect(() => {
     if (!canSeeAllUnits) {
       if (unitId) {
         if (selectedUnit !== unitId) setSelectedUnit(unitId);
         setClientCookie(UNIT_COOKIE_NAME, unitId);
+
+        // ✅ se tivermos a lista de units, grava também o nome
+        const currentUnitName = (units ?? []).find(
+          (u) => u.id === unitId,
+        )?.name;
+        if (currentUnitName) {
+          setClientCookie("admin_unit_name", currentUnitName);
+        }
       }
       return;
     }
 
-    // dono
-    // dono
+    // DONO
+    // ✅ Se só existe 1 unidade: fixa nela e grava cookie
+    if ((units ?? []).length === 1) {
+      const onlyId = units?.[0]?.id;
+      const onlyName = units?.[0]?.name;
+      if (onlyId) {
+        setClientCookie(UNIT_COOKIE_NAME, onlyId);
+        setSelectedUnit(onlyId);
+      }
+      if (onlyName) {
+        setClientCookie("admin_unit_name", onlyName);
+      }
+      return;
+    }
+
     const cookie = getClientCookie(UNIT_COOKIE_NAME);
     const allowedIds = new Set((units ?? []).map((u) => u.id));
 
@@ -188,7 +228,6 @@ export function AdminNav({
       return;
     }
 
-    // se units já existe e cookie não é válido, corrige
     if (
       allowedIds.size > 0 &&
       cookie !== UNIT_ALL_VALUE &&
@@ -201,21 +240,48 @@ export function AdminNav({
   }, [canSeeAllUnits, unitId, selectedUnit, units]);
 
   function handleChangeUnit(next: string) {
-    // admin de unidade nunca troca unidade
     if (!canSeeAllUnits) return;
 
-    // dono: só aceita "all" OU uma unidade da lista recebida do server
     const allowedIds = new Set((units ?? []).map((u) => u.id));
     const safeNext =
       next === UNIT_ALL_VALUE || allowedIds.has(next) ? next : UNIT_ALL_VALUE;
 
     setSelectedUnit(safeNext);
     setClientCookie(UNIT_COOKIE_NAME, safeNext);
+
+    const nextName =
+      safeNext === UNIT_ALL_VALUE
+        ? "Todas as unidades"
+        : (units ?? []).find((u) => u.id === safeNext)?.name;
+    if (nextName) setClientCookie("admin_unit_name", nextName);
+
     router.refresh();
   }
 
+  // ✅ Só mostra seletor se for dono E tiver 2+ unidades
   const shouldShowUnitSelector =
-    canSeeAllUnits && Array.isArray(units) && units.length > 0;
+    canSeeAllUnits &&
+    ownerHasMultipleUnits &&
+    Array.isArray(units) &&
+    units.length > 0;
+
+  // ✅ Texto quando NÃO tem seletor
+  const unitLabel = useMemo(() => {
+    if (shouldShowUnitSelector) return null;
+
+    if (canSeeAllUnits) {
+      // dono, mas só 1 unidade
+      return ownerSingleUnitName ?? "Todas as unidades";
+    }
+
+    // admin fixo
+    return fixedUnitName ?? getClientCookie("admin_unit_name") ?? "";
+  }, [
+    shouldShowUnitSelector,
+    canSeeAllUnits,
+    ownerSingleUnitName,
+    fixedUnitName,
+  ]);
 
   return (
     <nav
@@ -224,22 +290,21 @@ export function AdminNav({
         "border-r border-border-primary bg-background-primary",
         "w-14 hover:w-55 transition-[width] duration-200 ease-in-out",
         "pt-20",
-        "overflow-hidden", // ✅ evita qualquer reflow/overflow visual
+        "overflow-hidden",
       )}
     >
-      {/* ✅ Header com altura fixa (não empurra os links quando abre) */}
+      {/* Header */}
       <div className="px-2">
         <div
           className={cn(
             "flex items-center gap-2 px-3 rounded-lg",
             "text-content-secondary",
             "bg-transparent",
-            "h-11", // ✅ altura fixa do header (ajuste se quiser)
+            "h-11",
           )}
         >
           <Building2 className="h-4 w-4 shrink-0 text-content-secondary" />
 
-          {/* ✅ área do texto sempre reservada, mas só aparece no hover */}
           <div className="min-w-0 flex-1 overflow-hidden">
             <div
               className={cn(
@@ -267,8 +332,8 @@ export function AdminNav({
                   ))}
                 </select>
               ) : (
-                <div className="text-[11px] text-content-tertiary">
-                  {canSeeAllUnits ? "Todas as unidades" : "Unidade fixa"}
+                <div className="text-[11px] text-content-tertiary truncate">
+                  {unitLabel}
                 </div>
               )}
             </div>
@@ -313,7 +378,6 @@ export function AdminNav({
           );
         })}
 
-        {/* Configurações: só mostra se tiver módulo SETTINGS liberado */}
         {allowedModules.includes("SETTINGS") && (
           <Link
             href="/admin/settings"

@@ -27,7 +27,12 @@ export default async function AdminLayout({
         select: { id: true, name: true },
         orderBy: { name: "asc" },
       })
-    : [];
+    : currentAdmin.unitId
+      ? await prisma.unit.findMany({
+          where: { id: currentAdmin.unitId },
+          select: { id: true, name: true },
+        })
+      : [];
 
   // 🔹 Admin ativo: nav fixo na esquerda + conteúdo com padding
   return (
