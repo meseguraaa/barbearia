@@ -164,6 +164,11 @@ export default async function AdminFinancePage({
 
   await seedRecurringExpensesForMonth(monthStart, monthEnd, activeUnitId);
 
+  const monthQuery = format(referenceDate, "yyyy-MM");
+
+  const newExpenseDisabled =
+    !activeUnitId || (admin?.canSeeAllUnits && activeUnitId == null);
+
   /* ======================================================
    * 🔒 REGRA DE OURO
    * Financeiro = SOMENTE Order COMPLETED
@@ -284,7 +289,6 @@ export default async function AdminFinancePage({
    * RESULTADOS
    * ======================================================*/
   const netRevenueMonth = servicesNetMonth + productsNetMonth;
-
   const netIncome = netRevenueMonth - totalExpenses;
 
   const currencyFormatter = new Intl.NumberFormat("pt-BR", {
@@ -405,9 +409,7 @@ export default async function AdminFinancePage({
             Lucro líquido (mês)
           </p>
           <p
-            className={`text-title ${
-              netIncome >= 0 ? "text-green-500" : "text-red-600"
-            }`}
+            className={`text-title ${netIncome >= 0 ? "text-green-500" : "text-red-600"}`}
           >
             {currencyFormatter.format(netIncome)}
           </p>
@@ -422,14 +424,23 @@ export default async function AdminFinancePage({
         currencyFormatter={currencyFormatter}
       />
 
-      <div>
-        <h2 className="text-subtitle text-content-primary">
-          Cadastro de despesas (mês)
-        </h2>
-        <p className="text-paragraph-small text-content-secondary">
-          Contas cadastradas para este mês, incluindo despesas recorrentes e
-          avulsas.
-        </p>
+      {/* HEADER DO CADASTRO + BOTÃO (VOLTOU A VIDA) */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 className="text-subtitle text-content-primary">
+            Cadastro de despesas (mês)
+          </h2>
+          <p className="text-paragraph-small text-content-secondary">
+            Contas cadastradas para este mês, incluindo despesas recorrentes e
+            avulsas.
+          </p>
+        </div>
+
+        <NewExpenseDialog
+          month={monthQuery}
+          unitId={activeUnitId}
+          disabled={newExpenseDisabled}
+        />
       </div>
 
       <section className="overflow-x-auto rounded-xl border border-border-primary bg-background-tertiary">

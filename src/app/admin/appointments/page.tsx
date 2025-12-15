@@ -185,14 +185,22 @@ async function getServices(): Promise<Service[]> {
   }));
 }
 
-// Clientes = Users com role CLIENT (porque prisma.client não existe no seu schema)
-async function getClientsForAdminAppointments(): Promise<
+/**
+ * ✅ IMPORTANTE:
+ * Não carregamos mais “centenas/milhares” de clientes aqui.
+ * Apenas um “seed” pequeno (ex.: 20) para o modal abrir com algo.
+ * A busca real acontece conforme o admin digita (via /api/admin/clients/search).
+ */
+async function getInitialClientsForAdminAppointments(): Promise<
   AppointmentClientOption[]
 > {
   const clients = await prisma.user.findMany({
-    where: { role: "CLIENT" },
+    where: {
+      role: "CLIENT",
+      name: { not: null },
+    },
     orderBy: { name: "asc" },
-    take: 500,
+    take: 20,
     select: {
       id: true,
       name: true,
@@ -286,7 +294,8 @@ export default async function AdminAppointmentsPage({
       include: { product: true, barber: true },
     }),
 
-    getClientsForAdminAppointments(),
+    // ✅ Agora é leve: só um seed pequeno
+    getInitialClientsForAdminAppointments(),
   ]);
 
   const appointmentsForForm = appointmentsPrisma.map(mapToAppointmentType);

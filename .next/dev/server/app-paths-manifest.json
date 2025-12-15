@@ -1,7 +1,8 @@
 {
-  "/painel/login/page": "app/painel/login/page.js",
-  "/admin/settings/page": "app/admin/settings/page.js",
+  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
   "/admin/appointments/page": "app/admin/appointments/page.js",
+  "/admin/settings/page": "app/admin/settings/page.js",
   "/admin/dashboard/page": "app/admin/dashboard/page.js",
+  "/admin/checkout/page": "app/admin/checkout/page.js",
   "/admin/professional/page": "app/admin/professional/page.js"
 }
