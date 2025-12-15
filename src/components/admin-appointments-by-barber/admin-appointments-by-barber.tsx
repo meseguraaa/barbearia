@@ -1,6 +1,7 @@
 import { AdminAppointmentRow } from "@/components/admin-appointment-row";
 import type { Appointment as AppointmentType } from "@/types/appointment";
 import type { Service } from "@/types/service";
+import type { UnitOption } from "@/components/appointment-form";
 
 type BarberForForm = {
   id: string;
@@ -33,6 +34,9 @@ type AdminAppointmentsByBarberProps = {
   barbersForForm: BarberForForm[];
   services: Service[];
   planCreditInfoByAppointmentId?: Record<string, PlanCreditInfo>;
+
+  // ✅ NOVO: unidades para o AppointmentForm (ADMIN)
+  units?: UnitOption[];
 };
 
 export function AdminAppointmentsByBarber({
@@ -42,7 +46,10 @@ export function AdminAppointmentsByBarber({
   barbersForForm,
   services,
   planCreditInfoByAppointmentId,
+  units,
 }: AdminAppointmentsByBarberProps) {
+  const safeUnits = units ?? [];
+
   const avatarInitials = group.barberName
     .split(" ")
     .map((n) => n[0])
@@ -92,6 +99,7 @@ export function AdminAppointmentsByBarber({
                   appointmentsForForm={appointmentsForForm}
                   barbersForForm={barbersForForm}
                   services={services}
+                  units={safeUnits} // ✅ NOVO
                   isPlanCredit={planInfo?.isPlanCredit ?? false}
                   planCreditIndex={planInfo?.planCreditIndex ?? null}
                   planTotalCredits={planInfo?.planTotalCredits ?? null}

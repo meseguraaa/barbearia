@@ -281,6 +281,8 @@ type AppointmentFormProps = {
    */
   units?: UnitOption[];
 
+  defaultUnitId?: string;
+
   /**
    * ✅ ADMIN: unidade "forçada" pelo contexto (cookie/escopo do admin).
    * - quando definida, o modal NÃO precisa renderizar select de unidade
@@ -307,6 +309,7 @@ export const AppointmentForm = ({
   services,
   units = [],
   forcedUnitId,
+  defaultUnitId,
   children,
   defaultClientName,
   clientPlan,
@@ -373,7 +376,8 @@ export const AppointmentForm = ({
     if (open == null) setIsOpen(v);
   };
 
-  const canProceedAdmin = !isAdminMode || !!selectedClientId;
+  // ✅ FIX: no EDIT do admin não existe selectedClientId, então não pode travar o fluxo
+  const canProceedAdmin = !isAdminMode || isEdit || !!selectedClientId;
 
   const adminHasForcedUnit = isAdminMode && !!forcedUnitId;
 
@@ -386,7 +390,7 @@ export const AppointmentForm = ({
     if (currentUnitId !== forcedUnitId) {
       form.setValue("unitId", forcedUnitId as string, { shouldDirty: false });
 
-      // ✅ unidade mudou (contexto admin), então reseta seleção dependente
+      // unidade mudou, reseta seleção dependente
       form.setValue("serviceId", "");
       form.setValue("description", "");
       form.setValue("scheduleAt", undefined as any);
@@ -396,23 +400,27 @@ export const AppointmentForm = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminHasForcedUnit, forcedUnitId, isEdit]);
 
-  // ✅ FIX A: sessão pode chegar depois, então injeta nome/telefone (modo client, novo)
+  // ✅ CLIENT: se vier defaultUnitId, injeta no form (novo)
   useEffect(() => {
     if (isAdminMode) return;
     if (isEdit) return;
+    if (!defaultUnitId) return;
 
-    const currentPhone = form.getValues("phone");
-    const currentName = form.getValues("clientName");
+    const currentUnitId = form.getValues("unitId");
+    if (currentUnitId) return;
 
-    if (!currentName && sessionClientName) {
-      form.setValue("clientName", sessionClientName, { shouldDirty: false });
-    }
+    const exists = activeUnits.some((u) => u.id === defaultUnitId);
+    if (!exists) return;
 
-    if (!currentPhone && sessionPhone) {
-      form.setValue("phone", sessionPhone, { shouldDirty: false });
-    }
+    form.setValue("unitId", defaultUnitId, { shouldDirty: false });
+
+    form.setValue("serviceId", "");
+    form.setValue("description", "");
+    form.setValue("scheduleAt", undefined as any);
+    form.setValue("time", "");
+    form.setValue("barberId", "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdminMode, isEdit, sessionClientName, sessionPhone]);
+  }, [isAdminMode, isEdit, defaultUnitId, activeUnits.length]);
 
   // ✅ Item B: se tiver 1 unidade ativa, auto seleciona (modo client, novo)
   useEffect(() => {
@@ -432,15 +440,17 @@ export const AppointmentForm = ({
     if (!isAdminMode) return;
 
     if (!selectedClient) {
-      form.setValue("clientName", "");
-      form.setValue("phone", "");
+      if (!isEdit) {
+        form.setValue("clientName", "");
+        form.setValue("phone", "");
+      }
       return;
     }
 
     form.setValue("clientName", selectedClient.name ?? "");
     form.setValue("phone", selectedClient.phone ?? "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdminMode, selectedClientId]);
+  }, [isAdminMode, selectedClientId, isEdit]);
 
   // ✅ Em edição: tenta puxar unitId do appointment
   useEffect(() => {
@@ -467,23 +477,7 @@ export const AppointmentForm = ({
   };
 
   const onSubmit = async (data: FormValues) => {
-    console.log("[AppointmentForm] submit data:", {
-      mode: isAdminMode ? "admin" : "client",
-      isEdit,
-      forcedUnitId,
-      selectedClientId: isAdminMode ? selectedClientId : null,
-
-      unitId: data.unitId,
-      serviceId: data.serviceId,
-      barberId: data.barberId,
-
-      scheduleAt: data.scheduleAt,
-      time: data.time,
-
-      activeUnitsCount: activeUnits.length,
-    });
-
-    if (isAdminMode && !selectedClientId) {
+    if (isAdminMode && !isEdit && !selectedClientId) {
       toast.error("Selecione um cliente para continuar.");
       return;
     }
@@ -498,7 +492,9 @@ export const AppointmentForm = ({
     scheduleAt.setHours(Number(hour), Number(minute), 0, 0);
 
     const payload = {
-      clientId: isAdminMode ? selectedClientId : undefined,
+      // ✅ FIX: só manda clientId no ADMIN NOVO
+      clientId: isAdminMode && !isEdit ? selectedClientId : undefined,
+
       clientName: data.clientName,
       phone: data.phone,
       unitId: data.unitId,
@@ -507,8 +503,6 @@ export const AppointmentForm = ({
       barberId: data.barberId,
       serviceId: data.serviceId,
     };
-
-    console.log("[AppointmentForm] payload -> server:", payload);
 
     const result = isEdit
       ? await updateAppointment((appointment as any).id, payload as any)
@@ -594,32 +588,21 @@ export const AppointmentForm = ({
   const selectedServiceId = form.watch("serviceId");
   const selectedDate = form.watch("scheduleAt");
   const selectedBarberId = form.watch("barberId");
+  const selectedTimeValue = form.watch("time");
 
-  console.log("[AppointmentForm] render state", {
-    selectedUnitId,
-    selectedServiceId,
-    selectedDate,
-    selectedBarberId,
-  });
+  const needsUnitSelection = activeUnits.length > 1 && !selectedUnitId;
 
   /**
-   * ✅ B.2: Serviços filtrados pela unidade, mas pela regra correta:
-   * - pega os profissionais daquela unidade (BarberUnit)
-   * - junta todos os serviceIds desses profissionais (ServiceProfessional)
-   * - filtra os serviços por esse Set
+   * Serviços filtrados pela unidade
    */
   const servicesForUnit = useMemo(() => {
     if (!selectedUnitId) return servicesList;
 
-    // ✅ 1) trava por unitId do serviço (a regra real do schema)
     const servicesFromThisUnit = servicesList.filter((s: any) => {
-      // se vier unitId no objeto, filtra
       if (s?.unitId) return s.unitId === selectedUnitId;
-      // fallback: se o tipo Service ainda não tem unitId, não quebra
       return true;
     });
 
-    // ✅ 2) opcional: ainda restringe pelos serviços que os profissionais da unidade executam
     const barbersInSelectedUnit = filterProfessionalsByUnit(
       barbers,
       selectedUnitId,
@@ -628,10 +611,8 @@ export const AppointmentForm = ({
       barbersInSelectedUnit.flatMap((b) => b.serviceIds ?? []),
     );
 
-    // legado: se não temos serviceIds, retorna só os serviços da unidade
     if (allowedServiceIds.size === 0) return servicesFromThisUnit;
 
-    // regra final: tem que ser da unidade E estar no set
     return servicesFromThisUnit.filter((s) => allowedServiceIds.has(s.id));
   }, [servicesList, barbers, selectedUnitId]);
 
@@ -660,7 +641,6 @@ export const AppointmentForm = ({
   >(() => sortProfessionals(barbers));
   const [isLoadingBarbers, setIsLoadingBarbers] = useState(false);
 
-  // ✅ TROCA DEFINITIVA: backend travado por (data + unidade + serviço)
   useEffect(() => {
     if (!selectedDate || !selectedServiceId || !effectiveUnitId) {
       setAvailableBarbersForDate(sortProfessionals(barbers));
@@ -682,8 +662,6 @@ export const AppointmentForm = ({
 
         result = Array.isArray(result) ? result : [];
 
-        // Em edição: garante que o profissional do appointment apareça no select
-        // (mesmo se ele hoje não estiver disponível pela regra nova)
         if (isEdit && (appointment as any)?.barberId) {
           const existsInResult = result.some(
             (b) => b.id === (appointment as any).barberId,
@@ -720,7 +698,6 @@ export const AppointmentForm = ({
     (appointment as any)?.barberId,
   ]);
 
-  // ✅ B.2: (extra) aplica filtro por unidade + serviço na lista final exibida
   const barbersInUnit = filterProfessionalsByUnit(
     availableBarbersForDate,
     selectedUnitId,
@@ -758,13 +735,6 @@ export const AppointmentForm = ({
           iso,
           effectiveUnitId,
         );
-
-        console.log("[availability windows]", {
-          selectedBarberId,
-          iso,
-          effectiveUnitId,
-          windows,
-        });
 
         if (!cancelled) {
           if (!windows) setAvailabilityWindows(undefined);
@@ -816,8 +786,28 @@ export const AppointmentForm = ({
     availableTimes = [];
   }
 
+  const availableTimesForUI = useMemo(() => {
+    const base = Array.isArray(availableTimes) ? [...availableTimes] : [];
+
+    const fallbackEditTime =
+      isEdit && (appointment as any)?.scheduleAt
+        ? format(new Date((appointment as any).scheduleAt), "HH:mm")
+        : "";
+
+    const current = (selectedTimeValue ?? "").trim() || fallbackEditTime;
+
+    if (isEdit && current) {
+      if (!base.includes(current)) {
+        return [current, ...base];
+      }
+    }
+
+    return base;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableTimes, isEdit, selectedTimeValue, (appointment as any)?.id]);
+
   /* ======================================================================
-   *  ✅ ADMIN: Busca de cliente (single input + dropdown)
+   *  ADMIN: Busca de cliente (single input + dropdown)
    * ====================================================================== */
   const [isClientPickerOpen, setIsClientPickerOpen] = useState(false);
   const [clientQuery, setClientQuery] = useState("");
@@ -835,7 +825,6 @@ export const AppointmentForm = ({
     form.setValue("time", "");
     form.setValue("barberId", "");
 
-    // ✅ admin com unidade forçada NÃO perde unitId ao trocar cliente
     if (adminHasForcedUnit) {
       form.setValue("unitId", forcedUnitId as string, {
         shouldDirty: false,
@@ -848,7 +837,6 @@ export const AppointmentForm = ({
   const handleSelectClient = (client: AppointmentClientOption) => {
     setSelectedClientId(client.id);
 
-    // Mostra no input: "nome • telefone"
     const label = client.name + (client.phone ? ` • ${client.phone}` : "");
 
     setClientQuery(label);
@@ -877,8 +865,6 @@ export const AppointmentForm = ({
     resetDependentFlowAfterClientChange();
   };
 
-  // Quando abre o modal, não mostra clientes automaticamente.
-  // Só mostra resultados depois que o admin digitar.
   useEffect(() => {
     if (!isAdminMode) return;
     if (isEdit) return;
@@ -888,7 +874,6 @@ export const AppointmentForm = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dialogOpen, isAdminMode, isEdit]);
 
-  // Busca com debounce: local (lista pequena) ou API (lista grande)
   useEffect(() => {
     if (!isAdminMode) return;
     if (isEdit) return;
@@ -896,7 +881,6 @@ export const AppointmentForm = ({
 
     const q = clientQuery.trim();
 
-    // se está selecionado, e o input está exibindo o label, não re-busca
     if (selectedClientId && selectedClient && q) {
       const label =
         selectedClient.name +
@@ -904,13 +888,11 @@ export const AppointmentForm = ({
       if (q === label) return;
     }
 
-    // vazio => não mostra nada (só mostra após digitar)
     if (!q) {
       setClientResults([]);
       return;
     }
 
-    // menos de 2 caracteres => só filtra local (se der) ou mostra vazio
     if (q.length < 2) {
       const local = clients
         .filter((c) => {
@@ -989,7 +971,6 @@ export const AppointmentForm = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientQuery, clients.length, isAdminMode, isEdit, dialogOpen]);
 
-  // Fecha o dropdown ao clicar fora do input/dropdown
   useEffect(() => {
     if (!isClientPickerOpen) return;
 
@@ -1040,7 +1021,7 @@ export const AppointmentForm = ({
         <Form {...form}>
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* ===========================
-             *  MODO ADMIN: BUSCAR CLIENTE (SINGLE INPUT)
+             *  ADMIN NEW: BUSCAR CLIENTE
              * =========================== */}
             {isAdminMode && !isEdit && (
               <div className="space-y-2">
@@ -1062,10 +1043,7 @@ export const AppointmentForm = ({
                       <Input
                         value={clientQuery}
                         onFocus={() => {
-                          // abre dropdown ao focar
                           setIsClientPickerOpen(true);
-
-                          // se estiver vazio, mantém lista vazia (sem sugestão automática)
                           if (!clientQuery.trim()) {
                             setClientResults([]);
                           }
@@ -1074,7 +1052,6 @@ export const AppointmentForm = ({
                           const next = e.target.value;
                           setClientQuery(next);
 
-                          // Se começar a digitar com cliente selecionado, limpa seleção.
                           if (selectedClientId) {
                             clearSelectionButKeepTyping();
                           }
@@ -1158,18 +1135,20 @@ export const AppointmentForm = ({
             )}
 
             {/* ===========================
-             *  MODO CLIENT: CAMPOS + UNIDADE (Item B)
+             *  DADOS DO CLIENTE
+             *  - CLIENT: já existia
+             *  - ADMIN: volta a existir (NEW e EDIT)
              * =========================== */}
-            {!isAdminMode && (
+            {(isAdminMode || !isAdminMode) && (
               <>
-                {/* SEU NOME */}
+                {/* NOME */}
                 <FormField
                   control={form.control}
                   name="clientName"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="text-label-medium-size text-content-primary">
-                        Seu nome
+                        {isAdminMode ? "Nome do cliente" : "Seu nome"}
                       </FormLabel>
                       <FormControl>
                         <div className="relative">
@@ -1178,9 +1157,14 @@ export const AppointmentForm = ({
                             size={20}
                           />
                           <Input
-                            placeholder="Seu nome"
+                            placeholder={
+                              isAdminMode ? "Nome do cliente" : "Seu nome"
+                            }
                             className="pl-10"
                             {...field}
+                            disabled={
+                              isAdminMode && !isEdit && !selectedClientId
+                            }
                           />
                         </div>
                       </FormControl>
@@ -1212,6 +1196,9 @@ export const AppointmentForm = ({
                             placeholder="(99) 99999-9999"
                             mask="(00) 00000-0000"
                             className="pl-10 flex h-12 w-full rounded-md border border-border-primary bg-background-tertiary px-3 py-2 text-sm text-content-primary ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-content-secondary focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-offset-0 focus-visible:ring-border-brand disabled:cursor-not-allowed disabled:opacity-50 hover:border-border-secondary focus:border-border-brand focus-visible:border-border-brand aria-invalid:ring-destructive/20 aria-invalid:border-destructive"
+                            disabled={
+                              isAdminMode && !isEdit && !selectedClientId
+                            }
                           />
                         </div>
                       </FormControl>
@@ -1219,63 +1206,66 @@ export const AppointmentForm = ({
                   )}
                 />
 
-                {/* UNIDADE */}
-                <FormField
-                  control={form.control}
-                  name="unitId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel className="text-label-medium-size text-content-primary">
-                        Unidade
-                      </FormLabel>
-                      <FormControl>
-                        <Select
-                          value={field.value ?? ""}
-                          onValueChange={(value) => {
-                            field.onChange(value);
+                {/* UNIDADE
+                    - CLIENT: sempre (como já era)
+                    - ADMIN: aparece quando NÃO tem forcedUnitId (NEW no "all" e EDIT) */}
+                {(!isAdminMode || (isAdminMode && !adminHasForcedUnit)) && (
+                  <FormField
+                    control={form.control}
+                    name="unitId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-label-medium-size text-content-primary">
+                          Unidade
+                        </FormLabel>
+                        <FormControl>
+                          <Select
+                            value={field.value ?? ""}
+                            onValueChange={(value) => {
+                              field.onChange(value);
 
-                            // Trocar unidade reseta o fluxo
-                            form.setValue("serviceId", "");
-                            form.setValue("description", "");
-                            form.setValue("scheduleAt", undefined as any);
-                            form.setValue("time", "");
-                            form.setValue("barberId", "");
-                          }}
-                          disabled={activeUnits.length <= 1}
-                        >
-                          <SelectTrigger>
-                            <div className="flex items-center gap-2">
-                              <Store className="h-4 w-4 text-content-brand" />
-                              <SelectValue
-                                placeholder={
-                                  activeUnits.length === 0
-                                    ? "Nenhuma unidade disponível"
-                                    : activeUnits.length === 1
-                                      ? "Unidade selecionada automaticamente"
-                                      : "Selecione a unidade"
-                                }
-                              />
-                            </div>
-                          </SelectTrigger>
+                              form.setValue("serviceId", "");
+                              form.setValue("description", "");
+                              form.setValue("scheduleAt", undefined as any);
+                              form.setValue("time", "");
+                              form.setValue("barberId", "");
+                            }}
+                            disabled={activeUnits.length <= 1}
+                          >
+                            <SelectTrigger>
+                              <div className="flex items-center gap-2">
+                                <Store className="h-4 w-4 text-content-brand" />
+                                <SelectValue
+                                  placeholder={
+                                    activeUnits.length === 0
+                                      ? "Nenhuma unidade disponível"
+                                      : activeUnits.length === 1
+                                        ? "Unidade selecionada automaticamente"
+                                        : "Selecione a unidade"
+                                  }
+                                />
+                              </div>
+                            </SelectTrigger>
 
-                          <SelectContent>
-                            {activeUnits.length === 0 ? (
-                              <SelectItem disabled value="no-units">
-                                Nenhuma unidade cadastrada/ativa
-                              </SelectItem>
-                            ) : (
-                              activeUnits.map((u) => (
-                                <SelectItem key={u.id} value={u.id}>
-                                  {u.name}
+                            <SelectContent>
+                              {activeUnits.length === 0 ? (
+                                <SelectItem disabled value="no-units">
+                                  Nenhuma unidade cadastrada/ativa
                                 </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
+                              ) : (
+                                activeUnits.map((u) => (
+                                  <SelectItem key={u.id} value={u.id}>
+                                    {u.name}
+                                  </SelectItem>
+                                ))
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                )}
               </>
             )}
 
@@ -1303,12 +1293,7 @@ export const AppointmentForm = ({
                         form.setValue("barberId", "");
                       }}
                       value={field.value}
-                      disabled={
-                        !canProceedAdmin ||
-                        (!isAdminMode &&
-                          activeUnits.length > 1 &&
-                          !selectedUnitId)
-                      }
+                      disabled={!canProceedAdmin || needsUnitSelection}
                     >
                       <SelectTrigger>
                         <div className="flex items-center gap-2">
@@ -1317,9 +1302,7 @@ export const AppointmentForm = ({
                             placeholder={
                               !canProceedAdmin
                                 ? "Selecione um cliente"
-                                : !isAdminMode &&
-                                    activeUnits.length > 1 &&
-                                    !selectedUnitId
+                                : needsUnitSelection
                                   ? "Selecione a unidade"
                                   : "Selecione o serviço"
                             }
@@ -1416,9 +1399,7 @@ export const AppointmentForm = ({
                           disabled={
                             !selectedServiceId ||
                             !canProceedAdmin ||
-                            (!isAdminMode &&
-                              activeUnits.length > 1 &&
-                              !selectedUnitId)
+                            needsUnitSelection
                           }
                           className={cn(
                             "w-full justify-between text-left font-normal bg-background-tertiary border-border-primary text-content-primary hover:bg-background-tertiary hover:border-border-secondary hover:text-content-primary focus-visible:ring-offset-0 focus-visible:ring-1 focus-visible:ring-border-brand focus:border-border-brand focus-visible:border-border-brand disabled:opacity-60 disabled:cursor-not-allowed",
@@ -1440,9 +1421,7 @@ export const AppointmentForm = ({
                               <span>
                                 {!canProceedAdmin
                                   ? "Selecione um cliente"
-                                  : !isAdminMode &&
-                                      activeUnits.length > 1 &&
-                                      !selectedUnitId
+                                  : needsUnitSelection
                                     ? "Selecione a unidade"
                                     : !selectedServiceId
                                       ? "Selecione um serviço"
@@ -1494,9 +1473,7 @@ export const AppointmentForm = ({
                         !selectedServiceId ||
                         !selectedDate ||
                         !canProceedAdmin ||
-                        (!isAdminMode &&
-                          activeUnits.length > 1 &&
-                          !selectedUnitId)
+                        needsUnitSelection
                       }
                     >
                       <SelectTrigger
@@ -1514,9 +1491,7 @@ export const AppointmentForm = ({
                             placeholder={
                               !canProceedAdmin
                                 ? "Selecione um cliente"
-                                : !isAdminMode &&
-                                    activeUnits.length > 1 &&
-                                    !selectedUnitId
+                                : needsUnitSelection
                                   ? "Selecione a unidade"
                                   : !selectedServiceId
                                     ? "Selecione um serviço"
@@ -1574,9 +1549,7 @@ export const AppointmentForm = ({
                         !selectedDate ||
                         !selectedBarberId ||
                         !canProceedAdmin ||
-                        (!isAdminMode &&
-                          activeUnits.length > 1 &&
-                          !selectedUnitId)
+                        needsUnitSelection
                       }
                     >
                       <SelectTrigger
@@ -1594,9 +1567,7 @@ export const AppointmentForm = ({
                             placeholder={
                               !canProceedAdmin
                                 ? "Selecione um cliente"
-                                : !isAdminMode &&
-                                    activeUnits.length > 1 &&
-                                    !selectedUnitId
+                                : needsUnitSelection
                                   ? "Selecione a unidade"
                                   : !selectedServiceId
                                     ? "Selecione um serviço"
@@ -1617,12 +1588,12 @@ export const AppointmentForm = ({
                           <SelectItem disabled value="no-selection">
                             Selecione o serviço, a data e o profissional
                           </SelectItem>
-                        ) : availableTimes.length === 0 ? (
+                        ) : availableTimesForUI.length === 0 ? (
                           <SelectItem disabled value="no-times">
                             Sem horários disponíveis
                           </SelectItem>
                         ) : (
-                          availableTimes.map((time) => (
+                          availableTimesForUI.map((time) => (
                             <SelectItem key={time} value={time}>
                               {time}
                             </SelectItem>
@@ -1641,7 +1612,7 @@ export const AppointmentForm = ({
                 variant="brand"
                 disabled={
                   form.formState.isSubmitting ||
-                  (isAdminMode && !selectedClientId)
+                  (isAdminMode && !isEdit && !selectedClientId)
                 }
               >
                 {form.formState.isSubmitting && (

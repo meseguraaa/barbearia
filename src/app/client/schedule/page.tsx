@@ -14,6 +14,7 @@ import type { Barber } from "@/types/barber";
 import type { Service } from "@/types/service";
 import { ClientProfileDialog } from "@/components/client-profile-dialog";
 import { ClientAppointmentReviewDialog } from "@/components/client-appointment-review-dialog";
+import { ClientUnitSwitcher } from "@/components/client-unit-switcher";
 
 // força essa página a ser dinâmica (sem cache estático)
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export const dynamic = "force-dynamic";
 type HomeProps = {
   searchParams: Promise<{
     date?: string;
+    unit?: string; // ✅ unidade selecionada no topo (SEM "all")
   }>;
 };
 
@@ -31,19 +33,11 @@ export default async function Home({ searchParams }: HomeProps) {
   const userName = (session?.user as any)?.name ?? "Cliente";
   const userImage = (session?.user as any)?.image ?? "/default-avatar.png";
 
-  // 🔐 Se não tiver usuário logado, manda pro login
-  if (!userId) {
-    redirect("/login");
-  }
+  if (!userId) redirect("/login");
 
-  // 🔎 Busca usuário pra ver role + perfil
   const dbUser = await prisma.user.findUnique({
     where: { id: userId },
-    select: {
-      role: true,
-      phone: true,
-      birthday: true,
-    },
+    select: { role: true, phone: true, birthday: true },
   });
 
   let shouldOpenProfileModal = false;
@@ -51,15 +45,13 @@ export default async function Home({ searchParams }: HomeProps) {
   if (dbUser && dbUser.role === "CLIENT") {
     const isMissingPhone = !dbUser.phone || dbUser.phone.trim() === "";
     const isMissingBirthday = !dbUser.birthday;
-
     shouldOpenProfileModal = isMissingPhone || isMissingBirthday;
   }
 
-  // usado pra escolher o texto "primeira vez"
   const isFirstTimeProfile =
     dbUser?.role === "CLIENT" && shouldOpenProfileModal;
 
-  // 🔎 Busca atendimento DONE mais recente, sem avaliação e sem modal mostrado ainda
+  // ===== review pendente =====
   let pendingReviewAppointment: {
     id: string;
     scheduleAt: Date;
@@ -67,12 +59,7 @@ export default async function Home({ searchParams }: HomeProps) {
     serviceName: string;
   } | null = null;
 
-  let reviewTags:
-    | {
-        id: string;
-        label: string;
-      }[]
-    | [] = [];
+  let reviewTags: { id: string; label: string }[] | [] = [];
 
   if (dbUser?.role === "CLIENT") {
     const appointment = await prisma.appointment.findFirst({
@@ -80,17 +67,10 @@ export default async function Home({ searchParams }: HomeProps) {
         clientId: userId,
         status: "DONE",
         reviewModalShown: false,
-        review: {
-          is: null,
-        },
+        review: { is: null },
       },
-      orderBy: {
-        scheduleAt: "desc",
-      },
-      include: {
-        barber: true,
-        service: true,
-      },
+      orderBy: { scheduleAt: "desc" },
+      include: { barber: true, service: true },
     });
 
     if (appointment) {
@@ -101,35 +81,23 @@ export default async function Home({ searchParams }: HomeProps) {
         serviceName: appointment.service?.name ?? "Atendimento",
       };
 
-      // 🔹 Só buscamos as tags se realmente houver avaliação pendente
       reviewTags = await prisma.reviewTag.findMany({
-        where: {
-          isActive: true,
-        },
-        orderBy: {
-          label: "asc",
-        },
-        select: {
-          id: true,
-          label: true,
-        },
+        where: { isActive: true },
+        orderBy: { label: "asc" },
+        select: { id: true, label: true },
       });
     }
   }
 
-  // 🔓 Só abrimos o modal de avaliação automaticamente se:
-  // - for cliente
-  // - tiver atendimento pendente de avaliação
-  // - e NÃO estiver abrindo o modal de perfil (prioridade para o perfil)
   const shouldOpenReviewModal =
     !!pendingReviewAppointment && !shouldOpenProfileModal;
 
   const resolvedSearchParams = await searchParams;
   const dateParam = resolvedSearchParams.date;
+  const unitParam = resolvedSearchParams.unit;
 
   const baseDate = (() => {
     if (!dateParam) return new Date();
-
     const [year, month, day] = dateParam.split("-").map(Number);
     return new Date(year, month - 1, day);
   })();
@@ -137,7 +105,7 @@ export default async function Home({ searchParams }: HomeProps) {
   const dayStart = startOfDay(baseDate);
   const dayEnd = endOfDay(baseDate);
 
-  // ✅ Unidades ativas (pra Combo do Item B)
+  // ✅ Unidades ativas (SEM opção "todas")
   const unitsPrisma = await prisma.unit.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
@@ -150,44 +118,39 @@ export default async function Home({ searchParams }: HomeProps) {
     isActive: u.isActive,
   }));
 
+  // ✅ escolhe unidade: se tiver 1, usa ela; senão, usa param válido ou primeira
+  const selectedUnitId = (() => {
+    if (units.length === 0) return "";
+    if (units.length === 1) return units[0].id;
+
+    const isValidParam = !!unitParam && units.some((u) => u.id === unitParam);
+    return isValidParam ? (unitParam as string) : units[0].id;
+  })();
+
+  const selectedUnitName =
+    units.find((u) => u.id === selectedUnitId)?.name ?? "Unidade";
+
+  // ✅ appointments do cliente + do dia + da unidade selecionada
   const rawAppointments = await prisma.appointment.findMany({
     where: {
-      clientId: userId, // ✅ AQUI É A TRAVA: só agendamentos do cliente logado
-      scheduleAt: {
-        gte: dayStart,
-        lte: dayEnd,
-      },
-      status: {
-        not: "CANCELED",
-      },
+      clientId: userId,
+      unitId: selectedUnitId, // ✅ AQUI: filtra pela unidade do topo
+      scheduleAt: { gte: dayStart, lte: dayEnd },
+      status: { not: "CANCELED" },
     },
-    orderBy: {
-      scheduleAt: "asc",
-    },
+    orderBy: { scheduleAt: "asc" },
     include: {
-      barber: {
-        include: {
-          user: true,
-        },
-      },
+      barber: { include: { user: true } },
     },
   });
 
-  // 🔹 barbeiros ativos vindos do model Barber
-  //    incluindo serviços que fazem + vínculos de unidade (BarberUnit)
+  // ===== barbeiros =====
   const barbersPrisma = await prisma.barber.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
     include: {
-      services: {
-        select: {
-          serviceId: true,
-        },
-      },
-      units: {
-        where: { isActive: true },
-        select: { unitId: true },
-      },
+      services: { select: { serviceId: true } },
+      units: { where: { isActive: true }, select: { unitId: true } },
     },
   });
 
@@ -200,8 +163,7 @@ export default async function Home({ searchParams }: HomeProps) {
     role: "BARBER",
   }));
 
-  // ✅ serviços ativos (NÃO mandamos unitId pro form,
-  // porque no seu negócio "serviço é ligado ao profissional", e o form filtrava errado)
+  // ===== serviços =====
   const servicesPrisma = await prisma.service.findMany({
     where: { isActive: true },
     orderBy: { name: "asc" },
@@ -239,10 +201,7 @@ export default async function Home({ searchParams }: HomeProps) {
           : ("evening" as const);
 
     const barberData = barbers.find((b) => b.id === apt.barberId);
-
     const status = apt.status ?? "PENDING";
-
-    // 🔐 travar ações quando o horário chegou ou passou
     const isLocked = apt.scheduleAt <= now;
 
     return {
@@ -262,9 +221,7 @@ export default async function Home({ searchParams }: HomeProps) {
             isActive: barberData?.isActive ?? true,
             role: "BARBER",
             user: apt.barber.user
-              ? {
-                  image: apt.barber.user.image,
-                }
+              ? { image: apt.barber.user.image }
               : undefined,
           }
         : undefined,
@@ -276,8 +233,6 @@ export default async function Home({ searchParams }: HomeProps) {
 
   const periods = groupAppointmentByPeriod(appointments);
 
-  // 🔹 Array específico para o AppointmentForm:
-  //    manda serviceIds + unitIds (vínculos do profissional)
   const barbersForForm = barbersPrisma.map((barber) => ({
     id: barber.id,
     name: barber.name ?? "Barbeiro",
@@ -289,7 +244,7 @@ export default async function Home({ searchParams }: HomeProps) {
     unitIds: barber.units.map((u) => u.unitId),
   }));
 
-  // 🔹 Plano ativo do cliente logado (para o AppointmentForm)
+  // ===== plano do cliente =====
   let clientPlanForForm: {
     planId: string;
     planName: string;
@@ -300,16 +255,12 @@ export default async function Home({ searchParams }: HomeProps) {
     serviceIds: string[];
   } | null = null;
 
-  if (userId) {
+  {
     const clientPlans = await prisma.clientPlan.findMany({
       where: { clientId: userId },
       orderBy: { startDate: "desc" },
       include: {
-        plan: {
-          include: {
-            services: true,
-          },
-        },
+        plan: { include: { services: true } },
       },
     });
 
@@ -319,7 +270,6 @@ export default async function Home({ searchParams }: HomeProps) {
       const hasCredits = cp.usedBookings < cp.plan.totalBookings;
       const isActive = cp.status === "ACTIVE";
       const isWithinValidity = cp.endDate >= today;
-
       return hasCredits && isActive && isWithinValidity;
     });
 
@@ -369,17 +319,34 @@ export default async function Home({ searchParams }: HomeProps) {
           </div>
         </header>
 
-        {/* TÍTULO DA AGENDA */}
+        {/* TÍTULO DA AGENDA + UNIDADE */}
         <div className="flex items-center justify-between mb-8 gap-4">
           <div>
-            <h1 className="text-title-size text-content-primary mb-2">
-              Sua Agenda
-            </h1>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-title-size text-content-primary mb-2">
+                Agenda -
+              </h1>
+
+              {units.length <= 1 ? (
+                <div className="text-title text-content-primary mb-2">
+                  {selectedUnitName}
+                </div>
+              ) : (
+                <div className="mb-2">
+                  <ClientUnitSwitcher
+                    units={units}
+                    selectedUnitId={selectedUnitId}
+                  />
+                </div>
+              )}
+            </div>
+
             <p className="text-content-secondary">
               Selecione o serviço, a data e o horário para fazer seu
               agendamento.
             </p>
           </div>
+
           <div className="hidden md:flex items-center gap-4">
             <DatePicker />
           </div>
@@ -416,6 +383,8 @@ export default async function Home({ searchParams }: HomeProps) {
           units={units}
           defaultClientName={userName}
           clientPlan={clientPlanForForm}
+          // ✅ recomendado: faz o modal já “nascer” na unidade do topo
+          defaultUnitId={selectedUnitId as any}
         >
           <Button variant="brand">Novo Agendamento</Button>
         </AppointmentForm>

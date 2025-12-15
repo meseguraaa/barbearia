@@ -6,7 +6,7 @@ type BarberEarningsSummaryProps = {
   serviceEarningsDay: string;
   productEarningsDay: string;
 
-  // taxas de cancelamento
+  // taxas/multas de cancelamento
   cancelFeeDay: string;
   cancelFeeMonth: string;
 
@@ -52,19 +52,20 @@ export function BarberEarningsSummary({
 }: BarberEarningsSummaryProps) {
   return (
     <section className="grid gap-4 md:grid-cols-4">
-      {/* Ganhos no dia (serviços + produtos) */}
+      {/* Ganhos no dia (serviços + produtos + multas) */}
       <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
         <p className="text-label-small text-content-secondary">Ganhos no dia</p>
         <p className="text-title text-content-primary">{totalEarningsDay}</p>
         <p className="text-paragraph-small text-content-secondary">
-          Serviços: {serviceEarningsDay} • Produtos: {productEarningsDay}
+          Serviços: {serviceEarningsDay} • Produtos: {productEarningsDay} •
+          Multas: {cancelFeeDay}
         </p>
       </div>
 
-      {/* Taxas de cancelamento */}
+      {/* Multas por falta (cancelamento com cobrança) */}
       <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
         <p className="text-label-small text-content-secondary">
-          Taxas de cancelamento
+          Multas por falta
         </p>
         <p className="text-paragraph-medium text-content-primary">
           Dia: <span className="font-semibold">{cancelFeeDay}</span>
@@ -114,14 +115,15 @@ export function BarberEarningsSummary({
         </div>
       </div>
 
-      {/* Faturamento do mês (serviços + produtos + taxas) */}
+      {/* Faturamento do mês (serviços + produtos + multas) */}
       <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-1">
         <p className="text-label-small text-content-secondary">
           Faturamento do mês
         </p>
         <p className="text-title text-content-primary">{totalEarningsMonth}</p>
         <p className="text-paragraph-small text-content-secondary">
-          Serviços: {serviceEarningsMonth} • Produtos: {productEarningsMonth}
+          Serviços: {serviceEarningsMonth} • Produtos: {productEarningsMonth} •
+          Multas: {cancelFeeMonth}
         </p>
       </div>
 

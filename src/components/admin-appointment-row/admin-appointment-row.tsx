@@ -6,6 +6,7 @@ import { AppointmentForm } from "@/components/appointment-form";
 import { AppointmentActions } from "@/components/appointment-actions";
 import type { Appointment as AppointmentType } from "@/types/appointment";
 import type { Service } from "@/types/service";
+import type { UnitOption } from "@/components/appointment-form";
 
 type BarberForForm = {
   id: string;
@@ -22,6 +23,9 @@ type AdminAppointmentRowProps = {
   barbersForForm: BarberForForm[];
   services: Service[];
 
+  // ✅ unidades para o AppointmentForm (pra mostrar unidade no editar)
+  units?: UnitOption[];
+
   // 🔹 infos de plano por agendamento (opcionais)
   isPlanCredit?: boolean;
   planCreditIndex?: number | null;
@@ -33,6 +37,7 @@ export function AdminAppointmentRow({
   appointmentsForForm,
   barbersForForm,
   services,
+  units = [],
   isPlanCredit,
   planCreditIndex,
   planTotalCredits,
@@ -47,26 +52,31 @@ export function AdminAppointmentRow({
     (appt.status as AppointmentType["status"]) ?? "PENDING";
   const isPending = normalizedStatus === "PENDING";
 
-  const safeApptForForm: AppointmentType = apptForForm ?? {
-    id: appt.id,
-    clientName: appt.clientName,
-    phone: appt.phone,
-    description: appt.description,
-    scheduleAt: appt.scheduleAt,
-    status: normalizedStatus,
-    barberId: appt.barberId ?? "",
-    barber: appt.barber
-      ? {
-          id: appt.barber.id,
-          name: appt.barber.name ?? "", // garante string
-          email: appt.barber.email ?? "", // garante string
-          phone: appt.barber.phone,
-          isActive: appt.barber.isActive,
-          role: "BARBER",
-        }
-      : undefined,
-    serviceId: appt.serviceId ?? undefined,
-  };
+  const safeApptForForm: AppointmentType = {
+    ...(apptForForm ?? {
+      id: appt.id,
+      clientName: appt.clientName,
+      phone: appt.phone,
+      description: appt.description,
+      scheduleAt: appt.scheduleAt,
+      status: normalizedStatus,
+      barberId: appt.barberId ?? "",
+      barber: appt.barber
+        ? {
+            id: appt.barber.id,
+            name: appt.barber.name ?? "",
+            email: appt.barber.email ?? "",
+            phone: appt.barber.phone,
+            isActive: appt.barber.isActive,
+            role: "BARBER",
+          }
+        : undefined,
+      serviceId: appt.serviceId ?? undefined,
+    }),
+
+    // ✅ força unitId a existir no objeto final do form
+    unitId: (apptForForm as any)?.unitId ?? appt.unitId ?? undefined,
+  } as any;
 
   // avatar do cliente
   const clientImage = appt.client?.image ?? null;
@@ -144,10 +154,13 @@ export function AdminAppointmentRow({
         {isPending && (
           <div className="flex justify-end gap-2">
             <AppointmentForm
+              mode="admin"
               appointment={safeApptForForm}
               appointments={appointmentsForForm}
               barbers={barbersForForm}
               services={services}
+              units={units} // ✅ mantém unidades pra exibir corretamente
+              // 🚫 NÃO passar mode="admin" aqui (isso esconde campos no editar)
             />
 
             <AppointmentActions
@@ -173,7 +186,6 @@ export function AdminAppointmentRow({
               cancelLimitHours={appt.service?.cancelLimitHours ?? undefined}
               cancelledByRole="ADMIN"
               concludedByRole="ADMIN"
-              // 🔹 infos de plano (para o modal "Conferir")
               isPlanCredit={isPlanCredit}
               planCreditIndex={planCreditIndex}
               planTotalCredits={planTotalCredits}

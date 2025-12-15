@@ -133,6 +133,10 @@ export default async function BarberEarningsPage({
     monthCanceledAppointments,
     dayProductSales,
     monthProductSales,
+
+    // ✅ NOVO: multas de cancelamento (financeiro do barbeiro)
+    dayCancellationFees,
+    monthCancellationFees,
   ] = await Promise.all([
     // Atendimentos concluídos do DIA
     prisma.appointment.findMany({
@@ -214,6 +218,38 @@ export default async function BarberEarningsPage({
       },
       include: {
         product: true,
+      },
+    }),
+
+    // ✅ MULTAS DO DIA (pela criação do lançamento)
+    prisma.barberCancellationFee.findMany({
+      where: {
+        barberId: barber.id,
+        createdAt: {
+          gte: dayStart,
+          lte: dayEnd,
+        },
+      },
+      select: {
+        id: true,
+        amount: true,
+        createdAt: true,
+      },
+    }),
+
+    // ✅ MULTAS DO MÊS
+    prisma.barberCancellationFee.findMany({
+      where: {
+        barberId: barber.id,
+        createdAt: {
+          gte: monthStart,
+          lte: monthEnd,
+        },
+      },
+      select: {
+        id: true,
+        amount: true,
+        createdAt: true,
       },
     }),
   ]);
@@ -315,26 +351,57 @@ export default async function BarberEarningsPage({
   const totalAppointmentsCanceledMonth = monthCanceledAppointments.length;
 
   // 💰 TAXAS DE CANCELAMENTO (100% do barbeiro)
-  const canceledWithFeeDay = dayCanceledAppointments.filter(
+  // Preferência: BarberCancellationFee (novo). Fallback: Appointment.cancelFeeValue (antigo).
+  const totalCancelFeeDayFromTable = dayCancellationFees.reduce((sum, row) => {
+    return sum + Number(row.amount ?? 0);
+  }, 0);
+
+  const totalCancelFeeMonthFromTable = monthCancellationFees.reduce(
+    (sum, row) => {
+      return sum + Number(row.amount ?? 0);
+    },
+    0,
+  );
+
+  const canceledWithFeeDayFallback = dayCanceledAppointments.filter(
     (appt) => appt.cancelFeeApplied,
   );
 
-  const totalCancelFeeDay = canceledWithFeeDay.reduce((sum, appt) => {
-    const fee = appt.cancelFeeValue ? Number(appt.cancelFeeValue) : 0;
-    return sum + fee;
-  }, 0);
+  const totalCancelFeeDayFallback = canceledWithFeeDayFallback.reduce(
+    (sum, appt) => {
+      const fee = appt.cancelFeeValue ? Number(appt.cancelFeeValue) : 0;
+      return sum + fee;
+    },
+    0,
+  );
 
-  const canceledWithFeeMonth = monthCanceledAppointments.filter(
+  const canceledWithFeeMonthFallback = monthCanceledAppointments.filter(
     (appt) => appt.cancelFeeApplied,
   );
 
-  const totalCancelFeeMonth = canceledWithFeeMonth.reduce((sum, appt) => {
-    const fee = appt.cancelFeeValue ? Number(appt.cancelFeeValue) : 0;
-    return sum + fee;
-  }, 0);
+  const totalCancelFeeMonthFallback = canceledWithFeeMonthFallback.reduce(
+    (sum, appt) => {
+      const fee = appt.cancelFeeValue ? Number(appt.cancelFeeValue) : 0;
+      return sum + fee;
+    },
+    0,
+  );
+
+  const totalCancelFeeDay =
+    totalCancelFeeDayFromTable > 0
+      ? totalCancelFeeDayFromTable
+      : totalCancelFeeDayFallback;
+
+  const totalCancelFeeMonth =
+    totalCancelFeeMonthFromTable > 0
+      ? totalCancelFeeMonthFromTable
+      : totalCancelFeeMonthFallback;
 
   // 🔗 Ganhos totais
-  const totalEarningsDay = totalServiceEarningsDay + totalProductEarningsDay;
+  // ✅ Agora inclui taxa do DIA também
+  const totalEarningsDay =
+    totalServiceEarningsDay + totalProductEarningsDay + totalCancelFeeDay;
+
   const totalEarningsMonth =
     totalServiceEarningsMonth + totalProductEarningsMonth + totalCancelFeeMonth;
 

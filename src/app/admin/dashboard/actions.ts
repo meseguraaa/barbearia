@@ -404,15 +404,7 @@ async function withAppointmentMutation<T>(
 
 /* ---------------------------------------------------------
  * ✅ Concluir atendimento (ADMIN/BARBER)
- *
- * AJUSTE DE REGRA (IMPORTANTE):
- * - Antes: ao concluir, marcava Appointment como DONE imediatamente.
- * - Agora: ao concluir, NÃO muda o status do Appointment para DONE.
- *   Ele permanece PENDING e gera/garante um Order PENDING para checkout.
- * - O Appointment só vira DONE quando o Admin clicar "Pagar"/"Marcar como pago"
- *   (checkout/actions.ts já faz updateMany PENDING -> DONE).
- *
- * Isso garante que "Pedidos do mês" (se baseado em Appointment DONE) só alimente após pagamento.
+ * (inalterado)
  * ---------------------------------------------------------*/
 const concludeAppointmentSchema = z.object({
   concludedByRole: z.enum(["ADMIN", "BARBER"]).optional(),
@@ -459,7 +451,7 @@ export async function concludeAppointment(
     select: {
       id: true,
       status: true,
-      concludedByRole: true, // existe no schema ✅
+      concludedByRole: true,
     },
   });
 
@@ -468,17 +460,13 @@ export async function concludeAppointment(
     return { error: "Não é possível concluir um agendamento cancelado" };
   }
 
-  // Se já estiver DONE, só retorna ok (idempotência)
   if ((existing as any).status === "DONE") {
     return { ok: true };
   }
 
   return withAppointmentMutation(async () => {
-    // 1) "Concluir" sem mudar status.
-    // Tenta setar concludedAt/concludedByRole (se existirem no schema).
     const tryData: Record<string, any> = {
-      concludedByRole, // ✅ mantém rastreio sem depender de concludedAt
-      // ⚠️ NÃO setamos status aqui.
+      concludedByRole,
     };
 
     let appt: {
@@ -513,7 +501,6 @@ export async function concludeAppointment(
 
       if (!looksLikeUnknownField) throw err;
 
-      // fallback: sem campos extras, não faz update do appointment
       const apptFallback = await prisma.appointment.findUnique({
         where: { id: appointmentId },
         select: {
@@ -533,12 +520,10 @@ export async function concludeAppointment(
       appt = apptFallback;
     }
 
-    // 2) Depois: garantir Order/OrderItem pro checkout (transaction)
     await prisma.$transaction(async (tx) => {
       if (!appt.clientId) throw new Error("Appointment sem clientId");
       if (!appt.serviceId) throw new Error("Appointment sem serviceId");
 
-      // cria/garante o pedido do atendimento (PENDING para checkout)
       let order = await tx.order.findFirst({
         where: { appointmentId: appt.id },
         select: { id: true },
@@ -557,7 +542,6 @@ export async function concludeAppointment(
           select: { id: true },
         });
       } else {
-        // garante status pendente de checkout
         await tx.order.update({
           where: { id: order.id },
           data: {
@@ -569,7 +553,6 @@ export async function concludeAppointment(
         });
       }
 
-      // garante item do serviço (1x)
       const unitPrice = appt.servicePriceAtTheTime ?? new Prisma.Decimal(0);
 
       const existingItem = await tx.orderItem.findFirst({
@@ -592,7 +575,6 @@ export async function concludeAppointment(
         });
       }
 
-      // recalcula total do pedido
       const agg = await tx.orderItem.aggregate({
         where: { orderId: order.id },
         _sum: { totalPrice: true },
@@ -611,13 +593,8 @@ export async function concludeAppointment(
 }
 
 /* ---------------------------------------------------------
- * ✅ RESTAURADO: CANCELAR AGENDAMENTO (ADMIN/BARBER)
- * - Mantém compat com o client: cancelAppointment(id, { applyFee, cancelledByRole })
- * - Marca status como CANCELED
- * - Se existirem campos (canceledAt/cancelledByRole/cancelFeeValue), preenche também
- * - Se não existirem, faz fallback sem quebrar
- *
- * AJUSTE: se existir concludedAt e ele estiver preenchido, não permite cancelar.
+ * ✅ CANCELAR AGENDAMENTO (ADMIN/BARBER)
+ * ✅ AGORA: cria lançamento BarberCancellationFee quando applyFee=true e taxa > 0
  * ---------------------------------------------------------*/
 const cancelAppointmentSchema = z.object({
   applyFee: z.boolean().optional(),
@@ -637,15 +614,6 @@ export async function cancelAppointment(
 
   const auth = await getRoleFromPainelSession();
 
-  console.log(
-    "[cancelAppointment] auth:",
-    auth.source,
-    "role:",
-    auth.role,
-    "userId:",
-    auth.userId,
-  );
-
   if (auth.role !== "ADMIN" && auth.role !== "BARBER") {
     return { error: "Sem permissão para cancelar este agendamento" };
   }
@@ -653,18 +621,20 @@ export async function cancelAppointment(
   const cancelledByRole: RoleForAction =
     (parsed.data.cancelledByRole as RoleForAction | undefined) ?? auth.role;
 
-  const applyFee = !!parsed.data.applyFee;
+  const applyFeeRequested = !!parsed.data.applyFee;
 
+  // ✅ agora precisamos de dados a mais pra criar BarberCancellationFee
   const existing = await prisma.appointment.findUnique({
     where: { id: appointmentId },
     select: {
       id: true,
       status: true,
-      concludedByRole: true, // ✅ existe
+      unitId: true,
+      barberId: true,
+      scheduleAt: true,
       servicePriceAtTheTime: true,
-      cancelFeePercentageAtTheTime: true,
       serviceId: true,
-    } as any,
+    },
   });
 
   if (!existing) return { error: "Agendamento não encontrado" };
@@ -675,7 +645,7 @@ export async function cancelAppointment(
     return { error: "Não é possível cancelar um agendamento concluído" };
   }
 
-  // ✅ Regra segura: se já gerou pedido (concluído no fluxo), não pode cancelar
+  // ✅ Se já gerou pedido (fluxo de concluir), não pode cancelar
   const hasOrder = await prisma.order.findFirst({
     where: { appointmentId },
     select: { id: true },
@@ -685,89 +655,92 @@ export async function cancelAppointment(
     return { error: "Não é possível cancelar um atendimento já concluído" };
   }
 
-  // tenta descobrir % de taxa: usa snapshot se existir, senão busca no service
+  // =========================
+  // ✅ Busca regras no Service
+  // =========================
   let cancelFeePercentage: number | null = null;
+  let cancelLimitHours: number | null = null;
 
-  const snapPct = (existing as any).cancelFeePercentageAtTheTime;
-  if (typeof snapPct === "number") cancelFeePercentage = snapPct;
-  if (snapPct && typeof snapPct === "object" && "toNumber" in snapPct) {
-    try {
-      cancelFeePercentage = (snapPct as any).toNumber();
-    } catch {}
-  }
-
-  if (cancelFeePercentage == null && (existing as any).serviceId) {
+  if (existing.serviceId) {
     const svc = await prisma.service.findUnique({
-      where: { id: (existing as any).serviceId as string },
-      select: { cancelFeePercentage: true },
+      where: { id: existing.serviceId },
+      select: { cancelFeePercentage: true, cancelLimitHours: true },
     });
 
-    if (svc && svc.cancelFeePercentage != null) {
-      const pct = svc.cancelFeePercentage as any;
-      if (typeof pct === "number") cancelFeePercentage = pct;
-      else if (pct && typeof pct === "object" && "toNumber" in pct) {
-        try {
-          cancelFeePercentage = pct.toNumber();
-        } catch {}
-      }
+    if (svc?.cancelFeePercentage != null) {
+      const pctAny = svc.cancelFeePercentage as any;
+      cancelFeePercentage =
+        typeof pctAny === "number"
+          ? pctAny
+          : typeof pctAny?.toNumber === "function"
+            ? pctAny.toNumber()
+            : Number(pctAny);
+    }
+
+    if (svc?.cancelLimitHours != null) {
+      cancelLimitHours = svc.cancelLimitHours;
     }
   }
 
-  // calcula taxa (se aplicável)
+  // =========================
+  // ✅ Valida janela + calcula
+  // =========================
+  const price = existing.servicePriceAtTheTime as Prisma.Decimal | null;
+
   let cancelFeeValue: Prisma.Decimal | null = null;
+  let cancelFeeApplied = false;
 
-  if (applyFee) {
-    const price = (existing as any)
-      .servicePriceAtTheTime as Prisma.Decimal | null;
+  if (
+    applyFeeRequested &&
+    price &&
+    cancelFeePercentage != null &&
+    Number(cancelFeePercentage) > 0 &&
+    cancelLimitHours != null &&
+    cancelLimitHours > 0
+  ) {
+    const now = new Date().getTime();
+    const scheduleTime = new Date(existing.scheduleAt).getTime();
+    const diffHours = (scheduleTime - now) / (1000 * 60 * 60);
 
-    if (
-      price &&
-      cancelFeePercentage != null &&
-      Number(cancelFeePercentage) > 0
-    ) {
+    const insideWindow = diffHours < cancelLimitHours;
+
+    if (insideWindow) {
       cancelFeeValue = price
         .mul(new Prisma.Decimal(cancelFeePercentage))
         .div(new Prisma.Decimal(100));
+      cancelFeeApplied = cancelFeeValue.gt(new Prisma.Decimal(0));
     }
   }
 
   return withAppointmentMutation(async () => {
-    const baseData: Record<string, any> = {
-      status: "CANCELED",
-    };
-
-    // tenta preencher extras (se existirem no schema)
-    const tryData: Record<string, any> = {
-      ...baseData,
-      canceledAt: new Date(),
-      cancelledByRole,
-      cancelFeeValue,
-    };
-
-    try {
-      await prisma.appointment.update({
+    // ✅ Tudo numa transação pra ficar consistente
+    await prisma.$transaction(async (tx) => {
+      await tx.appointment.update({
         where: { id: appointmentId },
-        data: tryData as any,
+        data: {
+          status: "CANCELED",
+          cancelledByRole,
+          cancelFeeValue,
+          cancelFeeApplied,
+        } as any,
       });
-      return { ok: true };
-    } catch (err: any) {
-      const msg = String(err?.message ?? "");
-      const looksLikeUnknownField =
-        msg.includes("Unknown arg `canceledAt`") ||
-        msg.includes("Unknown arg `cancelledByRole`") ||
-        msg.includes("Unknown arg `cancelFeeValue`") ||
-        msg.includes("canceledAt") ||
-        msg.includes("cancelledByRole") ||
-        msg.includes("cancelFeeValue");
 
-      if (!looksLikeUnknownField) throw err;
+      // ✅ Lançamento financeiro do barbeiro (idempotente via unique appointmentId)
+      if (cancelFeeApplied && cancelFeeValue && existing.barberId) {
+        await tx.barberCancellationFee.upsert({
+          where: { appointmentId },
+          update: { amount: cancelFeeValue },
+          create: {
+            appointmentId,
+            barberId: existing.barberId,
+            unitId: existing.unitId,
+            amount: cancelFeeValue,
+          },
+        });
+      }
+    });
 
-      await prisma.appointment.update({
-        where: { id: appointmentId },
-        data: baseData as any,
-      });
-      return { ok: true };
-    }
+    return { ok: true };
   }, "Falha ao cancelar o agendamento");
 }
 
@@ -814,14 +787,12 @@ export async function createAppointment(data: AppointmentData) {
   if (!service) return { error: "Serviço não encontrado" };
   if (!service.isActive) return { error: "Serviço inativo" };
 
-  // ✅ Agora a unidade vem DO FORM/CONTEXTO, não do service
   const unitId = parsed.unitId;
 
   if (!unitId) {
     return { error: "Unidade é obrigatória para este agendamento" };
   }
 
-  // (opcional, mas recomendado) garante que a unidade existe/ativa
   const unit = await prisma.unit.findUnique({
     where: { id: unitId },
     select: { id: true, isActive: true },
@@ -854,7 +825,6 @@ export async function createAppointment(data: AppointmentData) {
     parsed.clientId,
   );
 
-  // Snapshots default (sem plano)
   let servicePriceAtTheTime = service.price;
   let barberPercentageAtTheTime = service.barberPercentage;
   let barberEarningValue = service.price
@@ -1001,14 +971,12 @@ export async function updateAppointment(id: string, data: AppointmentData) {
       .div(new Prisma.Decimal(100));
   }
 
-  // ✅ Unidade vem do form (se permitir trocar) ou mantém a do appointment
   const unitId = parsed.unitId ?? existing.unitId;
 
   if (!unitId) {
     return { error: "Unidade é obrigatória para este agendamento" };
   }
 
-  // (opcional) garante unidade existente/ativa
   const unit = await prisma.unit.findUnique({
     where: { id: unitId },
     select: { id: true, isActive: true },
@@ -1158,10 +1126,6 @@ export async function getAvailableBarbersForDateAction(
 
 /* ---------------------------------------------------------
  * ✅ NOVO: BARBEIROS DISPONÍVEIS PARA UMA DATA + SERVIÇO + UNIDADE
- * Regra travada:
- *  - vinculado à unidade
- *  - faz o serviço
- *  - unidade aberta (via windows do util com unitId)
  * ---------------------------------------------------------*/
 export async function getAvailableBarbersForDateAndServiceAction(
   dateISO: string,
@@ -1179,7 +1143,6 @@ export async function getAvailableBarbersForDateAndServiceAction(
   if (!unitId) return [];
   if (!serviceId) return [];
 
-  // 1) candidatos: ativo + vinculado à unidade + faz o serviço
   const candidates = await prisma.barber.findMany({
     where: {
       isActive: true,
@@ -1203,7 +1166,6 @@ export async function getAvailableBarbersForDateAndServiceAction(
 
   if (candidates.length === 0) return [];
 
-  // 2) valida janela disponível no dia (com unitId)
   const available = [];
   for (const barber of candidates) {
     const windows = await getAvailabilityWindowsForBarberOnDate(
@@ -1217,7 +1179,6 @@ export async function getAvailableBarbersForDateAndServiceAction(
     }
   }
 
-  // 3) normaliza pro formato do form
   return available.map((b) => ({
     id: b.id,
     name: b.name,

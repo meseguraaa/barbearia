@@ -1,6 +1,11 @@
 // src/app/admin/appointments/page.tsx
 import { prisma } from "@/lib/prisma";
-import { startOfDay, endOfDay } from "date-fns";
+import {
+  startOfDay,
+  endOfDay,
+  startOfDay as startOfDayFns,
+  endOfDay as endOfDayFns,
+} from "date-fns";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 
@@ -11,7 +16,10 @@ import { AdminAppointmentsByBarber } from "@/components/admin-appointments-by-ba
 
 import { requireAdminPermission } from "@/lib/admin-permissions";
 
-import type { AppointmentClientOption } from "@/components/appointment-form";
+import type {
+  AppointmentClientOption,
+  UnitOption,
+} from "@/components/appointment-form";
 import { AdminNewAppointmentButton } from "@/components/admin-new-appointment-button";
 
 export const dynamic = "force-dynamic";
@@ -155,12 +163,10 @@ async function getBarbers(unitId: string | null) {
     },
     orderBy: { name: "asc" },
     include: {
-      // pivot BarberUnit -> precisamos só do unitId
       units: {
         where: { isActive: true },
         select: { unitId: true, isActive: true },
       },
-      // pivot ServiceProfessional -> precisamos só do serviceId
       services: {
         select: { serviceId: true },
       },
@@ -185,12 +191,6 @@ async function getServices(): Promise<Service[]> {
   }));
 }
 
-/**
- * ✅ IMPORTANTE:
- * Não carregamos mais “centenas/milhares” de clientes aqui.
- * Apenas um “seed” pequeno (ex.: 20) para o modal abrir com algo.
- * A busca real acontece conforme o admin digita (via /api/admin/clients/search).
- */
 async function getInitialClientsForAdminAppointments(): Promise<
   AppointmentClientOption[]
 > {
@@ -217,6 +217,39 @@ async function getInitialClientsForAdminAppointments(): Promise<
   );
 }
 
+/**
+ * ✅ No ADMIN precisamos enviar as unidades (id + name) pro AppointmentForm
+ * para o select de unidade renderizar corretamente (principalmente no EDIT).
+ *
+ * - Dono (canSeeAllUnits): manda todas ativas
+ * - Admin de unidade: manda só a unidade dele (1 item)
+ */
+async function getUnitsForAdminAppointments(args: {
+  activeUnitId: string | null;
+  canSeeAllUnits: boolean;
+}): Promise<UnitOption[]> {
+  const { activeUnitId, canSeeAllUnits } = args;
+
+  const units = await prisma.unit.findMany({
+    where: {
+      isActive: true,
+      ...(canSeeAllUnits ? {} : activeUnitId ? { id: activeUnitId } : {}),
+    },
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      isActive: true,
+    },
+  });
+
+  return units.map((u) => ({
+    id: u.id,
+    name: u.name,
+    isActive: u.isActive,
+  }));
+}
+
 function mapToAppointmentType(prismaAppt: any): AppointmentType {
   return {
     id: prismaAppt.id,
@@ -237,7 +270,10 @@ function mapToAppointmentType(prismaAppt: any): AppointmentType {
         }
       : undefined,
     serviceId: prismaAppt.serviceId ?? undefined,
-  };
+
+    // ✅ ESSENCIAL pro EDIT funcionar
+    unitId: prismaAppt.unitId ?? undefined,
+  } as any;
 }
 
 export default async function AdminAppointmentsPage({
@@ -245,13 +281,11 @@ export default async function AdminAppointmentsPage({
 }: AdminAppointmentsPageProps) {
   const admin = await requireAdminPermission("canAccessAppointments");
 
-  // ✅ Unidade ativa para todas as queries
   const activeUnitId = await resolveUnitScope({
     unitId: admin.unitId ?? null,
     canSeeAllUnits: !!admin.canSeeAllUnits,
   });
 
-  // ✅ scope do FORM: dono vê tudo (null), admin de unidade fica travado
   const formScopeUnitId = admin.canSeeAllUnits ? null : activeUnitId;
 
   const resolvedSearchParams = await searchParams;
@@ -263,8 +297,8 @@ export default async function AdminAppointmentsPage({
     ? (parseDateParam(dateParam) ?? todaySP)
     : todaySP;
 
-  const dayStart = startOfDay(selectedDate);
-  const dayEnd = endOfDay(selectedDate);
+  const dayStart = startOfDayFns(selectedDate);
+  const dayEnd = endOfDayFns(selectedDate);
 
   const [
     appointmentsPrisma,
@@ -272,14 +306,11 @@ export default async function AdminAppointmentsPage({
     servicesForForm,
     dayProductSalesPrisma,
     clientsForAdmin,
+    unitsForForm,
   ] = await Promise.all([
-    // ✅ A TELA segue o contexto de unidade ativo
     getAppointments(dateParam, activeUnitId),
-
-    // ✅ O MODAL precisa poder trocar unidade (quando dono)
     getBarbers(formScopeUnitId),
     getServices(),
-
     prisma.productSale.findMany({
       where: {
         soldAt: { gte: dayStart, lte: dayEnd },
@@ -293,9 +324,11 @@ export default async function AdminAppointmentsPage({
       } as any,
       include: { product: true, barber: true },
     }),
-
-    // ✅ Agora é leve: só um seed pequeno
     getInitialClientsForAdminAppointments(),
+    getUnitsForAdminAppointments({
+      activeUnitId,
+      canSeeAllUnits: !!admin.canSeeAllUnits,
+    }),
   ]);
 
   const appointmentsForForm = appointmentsPrisma.map(mapToAppointmentType);
@@ -315,7 +348,6 @@ export default async function AdminAppointmentsPage({
     serviceIds: (barber.services ?? []).map((s: any) => s.serviceId),
   }));
 
-  // ✅ só filtra se for admin de unidade (travado). Dono recebe lista global.
   const safeBarbersForForm = admin.canSeeAllUnits
     ? barbersForForm
     : activeUnitId
@@ -327,9 +359,6 @@ export default async function AdminAppointmentsPage({
   type AppointmentWithBarberPrisma = (typeof appointmentsPrisma)[number];
   type DayProductSale = (typeof dayProductSalesPrisma)[number];
 
-  /* ------------------------------------------------------------------
-   * CÁLCULO DE CRÉDITOS DE PLANO POR AGENDAMENTO
-   * ------------------------------------------------------------------*/
   const planCreditInfoByAppointmentId: Record<
     string,
     {
@@ -418,7 +447,6 @@ export default async function AdminAppointmentsPage({
 
   return (
     <div className="space-y-6">
-      {/* HEADER + DATA + BOTÃO */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-title text-content-primary">Agendamentos</h1>
@@ -435,6 +463,7 @@ export default async function AdminAppointmentsPage({
             barbers={safeBarbersForForm}
             services={servicesForForm}
             unitId={formScopeUnitId}
+            units={unitsForForm}
           />
 
           <DatePicker />
@@ -465,6 +494,7 @@ export default async function AdminAppointmentsPage({
                 barbersForForm={barbersForForm}
                 services={servicesForForm}
                 planCreditInfoByAppointmentId={planCreditInfoByAppointmentId}
+                units={unitsForForm}
               />
             );
           })}
