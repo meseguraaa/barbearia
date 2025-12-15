@@ -7,6 +7,9 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Prisma, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { validatePassword } from "@/lib/password-policy";
+
+type ActionResult = { ok: true } | { ok: false; error: string };
 
 const imageUrlSchema = z
   .union([z.string().url("URL da imagem inválida"), z.literal(""), z.null()])
@@ -32,7 +35,10 @@ const createBarberSchema = z.object({
   name: z.string().min(1, "Nome obrigatório"),
   email: z.string().email("E-mail inválido"),
   phone: z.string().optional(),
-  password: z.string().min(5, "Senha deve ter pelo menos 5 caracteres"),
+
+  // ✅ senha obrigatória (validação forte feita no server via validatePassword)
+  password: z.string().min(1, "Senha obrigatória"),
+
   imageUrl: imageUrlSchema,
 
   // ✅ obrigatório
@@ -44,7 +50,10 @@ const updateBarberSchema = z.object({
   name: z.string().min(1, "Nome obrigatório"),
   email: z.string().email("E-mail inválido"),
   phone: z.string().optional(),
+
+  // ✅ opcional: se vier preenchida, troca a senha (validação forte no server)
   password: z.string().optional(),
+
   imageUrl: imageUrlSchema,
 
   // ✅ obrigatório também no update (integridade)
@@ -100,7 +109,7 @@ async function syncBarberUnits(
   );
 }
 
-export async function createBarber(formData: FormData): Promise<void> {
+export async function createBarber(formData: FormData): Promise<ActionResult> {
   const rawPassword = String(formData.get("password") ?? "");
 
   const result = createBarberSchema.safeParse({
@@ -114,18 +123,29 @@ export async function createBarber(formData: FormData): Promise<void> {
 
   if (!result.success) {
     console.error("[createBarber] Erro de validação:", result.error.flatten());
-    return;
+    const msg =
+      result.error.flatten().formErrors?.[0] ||
+      Object.values(result.error.flatten().fieldErrors).flat().find(Boolean) ||
+      "Dados inválidos.";
+    return { ok: false, error: msg };
   }
 
   const parsed = result.data;
   const normalizedImageUrl = normalizeImageUrl(parsed.imageUrl as any);
 
   try {
+    // ✅ política de senha (fonte da verdade)
+    const passCheck = validatePassword(parsed.password);
+    if (!passCheck.ok) {
+      return { ok: false, error: passCheck.errors[0] ?? "Senha inválida." };
+    }
+
     await prisma.$transaction(async (tx) => {
       // ✅ garante que todas as unidades existem e estão ativas
       await assertUnitsAreActive(tx, parsed.unitIds);
 
-      const passwordHash = await bcrypt.hash(parsed.password, 10);
+      // ✅ padrão consistente com admin
+      const passwordHash = await bcrypt.hash(parsed.password, 12);
 
       // 1) cria usuário que loga no painel
       const user = await tx.user.create({
@@ -159,34 +179,32 @@ export async function createBarber(formData: FormData): Promise<void> {
         skipDuplicates: true,
       });
     });
+
+    revalidatePath("/admin/professional");
+
+    // ✅ não redireciona aqui, pois o client quer controlar UI/toast
+    // (se você preferir manter o redirect, me avisa que eu adapto o client)
+    return { ok: true };
   } catch (err: any) {
     // P2002 = unique constraint (email duplicado em User/Barber)
     if (
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === "P2002"
     ) {
-      console.warn(
-        "[createBarber] E-mail já cadastrado em User ou Barber:",
-        parsed.email,
-      );
-      return;
+      return { ok: false, error: "Já existe um profissional com esse e-mail." };
     }
 
-    // erro de regra (unidade inválida/inativa)
     if (err?.message) {
       console.error("[createBarber] Regra de negócio:", err.message);
-      return;
+      return { ok: false, error: String(err.message) };
     }
 
     console.error("[createBarber] Erro inesperado:", err);
-    return;
+    return { ok: false, error: "Erro ao criar profissional." };
   }
-
-  revalidatePath("/admin/professional");
-  redirect("/admin/professional");
 }
 
-export async function updateBarber(formData: FormData): Promise<void> {
+export async function updateBarber(formData: FormData): Promise<ActionResult> {
   const rawPassword = String(formData.get("password") ?? "");
 
   const result = updateBarberSchema.safeParse({
@@ -201,13 +219,25 @@ export async function updateBarber(formData: FormData): Promise<void> {
 
   if (!result.success) {
     console.error("[updateBarber] Erro de validação:", result.error.flatten());
-    return;
+    const msg =
+      result.error.flatten().formErrors?.[0] ||
+      Object.values(result.error.flatten().fieldErrors).flat().find(Boolean) ||
+      "Dados inválidos.";
+    return { ok: false, error: msg };
   }
 
   const parsed = result.data;
   const normalizedImageUrl = normalizeImageUrl(parsed.imageUrl as any);
 
   try {
+    // ✅ só valida se veio senha
+    if (parsed.password) {
+      const passCheck = validatePassword(parsed.password);
+      if (!passCheck.ok) {
+        return { ok: false, error: passCheck.errors[0] ?? "Senha inválida." };
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       // ✅ garante que unidades selecionadas existem e estão ativas
       await assertUnitsAreActive(tx, parsed.unitIds);
@@ -218,13 +248,13 @@ export async function updateBarber(formData: FormData): Promise<void> {
       });
 
       if (!barber) {
-        console.warn("[updateBarber] Barbeiro não encontrado:", parsed.id);
-        return;
+        throw new Error("Profissional não encontrado.");
       }
 
       let passwordHash: string | undefined;
       if (parsed.password) {
-        passwordHash = await bcrypt.hash(parsed.password, 10);
+        // ✅ padrão consistente com admin
+        passwordHash = await bcrypt.hash(parsed.password, 12);
       }
 
       // 1) atualiza barber
@@ -271,29 +301,25 @@ export async function updateBarber(formData: FormData): Promise<void> {
       // 3) sincroniza vínculos BarberUnit (obrigatório)
       await syncBarberUnits(tx, parsed.id, parsed.unitIds);
     });
+
+    revalidatePath("/admin/professional");
+    return { ok: true };
   } catch (err: any) {
     if (
       err instanceof Prisma.PrismaClientKnownRequestError &&
       err.code === "P2002"
     ) {
-      console.warn(
-        "[updateBarber] E-mail já cadastrado em User ou Barber:",
-        parsed.email,
-      );
-      return;
+      return { ok: false, error: "Já existe um profissional com esse e-mail." };
     }
 
     if (err?.message) {
       console.error("[updateBarber] Regra de negócio:", err.message);
-      return;
+      return { ok: false, error: String(err.message) };
     }
 
     console.error("[updateBarber] Erro inesperado:", err);
-    return;
+    return { ok: false, error: "Erro ao atualizar profissional." };
   }
-
-  revalidatePath("/admin/professional");
-  redirect("/admin/professional");
 }
 
 export async function toggleBarberStatus(formData: FormData): Promise<void> {

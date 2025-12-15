@@ -87,7 +87,14 @@ export function ProfessionalEditDialog({
     unitIds.forEach((id) => formData.append("unitIds", id));
 
     startTransition(async () => {
-      await updateBarber(formData);
+      const res = await updateBarber(formData);
+
+      if (!res?.ok) {
+        toast.error(res?.error ?? "Erro ao salvar alterações.");
+        return; // ✅ não fecha o modal
+      }
+
+      toast.success("Alterações salvas!");
       setOpen(false);
     });
   }
@@ -221,8 +228,10 @@ export function ProfessionalEditDialog({
               placeholder="Preencha para alterar a senha"
               className="bg-background-tertiary border-border-primary text-content-primary"
             />
-            <p className="text-xs text-content-secondary/70">
-              Deixe vazio para manter a senha atual.
+            <p className="text-[11px] text-content-secondary">
+              Deixe vazio para manter a senha atual. Se preencher: mín. 6, 1
+              maiúscula, 1 número e 1 especial (!@#$%^&*()_+-=[]{}
+              ;':&quot;,.&lt;&gt;/?\|)
             </p>
           </div>
 

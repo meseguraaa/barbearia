@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { validatePassword } from "@/lib/password-policy";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -19,8 +20,8 @@ const createAdminSchema = z.object({
   phone: z.string().optional().nullable(),
   birthday: z.string().optional().nullable(), // dd/MM/yyyy ou yyyy-mm-dd
 
-  // ✅ AGORA: senha obrigatória (e vamos gerar hash)
-  password: z.string().min(6, "Senha muito curta"),
+  // ✅ senha obrigatória (validação forte feita no server via validatePassword)
+  password: z.string().min(1, "Senha obrigatória"),
 });
 
 const updateAdminSchema = z.object({
@@ -29,6 +30,9 @@ const updateAdminSchema = z.object({
   email: z.string().email("E-mail inválido"),
   phone: z.string().optional().nullable(),
   birthday: z.string().optional().nullable(),
+
+  // ✅ se vier preenchida, troca senha (validação forte no server)
+  password: z.string().optional().nullable(),
 });
 
 const permissionsSchema = z.object({
@@ -133,8 +137,14 @@ export async function createAdminAction(
   const phone = normalizeOptionalText(parsed.data.phone);
   const birthday = normalizeBirthday(parsed.data.birthday);
 
-  // ✅ senha obrigatória (schema já garante min 6)
-  const password = String(parsed.data.password);
+  // ✅ senha obrigatória
+  const password = String(parsed.data.password ?? "");
+
+  // ✅ política de senha (fonte da verdade)
+  const passCheck = validatePassword(password);
+  if (!passCheck.ok) {
+    return { ok: false, error: passCheck.errors[0] ?? "Senha inválida." };
+  }
 
   try {
     // ✅ garante que a unidade existe (evita salvar id lixo)
@@ -232,6 +242,7 @@ export async function updateAdminAction(
     email: formData.get("email"),
     phone: formData.get("phone"),
     birthday: formData.get("birthday"),
+    password: formData.get("password"),
   });
 
   if (!parsed.success) {
@@ -245,15 +256,31 @@ export async function updateAdminAction(
   const phone = normalizeOptionalText(parsed.data.phone);
   const birthday = normalizeBirthday(parsed.data.birthday);
 
+  // ✅ senha opcional: se vier preenchida, troca
+  const maybePasswordRaw =
+    typeof parsed.data.password === "string" ? parsed.data.password : "";
+  const passwordToSet = maybePasswordRaw.trim();
+
   try {
+    const dataToUpdate: any = {
+      name,
+      email,
+      phone,
+      birthday: birthday ?? null,
+    };
+
+    if (passwordToSet) {
+      const passCheck = validatePassword(passwordToSet);
+      if (!passCheck.ok) {
+        return { ok: false, error: passCheck.errors[0] ?? "Senha inválida." };
+      }
+
+      dataToUpdate.passwordHash = await hashPassword(passwordToSet);
+    }
+
     await prisma.user.update({
       where: { id: userId },
-      data: {
-        name,
-        email,
-        phone,
-        birthday: birthday ?? null,
-      },
+      data: dataToUpdate,
       select: { id: true },
     });
 

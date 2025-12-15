@@ -75,7 +75,14 @@ export function ProfessionalNewDialog({ units }: { units: UnitOption[] }) {
     selectedUnitIds.forEach((id) => formData.append("unitIds", id));
 
     startTransition(async () => {
-      await createBarber(formData);
+      const res = await createBarber(formData);
+
+      if (!res?.ok) {
+        toast.error(res?.error ?? "Erro ao criar profissional.");
+        return; // ✅ não fecha o modal
+      }
+
+      toast.success("Profissional criado com sucesso!");
       setOpen(false);
       setPhone("");
       setSelectedUnitIds([]);
@@ -213,6 +220,10 @@ export function ProfessionalNewDialog({ units }: { units: UnitOption[] }) {
                 placeholder="Defina a senha do profissional"
                 className="bg-background-tertiary border-border-primary text-content-primary"
               />
+              <p className="text-[11px] text-content-secondary">
+                Mín. 6 caracteres, 1 maiúscula, 1 número e 1 especial
+                (!@#$%^&*()_+-=[]{};':&quot;,.&lt;&gt;/?\|)
+              </p>
             </div>
 
             <div className="flex justify-end gap-2 pt-2">

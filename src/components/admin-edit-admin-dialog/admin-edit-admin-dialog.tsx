@@ -15,6 +15,7 @@ import { Calendar as CalendarIcon } from "lucide-react";
 import { updateAdminAction } from "@/app/admin/settings/actions";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { validatePassword } from "@/lib/password-policy";
 
 type AdminForEdit = {
   id: string;
@@ -128,23 +129,26 @@ export function AdminEditAdminDialog({ admin }: { admin: AdminForEdit }) {
         return;
       }
 
-      if (password.trim() && password.trim().length < 6) {
-        toast.error("A nova senha deve ter pelo menos 6 caracteres.");
-        return;
+      // ✅ se digitou nova senha, valida forte
+      if (password.trim()) {
+        const passCheck = validatePassword(password.trim());
+        if (!passCheck.ok) {
+          toast.error(passCheck.errors[0] ?? "Senha inválida.");
+          return;
+        }
       }
 
       const formData = new FormData();
-      // ✅ action espera "userId"
       formData.append("userId", admin.id);
-
       formData.append("name", name.trim());
       formData.append("email", email.trim());
       formData.append("phone", phone.trim());
       formData.append("birthday", birthdayInput.trim());
 
-      // ⚠️ seu updateAdminAction atual NÃO usa password (schema não tem)
-      // então não mandamos pra não dar efeito "falso positivo" no front.
-      // Se você quiser trocar senha pelo admin, a gente adiciona isso no action depois.
+      // ✅ agora salva no backend (quando preenchida)
+      if (password.trim()) {
+        formData.append("password", password.trim());
+      }
 
       const result = await updateAdminAction(formData);
 
@@ -163,7 +167,8 @@ export function AdminEditAdminDialog({ admin }: { admin: AdminForEdit }) {
     }
   }
 
-  const descriptionText = "Atualize os dados de contato desse administrador.";
+  const descriptionText =
+    "Atualize os dados de contato desse administrador. Para trocar a senha, preencha o campo abaixo.";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -239,15 +244,16 @@ export function AdminEditAdminDialog({ admin }: { admin: AdminForEdit }) {
                 id="edit-admin-password"
                 name="password"
                 type="password"
-                placeholder="(Ainda não salva no backend)"
+                placeholder="Preencha para alterar a senha"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={saving}
                 className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
               />
               <p className="text-[11px] text-content-tertiary">
-                Se você quiser que isso atualize de verdade, eu ajusto o action
-                pra aceitar e salvar senha com hash.
+                Deixe vazio para manter a senha atual. Se preencher: mín. 6, 1
+                maiúscula, 1 número e 1 especial (!@#$%^&*()_+-=[]{}
+                ;':&quot;,.&lt;&gt;/?\|)
               </p>
             </div>
 

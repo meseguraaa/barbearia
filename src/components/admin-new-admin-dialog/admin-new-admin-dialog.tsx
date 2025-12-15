@@ -21,6 +21,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
+import { validatePassword } from "@/lib/password-policy";
 
 /* =========================================================
  * Tipos
@@ -133,8 +134,12 @@ export function AdminNewAdminDialog({ units }: { units: UnitOption[] }) {
         return toast.error("Preencha a data no formato DD/MM/AAAA.");
 
       if (!password.trim()) return toast.error("Preencha a senha.");
-      if (password.trim().length < 6)
-        return toast.error("A senha deve ter pelo menos 6 caracteres.");
+
+      // ✅ validação forte (mesma do backend)
+      const passCheck = validatePassword(password.trim());
+      if (!passCheck.ok) {
+        return toast.error(passCheck.errors[0] ?? "Senha inválida.");
+      }
 
       // 🚨 OBRIGATÓRIO
       if (!unitId) {
@@ -237,7 +242,8 @@ export function AdminNewAdminDialog({ units }: { units: UnitOption[] }) {
               className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary"
             />
             <p className="text-[11px] text-content-tertiary">
-              A senha deve ter pelo menos 6 caracteres.
+              Mín. 6 caracteres, 1 maiúscula, 1 número e 1 especial
+              (!@#$%^&*()_+-=[]{};':&quot;,.&lt;&gt;/?\|)
             </p>
           </div>
 
