@@ -630,6 +630,9 @@
   .z-50 {
     z-index: 50;
   }
+  .order-1 {
+    order: 1;
+  }
   .col-span-2 {
     grid-column: span 2 / span 2;
   }

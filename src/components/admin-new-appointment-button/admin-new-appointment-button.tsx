@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { AppointmentForm } from "@/components/appointment-form";
-import type { AppointmentClientOption } from "@/components/appointment-form";
+import type {
+  AppointmentClientOption,
+  UnitOption,
+} from "@/components/appointment-form";
 import type { Appointment } from "@/types/appointment";
 import type { Service } from "@/types/service";
 import { toast } from "sonner";
@@ -21,6 +24,9 @@ type Props = {
    * - null = "all" (ver todas) -> não pode agendar sem escolher uma unidade específica
    */
   unitId: string | null;
+
+  // ✅ NOVO: unidades disponíveis (pra exibir label corretamente no form)
+  units?: UnitOption[];
 };
 
 export function AdminNewAppointmentButton({
@@ -29,6 +35,7 @@ export function AdminNewAppointmentButton({
   barbers,
   services,
   unitId,
+  units = [],
 }: Props) {
   const [open, setOpen] = useState(false);
 
@@ -66,6 +73,7 @@ export function AdminNewAppointmentButton({
         appointments={appointments}
         barbers={barbers}
         services={services}
+        units={units} // ✅ NOVO
         forcedUnitId={unitId ?? undefined} // ✅ evita null causar inconsistência no form
       >
         {/* IMPORTANTE:
