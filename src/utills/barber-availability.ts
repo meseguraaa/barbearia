@@ -14,6 +14,10 @@ type GetAvailabilityWindowsOptions = {
    * Se informado, tenta:
    * 1) disponibilidade do BARBEIRO na unidade (daily/weekly)
    * 2) fallback: disponibilidade da UNIDADE (daily/weekly)
+   *
+   * ✅ REGRA NOVA (soberania):
+   * Mesmo que o barbeiro tenha horário, a unidade pode bloquear.
+   * Então o resultado final SEMPRE respeita a UNIDADE.
    */
   unitId?: string;
 };
@@ -37,6 +41,54 @@ async function ensureBarberLinkedToUnit(barberId: string, unitId: string) {
   return !!link;
 }
 
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map((n) => Number(n));
+  return (h || 0) * 60 + (m || 0);
+}
+
+function minutesToTime(total: number): string {
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/**
+ * Interseção entre janelas (A ∩ B), tudo em "HH:mm".
+ * Se não tiver interseção, retorna [].
+ */
+function intersectWindows(
+  a: AvailabilityWindow[],
+  b: AvailabilityWindow[],
+): AvailabilityWindow[] {
+  if (!a || a.length === 0) return [];
+  if (!b || b.length === 0) return [];
+
+  const out: AvailabilityWindow[] = [];
+
+  for (const wa of a) {
+    const aStart = timeToMinutes(wa.startTime);
+    const aEnd = timeToMinutes(wa.endTime);
+
+    for (const wb of b) {
+      const bStart = timeToMinutes(wb.startTime);
+      const bEnd = timeToMinutes(wb.endTime);
+
+      const start = Math.max(aStart, bStart);
+      const end = Math.min(aEnd, bEnd);
+
+      if (start < end) {
+        out.push({
+          startTime: minutesToTime(start),
+          endTime: minutesToTime(end),
+        });
+      }
+    }
+  }
+
+  // normaliza (ordena)
+  return out.sort((x, y) => x.startTime.localeCompare(y.startTime));
+}
+
 /* ---------------------------------------------------------
  * Fallback: disponibilidade da UNIDADE
  * ---------------------------------------------------------*/
@@ -47,7 +99,7 @@ async function getUnitAvailabilityWindowsOnDate(
   const dayStart = startOfDay(date);
   const nextDay = addDays(dayStart, 1);
 
-  // 1) Exceção diária da unidade
+  // 1) Exceção diária da unidade (é aqui que mora o "fechado" do dia)
   const daily = await prisma.unitDailyAvailability.findFirst({
     where: {
       unitId,
@@ -62,7 +114,7 @@ async function getUnitAvailabilityWindowsOnDate(
   });
 
   if (daily) {
-    // unidade fechada
+    // unidade fechada no dia inteiro
     if (daily.isClosed) return [];
 
     // se tem intervals, usa eles
@@ -109,9 +161,12 @@ async function getUnitAvailabilityWindowsOnDate(
  *    - type = CUSTOM   → usa os intervals diários
  * 2. Senão, usa o padrão semanal (BarberWeeklyAvailability) (na unidade):
  *    - Se isActive = true e tiver intervals → usa esses intervals
- *    - Senão → FALLBACK: usa disponibilidade da UNIDADE (daily/weekly)
+ *    - Senão → fallback: usa disponibilidade da UNIDADE (daily/weekly)
  *
- * ✅ Se unitId vier, valida vínculo BarberUnit ativo.
+ * ✅ REGRA NOVA: se unitId vier, o resultado final SEMPRE respeita a UNIDADE:
+ * - calcula janelas-base (barbeiro ou fallback)
+ * - calcula janelas da unidade
+ * - retorna INTERSEÇÃO (base ∩ unidade)
  */
 export async function getAvailabilityWindowsForBarberOnDate(
   barberId: string,
@@ -127,6 +182,9 @@ export async function getAvailabilityWindowsForBarberOnDate(
     const linked = await ensureBarberLinkedToUnit(barberId, unitId);
     if (!linked) return [];
   }
+
+  // ✅ janelas base (barbeiro / fallback)
+  let baseWindows: AvailabilityWindow[] = [];
 
   // 1) Daily do barbeiro (na unidade se unitId informado)
   const daily = await prisma.barberDailyAvailability.findFirst({
@@ -144,46 +202,57 @@ export async function getAvailabilityWindowsForBarberOnDate(
   });
 
   if (daily) {
-    if (daily.type === "DAY_OFF") return [];
-
-    if (daily.type === "CUSTOM") {
+    if (daily.type === "DAY_OFF") {
+      baseWindows = [];
+    } else if (daily.type === "CUSTOM") {
       const sorted = sortIntervals(daily.intervals ?? []);
-      return sorted.map((i) => ({
+      baseWindows = sorted.map((i) => ({
         startTime: i.startTime,
         endTime: i.endTime,
       }));
     }
+  } else {
+    // 2) Weekly do barbeiro (na unidade se unitId informado)
+    const weekday = date.getDay();
+    const weekly = await prisma.barberWeeklyAvailability.findFirst({
+      where: {
+        barberId,
+        ...(unitId ? { unitId } : {}),
+        weekday,
+        isActive: true,
+      },
+      include: {
+        intervals: true,
+      },
+    });
+
+    if (weekly && weekly.intervals && weekly.intervals.length > 0) {
+      const sortedWeekly = sortIntervals(weekly.intervals);
+      baseWindows = sortedWeekly.map((i) => ({
+        startTime: i.startTime,
+        endTime: i.endTime,
+      }));
+    } else {
+      // 3) fallback: se pediram unitId, usa horário da UNIDADE
+      if (unitId) {
+        baseWindows =
+          (await getUnitAvailabilityWindowsOnDate(unitId, date)) ?? [];
+      } else {
+        baseWindows = [];
+      }
+    }
   }
 
-  // 2) Weekly do barbeiro (na unidade se unitId informado)
-  const weekday = date.getDay();
-  const weekly = await prisma.barberWeeklyAvailability.findFirst({
-    where: {
-      barberId,
-      ...(unitId ? { unitId } : {}),
-      weekday,
-      isActive: true,
-    },
-    include: {
-      intervals: true,
-    },
-  });
-
-  if (weekly && weekly.intervals && weekly.intervals.length > 0) {
-    const sortedWeekly = sortIntervals(weekly.intervals);
-    return sortedWeekly.map((i) => ({
-      startTime: i.startTime,
-      endTime: i.endTime,
-    }));
-  }
-
-  // 3) ✅ FALLBACK: se pediram unitId, usa horário da UNIDADE
+  // ✅ Soberania da UNIDADE: se unitId, intersecta com horário da unidade
   if (unitId) {
-    return await getUnitAvailabilityWindowsOnDate(unitId, date);
+    const unitWindows =
+      (await getUnitAvailabilityWindowsOnDate(unitId, date)) ?? [];
+    if (!unitWindows || unitWindows.length === 0) return [];
+    if (!baseWindows || baseWindows.length === 0) return [];
+    return intersectWindows(baseWindows, unitWindows);
   }
 
-  // Sem unitId e sem weekly do barbeiro = sem disponibilidade
-  return [];
+  return baseWindows ?? [];
 }
 
 type GetAvailableBarbersOnDateOptions = {
@@ -193,10 +262,9 @@ type GetAvailableBarbersOnDateOptions = {
 /**
  * Retorna barbeiros que têm ALGUMA disponibilidade nesse dia.
  *
- * ✅ Ajuste importante:
- * - Se unitId informado:
- *   - só considera barbeiros vinculados à unidade (BarberUnit.isActive=true)
- *   - janelas do barbeiro podem cair no fallback da unidade (se faltar weekly/intervals)
+ * ✅ Se unitId informado:
+ * - só considera barbeiros vinculados à unidade (BarberUnit.isActive=true)
+ * - e a unidade é soberana (via getAvailabilityWindowsForBarberOnDate)
  */
 export async function getAvailableBarbersOnDate(
   date: Date,
@@ -227,9 +295,7 @@ export async function getAvailableBarbersOnDate(
     const windows = await getAvailabilityWindowsForBarberOnDate(
       barber.id,
       date,
-      {
-        unitId,
-      },
+      { unitId },
     );
 
     if (!windows || windows.length === 0) continue;
@@ -278,6 +344,7 @@ type GetAvailableTimeSlotsOptions = {
 /**
  * Gera horários possíveis para agendar um serviço, considerando:
  * - janelas (barbeiro na unidade) com fallback (unidade)
+ * - ✅ unidade soberana (já aplicado em getAvailabilityWindowsForBarberOnDate)
  * - agendamentos existentes do barbeiro (qualquer unidade) ignorando cancelados
  */
 export async function getAvailableTimeSlotsForBarberOnDate(

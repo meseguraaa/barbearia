@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -52,7 +52,12 @@ const WEEK_DAYS: { key: DayKey; label: string; short: string }[] = [
   { key: 0, label: "Domingo", short: "Dom" },
 ];
 
-const defaultDayState: DayState = { active: false, startTime: "", endTime: "" };
+// ✅ NOVO PADRÃO (recomendado): admin decide, mas já nasce “dia inteiro”
+const defaultDayState: DayState = {
+  active: false,
+  startTime: "00:00",
+  endTime: "23:30",
+};
 
 function createDefaultState(): UnitWeeklyAvailabilityState {
   return {
@@ -66,18 +71,17 @@ function createDefaultState(): UnitWeeklyAvailabilityState {
   };
 }
 
-// 09:00 → 21:00 (30 em 30)
+// ✅ 00:00 → 23:30 (30 em 30)
 const TIME_OPTIONS = (() => {
   const times: string[] = [];
-  for (let hour = 9; hour <= 21; hour++) {
+  for (let hour = 0; hour <= 23; hour++) {
     for (let minute = 0; minute < 60; minute += 30) {
-      if (hour === 21 && minute > 0) break;
       times.push(
         `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
       );
     }
   }
-  return times;
+  return times; // inclui 23:30
 })();
 
 function isBlank(v: string) {

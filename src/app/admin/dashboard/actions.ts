@@ -11,7 +11,7 @@ import {
 import { getServerSession } from "next-auth";
 import { nextAuthOptions } from "@/lib/nextauth";
 import { Prisma } from "@prisma/client";
-import { addMinutes, subMinutes } from "date-fns";
+import { addMinutes, subMinutes, addDays, startOfDay } from "date-fns";
 
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
@@ -158,31 +158,154 @@ function getSaoPauloTime(date: Date): { hour: number; minute: number } {
   return { hour, minute };
 }
 
+function getSaoPauloDateKey(date: Date): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  // ex: 2025-12-15
+  return formatter.format(date);
+}
+
+/**
+ * ✅ Weekday no fuso de São Paulo (0..6, igual Date.getDay):
+ * Evita bug quando o servidor está em UTC e o "dia" vira outro.
+ */
+function getSaoPauloWeekday(date: Date): number {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "short",
+  });
+
+  const wd = formatter.format(date); // Sun, Mon, Tue...
+  const map: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
+  };
+
+  return map[wd] ?? date.getDay();
+}
+
+function timeToMinutes(time: string): number {
+  const [h, m] = time.split(":").map((n) => Number(n));
+  return (h || 0) * 60 + (m || 0);
+}
+
+function sortIntervals<T extends { startTime: string; endTime: string }>(
+  arr: T[],
+) {
+  return [...arr].sort((a, b) => a.startTime.localeCompare(b.startTime));
+}
+
 /* ---------------------------------------------------------
  * REGRA 1: não permitir agendamento no passado
  * ---------------------------------------------------------*/
 function validateNotInPast(scheduleAt: Date): string | null {
   const now = new Date();
-
   if (scheduleAt.getTime() < now.getTime()) {
     return "Não é possível agendar para um horário no passado";
   }
-
   return null;
 }
 
 /* ---------------------------------------------------------
- * REGRA 2: Pode agendar das 09:00 até 21:00 (contínuo)
+ * ✅ REGRA 2 (NOVA): validar horário REAL da UNIDADE (daily/weekly)
+ * - Exceções da unidade = sempre BLOQUEIO (fechado)
+ * - Se UnitDailyAvailability.isClosed -> bloqueia
+ * - Se UnitDailyAvailability tem intervals -> só permite dentro deles
+ * - Senão -> usa UnitWeeklyAvailability (isActive + intervals)
+ * - O serviço precisa caber por inteiro dentro de algum intervalo
+ * - Não permite cruzar o dia (no fuso de São Paulo)
  * ---------------------------------------------------------*/
-function validateBusinessHours(scheduleAt: Date): string | null {
-  const { hour, minute } = getSaoPauloTime(scheduleAt);
-  const totalMinutes = hour * 60 + minute;
+async function getUnitAvailabilityWindowsOnDate(
+  unitId: string,
+  date: Date,
+): Promise<Array<{ startTime: string; endTime: string }>> {
+  const dayStart = startOfDay(date);
+  const nextDay = addDays(dayStart, 1);
 
-  const start = 9 * 60; // 09:00
-  const end = 21 * 60; // 21:00
+  const daily = await prisma.unitDailyAvailability.findFirst({
+    where: {
+      unitId,
+      date: { gte: dayStart, lt: nextDay },
+    },
+    include: { intervals: true },
+  });
 
-  if (totalMinutes < start || totalMinutes > end) {
-    return `Agendamentos só podem ser feitos entre 9h-21h (horário de São Paulo)`;
+  if (daily) {
+    if (daily.isClosed) return [];
+    if (daily.intervals && daily.intervals.length > 0) {
+      const sorted = sortIntervals(daily.intervals);
+      return sorted.map((i) => ({
+        startTime: i.startTime,
+        endTime: i.endTime,
+      }));
+    }
+    // daily existe mas sem intervalos e não fechada -> cai no weekly
+  }
+
+  // ✅ weekday consistente com São Paulo
+  const weekday = getSaoPauloWeekday(date);
+
+  const weekly = await prisma.unitWeeklyAvailability.findFirst({
+    where: {
+      unitId,
+      weekday,
+      isActive: true,
+    },
+    include: { intervals: true },
+  });
+
+  if (!weekly || !weekly.intervals || weekly.intervals.length === 0) return [];
+  const sortedWeekly = sortIntervals(weekly.intervals);
+  return sortedWeekly.map((i) => ({
+    startTime: i.startTime,
+    endTime: i.endTime,
+  }));
+}
+
+async function validateWithinUnitHours(
+  unitId: string,
+  scheduleAt: Date,
+  durationMinutes: number,
+): Promise<string | null> {
+  const safeDuration = Math.max(0, durationMinutes || 0);
+
+  const endAt = addMinutes(scheduleAt, safeDuration);
+
+  // Não deixa atravessar o dia no fuso de SP (evita “meia-noite fantasma”)
+  const startKey = getSaoPauloDateKey(scheduleAt);
+  const endKey = getSaoPauloDateKey(endAt);
+  if (startKey !== endKey) {
+    return "Este horário ultrapassa o dia e a unidade não permite agendamentos cruzando o fechamento";
+  }
+
+  const { hour: sh, minute: sm } = getSaoPauloTime(scheduleAt);
+  const { hour: eh, minute: em } = getSaoPauloTime(endAt);
+
+  const startMinutes = sh * 60 + sm;
+  const endMinutes = eh * 60 + em;
+
+  const windows = await getUnitAvailabilityWindowsOnDate(unitId, scheduleAt);
+  if (!windows || windows.length === 0) {
+    return "A unidade está fechada nesse dia";
+  }
+
+  const fits = windows.some((w) => {
+    const ws = timeToMinutes(w.startTime);
+    const we = timeToMinutes(w.endTime);
+    return startMinutes >= ws && endMinutes <= we;
+  });
+
+  if (!fits) {
+    return "A unidade está indisponível nesse horário (fora do horário ou em exceção/bloqueio)";
   }
 
   return null;
@@ -196,18 +319,11 @@ async function ensureBarberLinkedToUnit(
   unitId: string,
 ): Promise<string | null> {
   const link = await prisma.barberUnit.findFirst({
-    where: {
-      barberId,
-      unitId,
-      isActive: true,
-    },
+    where: { barberId, unitId, isActive: true },
     select: { id: true },
   });
 
-  if (!link) {
-    return "Este profissional não está vinculado a esta unidade";
-  }
-
+  if (!link) return "Este profissional não está vinculado a esta unidade";
   return null;
 }
 
@@ -219,17 +335,11 @@ async function ensureBarberCanDoService(
   serviceId: string,
 ): Promise<string | null> {
   const link = await prisma.serviceProfessional.findFirst({
-    where: {
-      barberId,
-      serviceId,
-    },
+    where: { barberId, serviceId },
     select: { id: true },
   });
 
-  if (!link) {
-    return "Este profissional não executa este serviço";
-  }
-
+  if (!link) return "Este profissional não executa este serviço";
   return null;
 }
 
@@ -266,25 +376,15 @@ async function ensureAvailability(
       barberId,
       status: { not: "CANCELED" },
       ...(excludeId && { id: { not: excludeId } }),
-      scheduleAt: {
-        gte: windowStart,
-        lte: windowEnd,
-      },
+      scheduleAt: { gte: windowStart, lte: windowEnd },
     },
     select: {
       id: true,
       scheduleAt: true,
       unitId: true,
-      service: {
-        select: {
-          durationMinutes: true,
-          name: true,
-        },
-      },
+      service: { select: { durationMinutes: true, name: true } },
     },
-    orderBy: {
-      scheduleAt: "asc",
-    },
+    orderBy: { scheduleAt: "asc" },
   });
 
   for (const appt of candidates) {
@@ -312,11 +412,7 @@ async function getDefaultClientId(): Promise<string> {
   const client = await prisma.user.upsert({
     where: { email },
     update: {},
-    create: {
-      email,
-      name: "Cliente não autenticado",
-      role: "CLIENT",
-    },
+    create: { email, name: "Cliente não autenticado", role: "CLIENT" },
   });
 
   return client.id;
@@ -346,16 +442,11 @@ async function getClientIdForAppointment(
   // 1) tenta achar USUÁRIO CLIENT pelo telefone normalizado
   if (normalized) {
     const clientByPhone = await prisma.user.findFirst({
-      where: {
-        phone: normalized,
-        role: "CLIENT",
-      },
+      where: { phone: normalized, role: "CLIENT" },
       select: { id: true },
     });
 
-    if (clientByPhone) {
-      return clientByPhone.id;
-    }
+    if (clientByPhone) return clientByPhone.id;
   }
 
   // 2) sessão (SÓ CLIENT)
@@ -364,9 +455,7 @@ async function getClientIdForAppointment(
     const userId = (session?.user as any)?.id as string | undefined;
     const role = (session?.user as any)?.role as string | undefined;
 
-    if (userId && role === "CLIENT") {
-      return userId;
-    }
+    if (userId && role === "CLIENT") return userId;
   } catch (error) {
     console.error(
       "Erro ao obter sessão do NextAuth em getClientIdForAppointment:",
@@ -623,7 +712,6 @@ export async function cancelAppointment(
 
   const applyFeeRequested = !!parsed.data.applyFee;
 
-  // ✅ agora precisamos de dados a mais pra criar BarberCancellationFee
   const existing = await prisma.appointment.findUnique({
     where: { id: appointmentId },
     select: {
@@ -645,7 +733,6 @@ export async function cancelAppointment(
     return { error: "Não é possível cancelar um agendamento concluído" };
   }
 
-  // ✅ Se já gerou pedido (fluxo de concluir), não pode cancelar
   const hasOrder = await prisma.order.findFirst({
     where: { appointmentId },
     select: { id: true },
@@ -655,9 +742,6 @@ export async function cancelAppointment(
     return { error: "Não é possível cancelar um atendimento já concluído" };
   }
 
-  // =========================
-  // ✅ Busca regras no Service
-  // =========================
   let cancelFeePercentage: number | null = null;
   let cancelLimitHours: number | null = null;
 
@@ -682,9 +766,6 @@ export async function cancelAppointment(
     }
   }
 
-  // =========================
-  // ✅ Valida janela + calcula
-  // =========================
   const price = existing.servicePriceAtTheTime as Prisma.Decimal | null;
 
   let cancelFeeValue: Prisma.Decimal | null = null;
@@ -713,7 +794,6 @@ export async function cancelAppointment(
   }
 
   return withAppointmentMutation(async () => {
-    // ✅ Tudo numa transação pra ficar consistente
     await prisma.$transaction(async (tx) => {
       await tx.appointment.update({
         where: { id: appointmentId },
@@ -725,7 +805,6 @@ export async function cancelAppointment(
         } as any,
       });
 
-      // ✅ Lançamento financeiro do barbeiro (idempotente via unique appointmentId)
       if (cancelFeeApplied && cancelFeeValue && existing.barberId) {
         await tx.barberCancellationFee.upsert({
           where: { appointmentId },
@@ -749,6 +828,7 @@ export async function cancelAppointment(
  * ---------------------------------------------------------*/
 export async function createAppointment(data: AppointmentData) {
   const parsed = appointmentSchema.parse(data);
+
   console.log("[createAppointment] parsed:", {
     unitId: parsed.unitId ?? null,
     serviceId: parsed.serviceId,
@@ -763,9 +843,6 @@ export async function createAppointment(data: AppointmentData) {
 
   const pastError = validateNotInPast(scheduleAt);
   if (pastError) return { error: pastError };
-
-  const scheduleError = validateBusinessHours(scheduleAt);
-  if (scheduleError) return { error: scheduleError };
 
   const service = await prisma.service.findUnique({
     where: { id: serviceId },
@@ -788,10 +865,7 @@ export async function createAppointment(data: AppointmentData) {
   if (!service.isActive) return { error: "Serviço inativo" };
 
   const unitId = parsed.unitId;
-
-  if (!unitId) {
-    return { error: "Unidade é obrigatória para este agendamento" };
-  }
+  if (!unitId) return { error: "Unidade é obrigatória para este agendamento" };
 
   const unit = await prisma.unit.findUnique({
     where: { id: unitId },
@@ -800,6 +874,14 @@ export async function createAppointment(data: AppointmentData) {
 
   if (!unit) return { error: "Unidade não encontrada" };
   if (unit.isActive === false) return { error: "Unidade inativa" };
+
+  // ✅ TRAVA SOBERANA: horário REAL da unidade (daily/weekly)
+  const unitHoursError = await validateWithinUnitHours(
+    unitId,
+    scheduleAt,
+    service.durationMinutes ?? 0,
+  );
+  if (unitHoursError) return { error: unitHoursError };
 
   console.log("[createAppointment] ✅ unit ok", {
     unitId,
@@ -841,9 +923,7 @@ export async function createAppointment(data: AppointmentData) {
         startDate: { lte: scheduleAt },
         endDate: { gte: scheduleAt },
       },
-      include: {
-        plan: true,
-      },
+      include: { plan: true },
     });
 
     if (clientPlan && clientPlan.plan.isActive) {
@@ -922,9 +1002,6 @@ export async function updateAppointment(id: string, data: AppointmentData) {
   const pastError = validateNotInPast(scheduleAt);
   if (pastError) return { error: pastError };
 
-  const scheduleError = validateBusinessHours(scheduleAt);
-  if (scheduleError) return { error: scheduleError };
-
   const existing = await prisma.appointment.findUnique({
     where: { id },
     select: {
@@ -972,10 +1049,7 @@ export async function updateAppointment(id: string, data: AppointmentData) {
   }
 
   const unitId = parsed.unitId ?? existing.unitId;
-
-  if (!unitId) {
-    return { error: "Unidade é obrigatória para este agendamento" };
-  }
+  if (!unitId) return { error: "Unidade é obrigatória para este agendamento" };
 
   const unit = await prisma.unit.findUnique({
     where: { id: unitId },
@@ -984,6 +1058,14 @@ export async function updateAppointment(id: string, data: AppointmentData) {
 
   if (!unit) return { error: "Unidade não encontrada" };
   if (unit.isActive === false) return { error: "Unidade inativa" };
+
+  // ✅ TRAVA SOBERANA: horário REAL da unidade (daily/weekly)
+  const unitHoursError = await validateWithinUnitHours(
+    unitId,
+    scheduleAt,
+    targetService.durationMinutes ?? 0,
+  );
+  if (unitHoursError) return { error: unitHoursError };
 
   console.log("[updateAppointment] ✅ unit ok", {
     appointmentId: id,
