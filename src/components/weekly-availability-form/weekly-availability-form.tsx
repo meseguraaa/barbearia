@@ -38,6 +38,9 @@ type WeeklyAvailabilityFormProps = {
 
   // ✅ opcional: controlar loading externamente (wrapper)
   isSaving?: boolean;
+
+  // ✅ NOVO: ação opcional à esquerda do botão salvar (ex: Criar exceção)
+  leftAction?: React.ReactNode;
 };
 
 // ✅ NOVO PADRÃO: dia inteiro disponível (admin/profissional decide)
@@ -70,15 +73,14 @@ function createDefaultState(): WeeklyAvailabilityState {
   };
 }
 
-// ✅ NOVO: 00:00 até 23:30, de 30 em 30
+// ✅ 00:00 → 23:30 (30 em 30)
 const TIME_OPTIONS = (() => {
   const times: string[] = [];
   for (let hour = 0; hour <= 23; hour++) {
     for (let minute = 0; minute < 60; minute += 30) {
-      const timeString = `${hour.toString().padStart(2, "0")}:${minute
-        .toString()
-        .padStart(2, "0")}`;
-      times.push(timeString);
+      times.push(
+        `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
+      );
     }
   }
   return times; // inclui 23:30
@@ -89,6 +91,7 @@ export function WeeklyAvailabilityForm({
   onChange,
   onSave,
   isSaving = false,
+  leftAction,
 }: WeeklyAvailabilityFormProps) {
   const [state, setState] = useState<WeeklyAvailabilityState>(
     initialValue ?? createDefaultState(),
@@ -149,11 +152,13 @@ export function WeeklyAvailabilityForm({
 
   return (
     <div className="space-y-4">
-      {/* Botão salvar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* Ações (esquerda): Exceção + Salvar */}
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {leftAction}
+
         <Button
           type="button"
-          variant="brand"
+          variant="edit2"
           size="sm"
           onClick={handleSave}
           disabled={isSaving || hasAnyError}
