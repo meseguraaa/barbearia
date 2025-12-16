@@ -16,8 +16,8 @@ type DayKey = 0 | 1 | 2 | 3 | 4 | 5 | 6; // 0 = domingo ... 6 = sábado
 
 type DayState = {
   active: boolean;
-  startTime: string; // "09:00"
-  endTime: string; // "19:00"
+  startTime: string; // "00:00"
+  endTime: string; // "23:30"
 };
 
 export type WeeklyAvailabilityState = Record<DayKey, DayState>;
@@ -40,10 +40,11 @@ type WeeklyAvailabilityFormProps = {
   isSaving?: boolean;
 };
 
+// ✅ NOVO PADRÃO: dia inteiro disponível (admin/profissional decide)
 const defaultDayState: DayState = {
   active: false,
-  startTime: "09:00",
-  endTime: "19:00",
+  startTime: "00:00",
+  endTime: "23:30",
 };
 
 const WEEK_DAYS: { key: DayKey; label: string; short: string }[] = [
@@ -69,19 +70,18 @@ function createDefaultState(): WeeklyAvailabilityState {
   };
 }
 
-// Mesmo padrão da agenda: 09:00 até 21:00, de 30 em 30
+// ✅ NOVO: 00:00 até 23:30, de 30 em 30
 const TIME_OPTIONS = (() => {
   const times: string[] = [];
-  for (let hour = 9; hour <= 21; hour++) {
+  for (let hour = 0; hour <= 23; hour++) {
     for (let minute = 0; minute < 60; minute += 30) {
-      if (hour === 21 && minute > 0) break;
       const timeString = `${hour.toString().padStart(2, "0")}:${minute
         .toString()
         .padStart(2, "0")}`;
       times.push(timeString);
     }
   }
-  return times;
+  return times; // inclui 23:30
 })();
 
 export function WeeklyAvailabilityForm({
