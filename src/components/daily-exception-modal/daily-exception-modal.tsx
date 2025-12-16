@@ -32,20 +32,17 @@ import { cn } from "@/lib/utils";
 
 import { createDailyException } from "../../app/barber/availability/actions";
 
-// mesmos limites da barbearia (09:00 - 21:00), de 30 em 30
+// ✅ 00:00 → 23:30 (30 em 30)
 const TIME_OPTIONS = (() => {
   const times: string[] = [];
-  for (let hour = 9; hour <= 21; hour++) {
+  for (let hour = 0; hour <= 23; hour++) {
     for (let minute = 0; minute < 60; minute += 30) {
-      if (hour === 21 && minute > 0) break;
       times.push(
-        `${hour.toString().padStart(2, "0")}:${minute
-          .toString()
-          .padStart(2, "0")}`,
+        `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
       );
     }
   }
-  return times;
+  return times; // inclui 23:30
 })();
 
 type ExceptionInterval = {
@@ -178,7 +175,9 @@ export function DailyExceptionModal({ barberId }: DailyExceptionModalProps) {
       }}
     >
       <DialogTrigger asChild>
-        <Button variant="brand">Criar exceção</Button>
+        <Button variant="destructive" size="sm">
+          Criar exceção
+        </Button>
       </DialogTrigger>
 
       <DialogContent

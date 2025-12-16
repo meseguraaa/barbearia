@@ -13,10 +13,14 @@ import { saveWeeklyAvailability } from "@/app/barber/availability/actions";
 
 type WeeklyAvailabilityClientProps = {
   initialValue: WeeklyAvailabilityState;
+
+  // ✅ NOVO: permite passar o botão/modal de exceção pra ficar ao lado do salvar
+  leftAction?: React.ReactNode;
 };
 
 export function WeeklyAvailabilityClient({
   initialValue,
+  leftAction,
 }: WeeklyAvailabilityClientProps) {
   const [, startTransition] = useTransition();
 
@@ -38,6 +42,10 @@ export function WeeklyAvailabilityClient({
   }
 
   return (
-    <WeeklyAvailabilityForm initialValue={initialValue} onSave={handleSave} />
+    <WeeklyAvailabilityForm
+      initialValue={initialValue}
+      onSave={handleSave}
+      leftAction={leftAction}
+    />
   );
 }

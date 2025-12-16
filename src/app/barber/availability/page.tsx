@@ -127,13 +127,14 @@ export default async function BarberAvailabilityPage() {
             exceções em dias específicos.
           </p>
         </div>
-
-        <DailyExceptionModal barberId={barber.id} />
       </header>
 
       <section className="space-y-6">
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-4 space-y-3">
-          <WeeklyAvailabilityClient initialValue={initialState} />
+          <WeeklyAvailabilityClient
+            initialValue={initialState}
+            leftAction={<DailyExceptionModal barberId={barber.id} />}
+          />
         </div>
 
         <DailyExceptionsList barberId={barber.id} />

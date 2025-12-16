@@ -192,7 +192,7 @@ export function UnitWeeklyAvailabilityForm({
 
           <Button
             type="button"
-            variant="brand"
+            variant="edit2"
             size="sm"
             onClick={handleSave}
             disabled={isPending || hasAnyError}
