@@ -11,3 +11,4 @@ pgdata/.env
 # postgres data
 pgdata/
 **/pgdata/
+tsconfig.tsbuildinfo
