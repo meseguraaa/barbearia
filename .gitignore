@@ -1,4 +1,27 @@
 node_modules
 .next
 .env
+<<<<<<< HEAD
+pgdata/.env
+.env.*
+
+# secrets
+.env
+.env.*
+
+# postgres data
 pgdata/
+**/pgdata/
+tsconfig.tsbuildinfo
+
+# TypeScript build info
+tsconfig.tsbuildinfo
+=======
+pgdata/
+>>>>>>> origin/main
+
+# TypeScript build info
+tsconfig.tsbuildinfo
+
+# env
+.env

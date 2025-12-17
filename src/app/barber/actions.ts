@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 import { revalidatePath } from "next/cache";
-import { AppointmentStatus, Prisma } from "@prisma/client";
+import { AppointmentStatus, OrderStatus, Prisma, Role } from "@prisma/client";
 
 const SESSION_COOKIE_NAME = "painel_session";
 
@@ -52,8 +52,7 @@ async function getCurrentBarber() {
 }
 
 /* ----------------------------------------------------------
-   🧮 Recalcula snapshots (valor do serviço, porcentagem 
-      e ganho) quando o status muda para DONE.
+   🧮 Recalcula snapshots quando status muda para DONE
 ---------------------------------------------------------- */
 async function ensureEarningsSnapshot(appointmentId: string) {
   const appointment = await prisma.appointment.findUnique({
@@ -68,10 +67,9 @@ async function ensureEarningsSnapshot(appointmentId: string) {
     !appointment.barberPercentageAtTheTime ||
     !appointment.barberEarningValue;
 
-  if (!snapshotMissing) return; // já existe, não recalcula
+  if (!snapshotMissing) return;
 
   const service = appointment.service;
-
   if (!service) return;
 
   const price = Number(appointment.servicePriceAtTheTime ?? service.price);
@@ -92,7 +90,41 @@ async function ensureEarningsSnapshot(appointmentId: string) {
 }
 
 /* ----------------------------------------------------------
-   🔧 Atualiza status E recalcula ganhos quando vira DONE
+   🧾 Garante que o Order do atendimento apareça no Checkout
+   O checkout lista serviços com: status=PENDING + item.serviceId != null
+---------------------------------------------------------- */
+async function ensureOrderVisibleInCheckout(
+  appointmentId: string,
+  barberId: string,
+  unitId: string,
+) {
+  // Order é 1:1 com appointment via Order.appointmentId (unique)
+  const order = await prisma.order.findUnique({
+    where: { appointmentId: appointmentId },
+    select: { id: true, status: true, unitId: true, barberId: true },
+  });
+
+  if (!order) return;
+
+  // Coloca exatamente no status que o /admin/checkout está buscando
+  if (order.status !== OrderStatus.PENDING) {
+    await prisma.order.update({
+      where: { id: order.id },
+      data: {
+        status: OrderStatus.PENDING,
+        // reforços de coerência (evita “sumir por filtro de unidade/barbeiro”)
+        unitId,
+        barberId: order.barberId ?? barberId,
+        // limpeza de sinais de reserva, se for o caso
+        reservedUntil: null,
+        expiredAt: null,
+      },
+    });
+  }
+}
+
+/* ----------------------------------------------------------
+   🔧 Atualiza status + snapshots + sincroniza Order p/ checkout
 ---------------------------------------------------------- */
 async function updateAppointmentStatus(
   formData: FormData,
@@ -101,27 +133,52 @@ async function updateAppointmentStatus(
   const appointmentId = String(formData.get("appointmentId") ?? "");
   if (!appointmentId) return;
 
-  let barber;
-  try {
-    barber = await getCurrentBarber();
-  } catch {
-    return;
-  }
+  const barber = await getCurrentBarber();
 
-  // garante que o barbeiro só mexe nos appointments dele
-  await prisma.appointment.updateMany({
-    where: { id: appointmentId, barberId: barber.id },
-    data: { status: newStatus },
+  // Pegamos unitId também porque o checkout filtra por unidade
+  const appt = await prisma.appointment.findUnique({
+    where: { id: appointmentId },
+    select: { id: true, barberId: true, unitId: true, status: true },
   });
 
-  // SE STATUS = DONE → recalcula snapshots
-  if (newStatus === "DONE") {
-    await ensureEarningsSnapshot(appointmentId);
+  if (!appt || appt.barberId !== barber.id) {
+    throw new Error("APPOINTMENT_NOT_FOUND_OR_FORBIDDEN");
   }
 
-  // revalida dashboard e ganhos
+  if (
+    newStatus === AppointmentStatus.CANCELED &&
+    appt.status === AppointmentStatus.DONE
+  ) {
+    throw new Error("CANNOT_CANCEL_DONE");
+  }
+
+  const updated = await prisma.appointment.updateMany({
+    where: { id: appointmentId, barberId: barber.id },
+    data: {
+      status: newStatus,
+      concludedByRole:
+        newStatus === AppointmentStatus.DONE ? Role.BARBER : undefined,
+      cancelledByRole:
+        newStatus === AppointmentStatus.CANCELED ? Role.BARBER : undefined,
+    },
+  });
+
+  if (updated.count === 0) {
+    throw new Error("APPOINTMENT_NOT_FOUND_OR_FORBIDDEN");
+  }
+
+  if (newStatus === AppointmentStatus.DONE) {
+    await ensureEarningsSnapshot(appointmentId);
+    await ensureOrderVisibleInCheckout(appointmentId, barber.id, appt.unitId);
+  }
+
+  // ✅ revalida as rotas certas
+  revalidatePath("/barber/dashboard");
   revalidatePath("/barber/calendar");
   revalidatePath("/barber/earnings");
+
+  // ✅ checkout admin (sua rota é essa)
+  revalidatePath("/admin/checkout");
 }
 
 export async function markAppointmentDone(formData: FormData) {

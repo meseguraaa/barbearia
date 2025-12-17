@@ -1,5 +1,0 @@
-{
-  "/painel/login/page": "app/painel/login/page.js",
-  "/barber/availability/page": "app/barber/availability/page.js",
-  "/admin/settings/page": "app/admin/settings/page.js"
-}
