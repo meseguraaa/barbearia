@@ -12,3 +12,6 @@ pgdata/.env
 pgdata/
 **/pgdata/
 tsconfig.tsbuildinfo
+
+# TypeScript build info
+tsconfig.tsbuildinfo
