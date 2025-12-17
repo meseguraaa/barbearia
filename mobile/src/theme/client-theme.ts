@@ -27,7 +27,7 @@ export const UI = {
   },
   shadow: {
     card: {
-      shadowColor: "#000",
+      shadowColor: "#fff",
       shadowOpacity: 0.35,
       shadowRadius: 18,
       shadowOffset: { width: 0, height: 10 },
@@ -66,7 +66,7 @@ export const styles = {
   },
 
   card: {
-    backgroundColor: UI.colors.card,
+    backgroundColor: `${UI.colors.card}B3`, // 70% de transparência
     borderWidth: 1.5,
     borderColor: UI.brand.primary,
     borderRadius: UI.radius.card,
@@ -120,6 +120,6 @@ export const styles = {
   providerBtnFullText: {
     color: UI.brand.primaryText,
     fontSize: 15,
-    fontWeight: "900",
+    fontWeight: "600",
   },
 } as const;

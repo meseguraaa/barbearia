@@ -1,39 +1,18 @@
-import { useEffect, useState } from "react";
 import { View, ActivityIndicator } from "react-native";
 import { Redirect } from "expo-router";
-import * as SecureStore from "expo-secure-store";
-
-const AUTH_STORAGE_KEY = "auth_token";
+import { useAuth } from "../src/auth/auth-context";
+import { UI } from "../src/theme/client-theme";
 
 export default function Index() {
-  const [ready, setReady] = useState(false);
-  const [hasToken, setHasToken] = useState(false);
+  const { token, isBooting } = useAuth();
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function boot() {
-      try {
-        const token = await SecureStore.getItemAsync(AUTH_STORAGE_KEY);
-        if (!mounted) return;
-        setHasToken(!!token);
-      } finally {
-        if (mounted) setReady(true);
-      }
-    }
-
-    boot();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  if (!ready) {
+  // Loader enquanto o AuthProvider faz o boot
+  if (isBooting) {
     return (
       <View
         style={{
           flex: 1,
-          backgroundColor: "#020617",
+          backgroundColor: UI.brand.primary,
           alignItems: "center",
           justifyContent: "center",
         }}
@@ -43,10 +22,10 @@ export default function Index() {
     );
   }
 
-  // ✅ se tiver token, vai pra Home (rota que vamos criar agora)
-  if (hasToken) {
-    return <Redirect href="/home" />;
+  // Token decide tudo
+  if (token) {
+    return <Redirect href="/(app)/(tabs)/home" />;
   }
 
-  return <Redirect href="/auth/login" />;
+  return <Redirect href="/(auth)/login" />;
 }
