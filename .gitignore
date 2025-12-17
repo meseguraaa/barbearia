@@ -3,3 +3,11 @@ node_modules
 .env
 pgdata/.env
 .env.*
+
+# secrets
+.env
+.env.*
+
+# postgres data
+pgdata/
+**/pgdata/
