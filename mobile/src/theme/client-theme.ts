@@ -122,4 +122,24 @@ export const styles = {
     fontSize: 15,
     fontWeight: "600",
   },
+
+  iconBtnHeader: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+    position: "relative",
+  },
+  avatarHeader: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 2,
+    borderColor: "rgba(255,255,255,0.70)",
+    backgroundColor: UI.colors.card,
+  },
 } as const;

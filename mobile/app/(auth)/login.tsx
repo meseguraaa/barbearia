@@ -39,6 +39,8 @@ export default function Login() {
     try {
       setLoading(true);
 
+      devLog("redirectUri gerado:", redirectUri);
+
       const callbackUrl = `${API_BASE_URL}/api/mobile/auth-redirect?redirect_uri=${encodeURIComponent(
         redirectUri,
       )}`;
