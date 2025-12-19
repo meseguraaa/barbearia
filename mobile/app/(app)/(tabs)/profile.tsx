@@ -1,4 +1,4 @@
-import React, { memo, useMemo } from "react";
+import React, { memo, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -7,25 +7,103 @@ import {
   StyleSheet,
   ScrollView,
   TextInput,
+  Alert,
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  InputAccessoryView,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 import { UI, styles } from "../../../src/theme/client-theme";
+import { useAuth } from "../../../src/auth/auth-context";
+import { apiFetch } from "../../../src/lib/api";
 
 const STICKY_ROW_H = 74;
+const IOS_ACCESSORY_ID = "profileEmptyAccessory";
+
+/* ===========================
+ * Máscaras (sem libs)
+ * ===========================*/
+function maskPhone(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+
+  if (digits.length === 0) return "";
+
+  if (digits.length <= 10) {
+    const m = digits
+      .replace(/(\d{0,2})(\d{0,4})(\d{0,4}).*/, "($1) $2-$3")
+      .replace(/\(\)\s?/, "")
+      .replace(/\)\s-/, ") ")
+      .replace(/-$/, "");
+    return m.trim();
+  }
+
+  const m = digits
+    .replace(/(\d{0,2})(\d{0,5})(\d{0,4}).*/, "($1) $2-$3")
+    .replace(/\(\)\s?/, "")
+    .replace(/\)\s-/, ") ")
+    .replace(/-$/, "");
+  return m.trim();
+}
+
+function maskDate(value: string) {
+  const digits = value.replace(/\D/g, "").slice(0, 8);
+  if (digits.length === 0) return "";
+
+  let out = digits;
+  if (digits.length >= 3) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  if (digits.length >= 5)
+    out = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+
+  return out;
+}
+
+function formatBirthdayBR(input: unknown): string {
+  if (!input) return "";
+
+  const d =
+    input instanceof Date
+      ? input
+      : typeof input === "string"
+        ? new Date(input)
+        : null;
+
+  if (!d || Number.isNaN(d.getTime())) return "";
+
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const yyyy = String(d.getUTCFullYear());
+  return `${dd}/${mm}/${yyyy}`;
+}
+
+type MeApiUser = {
+  id: string;
+  name: string | null;
+  email: string;
+  image: string | null;
+  phone: string | null;
+  birthday: string | Date | null;
+};
 
 const Field = memo(function Field({
   label,
   value,
   placeholder,
   icon,
+  editable,
+  onChangeText,
+  keyboardType,
 }: {
   label: string;
   value?: string;
   placeholder: string;
   icon: any;
+  editable?: boolean;
+  onChangeText?: (t: string) => void;
+  keyboardType?: any;
 }) {
   return (
     <View style={S.fieldWrap}>
@@ -41,6 +119,15 @@ const Field = memo(function Field({
           placeholder={placeholder}
           placeholderTextColor={UI.colors.black45}
           style={S.input}
+          editable={editable}
+          onChangeText={onChangeText}
+          keyboardType={keyboardType}
+          // ✅ remove Next/Done bar no iOS
+          inputAccessoryViewID={
+            Platform.OS === "ios" ? IOS_ACCESSORY_ID : undefined
+          }
+          autoCorrect={false}
+          autoCapitalize="none"
         />
       </View>
     </View>
@@ -50,17 +137,17 @@ const Field = memo(function Field({
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { signOut } = useAuth();
 
-  const me = useMemo(
-    () => ({
-      name: "Bruno Leal",
-      email: "bruno@email.com",
-      phone: "(11) 99999-9999",
-      birth: "10/02/1994",
-      avatar: "https://i.pravatar.cc/200?img=12",
-    }),
-    [],
-  );
+  const [loadingMe, setLoadingMe] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [avatar, setAvatar] = useState("https://i.pravatar.cc/200?img=12");
+
+  const [phone, setPhone] = useState("");
+  const [birth, setBirth] = useState("");
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
   const topBounceHeight = useMemo(() => TOP_OFFSET + 1400, [TOP_OFFSET]);
@@ -70,122 +157,240 @@ export default function Profile() {
     [insets.top],
   );
 
+  const scrollContentStyle = useMemo(
+    () => [S.scrollContent, { paddingBottom: 28 + insets.bottom }],
+    [insets.bottom],
+  );
+
+  async function forceLogoutToLogin() {
+    try {
+      await signOut();
+    } finally {
+      router.replace("/(auth)/login");
+    }
+  }
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        setLoadingMe(true);
+
+        const res = await apiFetch<{ user: MeApiUser }>("/api/mobile/me");
+        if (!alive) return;
+
+        const u = res.user;
+
+        setName(u.name ?? "");
+        setEmail(u.email ?? "");
+        // ✅ foto do provider (Google/Facebook) salva em user.image (NextAuth)
+        setAvatar(u.image ?? "https://i.pravatar.cc/200?img=12");
+
+        setPhone(u.phone ? maskPhone(u.phone) : "");
+        setBirth(maskDate(formatBirthdayBR(u.birthday)));
+      } catch {
+        Alert.alert("Erro", "Não foi possível carregar seus dados.");
+      } finally {
+        if (alive) setLoadingMe(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  async function handleLogout() {
+    Alert.alert("Sair da conta", "Quer mesmo sair?", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Sair", style: "destructive", onPress: forceLogoutToLogin },
+    ]);
+  }
+
+  async function handleSave() {
+    if (saving) return;
+
+    const b = birth.trim();
+    if (b.length > 0 && !/^\d{2}\/\d{2}\/\d{4}$/.test(b)) {
+      Alert.alert("Data inválida", "Use o formato 00/00/0000.");
+      return;
+    }
+
+    try {
+      setSaving(true);
+
+      await apiFetch("/api/mobile/me", {
+        method: "PATCH",
+        body: JSON.stringify({
+          phone: phone.trim() || null,
+          birthday: b || null,
+        }),
+      });
+
+      // ✅ depois de salvar → home
+      router.replace("/(app)/(tabs)/home");
+    } catch (e: any) {
+      Alert.alert("Erro", e?.message || "Não foi possível salvar.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    <View style={S.page}>
-      {/* TOPO FIXO */}
-      <View style={S.fixedTop}>
-        <View style={safeTopStyle} />
-        <View style={S.stickyRow}>
-          {/* vazio por enquanto */}
-          <Text style={S.title}>Perfil</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      keyboardVerticalOffset={Platform.OS === "ios" ? STICKY_ROW_H : 0}
+    >
+      <View style={S.page}>
+        {/* ✅ iOS acessório vazio: remove Next/Done */}
+        {Platform.OS === "ios" ? (
+          <InputAccessoryView nativeID={IOS_ACCESSORY_ID}>
+            <View />
+          </InputAccessoryView>
+        ) : null}
+
+        {/* TOPO FIXO */}
+        <View style={S.fixedTop}>
+          <View style={safeTopStyle} />
+          <View style={S.stickyRow}>
+            <Text style={S.title}>Perfil</Text>
+          </View>
         </View>
-      </View>
 
-      <ScrollView
-        style={S.scroll}
-        contentContainerStyle={S.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ✅ garante topo escuro ao puxar pra baixo */}
-        <View
-          pointerEvents="none"
-          style={[S.topBounceDark, { height: topBounceHeight }]}
-        />
+        <ScrollView
+          style={S.scroll}
+          contentContainerStyle={scrollContentStyle}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+          {...(Platform.OS === "ios"
+            ? ({ automaticallyAdjustKeyboardInsets: true } as any)
+            : null)}
+        >
+          {/* topo escuro no overscroll */}
+          <View
+            pointerEvents="none"
+            style={[S.topBounceDark, { height: topBounceHeight }]}
+          />
 
-        {/* spacer do topo fixo */}
-        <View style={{ height: TOP_OFFSET, backgroundColor: UI.colors.bg }} />
+          {/* spacer topo fixo */}
+          <View style={{ height: TOP_OFFSET, backgroundColor: UI.colors.bg }} />
 
-        {/* BLOCO ESCURO */}
-        <View style={S.darkShell}>
-          <View style={S.darkInner}>
-            <View style={styles.glassCard}>
-              <View style={S.profileHeroRow}>
-                {/* ✅ avatar clicável, sem botão extra */}
-                <Pressable style={S.avatarWrap} onPress={() => {}}>
-                  <Image source={{ uri: me.avatar }} style={S.avatarBig} />
-                  <View style={S.avatarBadge}>
-                    <FontAwesome
-                      name="camera"
-                      size={12}
-                      color={UI.colors.white}
-                    />
+          {/* BLOCO ESCURO */}
+          <View style={S.darkShell}>
+            <View style={S.darkInner}>
+              <View style={styles.glassCard}>
+                <View style={S.profileHeroRow}>
+                  {/* ✅ sem upload: foto vem do provider */}
+                  <View style={S.avatarWrap}>
+                    <Image source={{ uri: avatar }} style={S.avatarBig} />
+                    <View style={S.avatarBadge}>
+                      <FontAwesome
+                        name="user"
+                        size={12}
+                        color={UI.colors.white}
+                      />
+                    </View>
                   </View>
-                </Pressable>
 
-                <View style={S.heroTextCol}>
-                  <Text style={S.heroHello}>Seus dados</Text>
-                  <Text style={S.heroName} numberOfLines={1}>
-                    {me.name}
-                  </Text>
-                  <Text style={S.heroEmail} numberOfLines={1}>
-                    {me.email}
-                  </Text>
+                  <View style={S.heroTextCol}>
+                    <Text style={S.heroHello}>
+                      Seus dados{loadingMe ? "…" : ""}
+                    </Text>
+                    <Text style={S.heroName} numberOfLines={1}>
+                      {name || " "}
+                    </Text>
+                    <Text style={S.heroEmail} numberOfLines={1}>
+                      {email || " "}
+                    </Text>
+                  </View>
                 </View>
               </View>
-            </View>
 
-            <View style={S.hintRow}>
-              <FontAwesome
-                name="lock"
-                size={14}
-                color="rgba(255,255,255,0.75)"
-              />
-              <Text style={S.hintText}>
-                Layout only. Depois ligamos validação e API.
-              </Text>
+              <View style={S.hintRow}>
+                <FontAwesome
+                  name="lock"
+                  size={14}
+                  color="rgba(255,255,255,0.75)"
+                />
+                <Text style={S.hintText}>
+                  A foto vem do login social. Upload fica pra depois.
+                </Text>
+              </View>
             </View>
           </View>
-        </View>
 
-        {/* ÁREA BRANCA */}
-        <View style={S.whiteArea}>
-          <View style={S.whiteContent}>
-            <Text style={S.sectionTitle}>Informações</Text>
+          {/* ÁREA BRANCA */}
+          <View style={S.whiteArea}>
+            <View style={S.whiteContent}>
+              <Text style={S.sectionTitle}>Informações</Text>
 
-            <View style={S.formCard}>
-              <Field
-                label="Nome"
-                value={me.name}
-                placeholder="Seu nome completo"
-                icon="user"
-              />
-              <View style={S.divider} />
+              <View style={S.formCard}>
+                <Field
+                  label="Nome"
+                  value={name}
+                  placeholder="Seu nome completo"
+                  icon="user"
+                  editable={false}
+                />
+                <View style={S.divider} />
 
-              <Field
-                label="E-mail"
-                value={me.email}
-                placeholder="seu@email.com"
-                icon="envelope"
-              />
-              <View style={S.divider} />
+                <Field
+                  label="E-mail"
+                  value={email}
+                  placeholder="seu@email.com"
+                  icon="envelope"
+                  editable={false}
+                />
+                <View style={S.divider} />
 
-              <Field
-                label="Telefone"
-                value={me.phone}
-                placeholder="(00) 00000-0000"
-                icon="phone"
-              />
-              <View style={S.divider} />
+                <Field
+                  label="Telefone"
+                  value={phone}
+                  placeholder="(00) 00000-0000"
+                  icon="phone"
+                  editable={!loadingMe && !saving}
+                  onChangeText={(t) => setPhone(maskPhone(t))}
+                  keyboardType="number-pad"
+                />
+                <View style={S.divider} />
 
-              <Field
-                label="Data de nascimento"
-                value={me.birth}
-                placeholder="dd/mm/aaaa"
-                icon="calendar"
-              />
+                <Field
+                  label="Data de nascimento"
+                  value={birth}
+                  placeholder="dd/mm/aaaa"
+                  icon="calendar"
+                  editable={!loadingMe && !saving}
+                  onChangeText={(t) => setBirth(maskDate(t))}
+                  keyboardType="number-pad"
+                />
+              </View>
+
+              <Pressable
+                style={[
+                  S.primaryBtn,
+                  saving || loadingMe ? { opacity: 0.85 } : null,
+                ]}
+                onPress={handleSave}
+                disabled={saving || loadingMe}
+              >
+                {saving ? (
+                  <ActivityIndicator color={UI.colors.white} />
+                ) : (
+                  <Text style={S.primaryBtnText}>Salvar alterações</Text>
+                )}
+              </Pressable>
+
+              <Pressable style={S.dangerLink} onPress={handleLogout}>
+                <Text style={S.dangerText}>Sair da conta</Text>
+              </Pressable>
             </View>
-
-            <Pressable style={S.primaryBtn}>
-              <Text style={S.primaryBtnText}>Salvar alterações</Text>
-            </Pressable>
-
-            <Pressable style={S.dangerLink}>
-              <Text style={S.dangerText}>Sair da conta</Text>
-            </Pressable>
           </View>
-        </View>
-      </ScrollView>
-    </View>
+        </ScrollView>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -207,17 +412,6 @@ const S = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-  },
-
-  navBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
   },
 
   title: {
@@ -295,21 +489,6 @@ const S = StyleSheet.create({
     marginTop: 3,
     fontWeight: "500",
   },
-
-  smallGhostBtn: {
-    marginTop: 10,
-    alignSelf: "flex-start",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: UI.radius.pill,
-    backgroundColor: UI.colors.overlay08,
-    borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  smallGhostText: { color: UI.colors.text, fontSize: 13, fontWeight: "600" },
 
   hintRow: {
     marginTop: 12,
@@ -416,7 +595,6 @@ const S = StyleSheet.create({
     textDecorationLine: "underline",
   },
 
-  /* ✅ coluna de texto um pouco mais “presente” */
   heroTextCol: {
     flex: 1,
     paddingVertical: 4,

@@ -1,8 +1,6 @@
 // src/lib/auth.ts
-import { PrismaClient, Role } from "@prisma/client";
+import type { PrismaClient, Role } from "@prisma/client";
 import bcrypt from "bcryptjs";
-
-const prisma = new PrismaClient();
 
 export type AuthenticatedUser = {
   id: string;
@@ -25,10 +23,11 @@ export class AuthError extends Error {
 }
 
 /**
- * Só valida e-mail/senha e retorna o usuário.
- * A permissão de acessar o painel fica no loginPainel.
+ * Implementação injetável (CORE-FRIENDLY):
+ * Você passa um prisma client (ideal pra reuso em services/route-handlers/actions)
  */
-export async function loginWithCredentials(
+export async function loginWithCredentialsWithPrisma(
+  prisma: PrismaClient,
   email: string,
   password: string,
 ): Promise<AuthenticatedUser> {
@@ -68,10 +67,22 @@ export async function loginWithCredentials(
     email: user.email,
     role: user.role,
 
-    // se o seu AuthenticatedUser tiver isso:
     isOwner: user.isOwner,
-
-    // multi-unidade vindo do AdminAccess
     unitId: user.adminAccess?.unitId ?? null,
   };
+}
+
+/**
+ * Wrapper compatível (não quebra o projeto agora):
+ * mantém a assinatura original e usa o prisma "padrão" do app.
+ *
+ * No próximo passo, vamos substituir o prisma daqui por "@/lib/prisma"
+ * (singleton), pra não abrir conexão demais.
+ */
+export async function loginWithCredentials(
+  email: string,
+  password: string,
+): Promise<AuthenticatedUser> {
+  const { prisma } = await import("@/lib/prisma");
+  return loginWithCredentialsWithPrisma(prisma as any, email, password);
 }

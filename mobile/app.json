@@ -14,19 +14,31 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Precisamos acessar sua galeria para você escolher uma foto de perfil."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#ffffff",
+        "softwareKeyboardLayoutMode": "resize"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.brunoleal2005.mobile"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-router", "expo-secure-store", "expo-web-browser"]
+    "plugins": ["expo-router", "expo-secure-store", "expo-web-browser"],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "9d60da16-de0d-4046-b8d4-734a8c2d40f8"
+      }
+    },
+    "owner": "brunoleal2005"
   }
 }

@@ -17,6 +17,8 @@ import { FontAwesome5, AntDesign, FontAwesome } from "@expo/vector-icons";
 import { UI, styles } from "../../src/theme/client-theme";
 import { useAuth } from "../../src/auth/auth-context";
 
+import { apiFetch } from "../../src/lib/api";
+
 WebBrowser.maybeCompleteAuthSession();
 
 const API_BASE_URL = "https://vagarious-gravely-filiberto.ngrok-free.dev";

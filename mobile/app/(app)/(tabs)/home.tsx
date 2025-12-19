@@ -12,6 +12,7 @@ import { FontAwesome } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { UI } from "../../../src/theme/client-theme";
+import { useAuth } from "../../../src/auth/auth-context";
 
 const STICKY_ROW_H = 74;
 
@@ -81,13 +82,16 @@ const HistoryRow = memo(function HistoryRow({
 
 export default function Home() {
   const insets = useSafeAreaInsets();
+  const { user, meLoading } = useAuth();
 
-  const me = useMemo(
-    () => ({
-      name: "Bruno Leal",
-      avatar: "https://i.pravatar.cc/200?img=12",
-    }),
-    [],
+  const displayName = useMemo(
+    () => user?.name || user?.email || "Cliente",
+    [user?.name, user?.email],
+  );
+
+  const avatarUrl = useMemo(
+    () => user?.image || "https://i.pravatar.cc/200?img=12",
+    [user?.image],
   );
 
   const next = useMemo(
@@ -308,10 +312,13 @@ export default function Home() {
 
         <View style={S.stickyRow}>
           <View style={S.profileRow}>
-            <Image source={{ uri: me.avatar }} style={S.avatar} />
+            <Image source={{ uri: avatarUrl }} style={S.avatar} />
             <View>
               <Text style={S.hello}>Olá,</Text>
-              <Text style={S.name}>{me.name}</Text>
+              <Text style={S.name} numberOfLines={1}>
+                {displayName}
+                {meLoading ? "…" : ""}
+              </Text>
             </View>
           </View>
 

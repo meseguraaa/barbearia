@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 
 import { UI, styles } from "../../../../src/theme/client-theme";
+import { useAuth } from "../../../../src/auth/auth-context";
 
 const STICKY_ROW_H = 74;
 
@@ -197,13 +198,16 @@ const ProductsFooter = memo(function ProductsFooter() {
 export default function Products() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user, meLoading } = useAuth();
 
-  const me = useMemo(
-    () => ({
-      name: "Bruno Leal",
-      avatar: "https://i.pravatar.cc/200?img=12",
-    }),
-    [],
+  const displayName = useMemo(
+    () => user?.name || user?.email || "Cliente",
+    [user?.name, user?.email],
+  );
+
+  const avatarUrl = useMemo(
+    () => user?.image || "https://i.pravatar.cc/200?img=12",
+    [user?.image],
   );
 
   const categories = useMemo<Category[]>(
@@ -313,10 +317,13 @@ export default function Products() {
 
         <View style={[styles.stickyRowBase, { height: STICKY_ROW_H }]}>
           <View style={S.profileRow}>
-            <Image source={{ uri: me.avatar }} style={styles.avatar42} />
+            <Image source={{ uri: avatarUrl }} style={styles.avatar42} />
             <View>
               <Text style={S.hello}>Olá</Text>
-              <Text style={S.name}>Bruno Leal</Text>
+              <Text style={S.name} numberOfLines={1}>
+                {displayName}
+                {meLoading ? "…" : ""}
+              </Text>
             </View>
           </View>
 

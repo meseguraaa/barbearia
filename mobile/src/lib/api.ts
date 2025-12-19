@@ -2,19 +2,38 @@
 import * as SecureStore from "expo-secure-store";
 
 const API_BASE_URL = "https://vagarious-gravely-filiberto.ngrok-free.dev";
-const AUTH_STORAGE_KEY = "auth_token";
+const AUTH_STORAGE_KEY = "auth_session";
+
+type StoredSession = {
+  appToken: string;
+  user?: any;
+};
 
 export async function apiFetch<T = any>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = await SecureStore.getItemAsync(AUTH_STORAGE_KEY);
+  const sessionJson = await SecureStore.getItemAsync(AUTH_STORAGE_KEY);
+
+  let appToken: string | null = null;
+
+  if (sessionJson) {
+    try {
+      const parsed = JSON.parse(sessionJson) as StoredSession;
+      if (parsed && typeof parsed.appToken === "string") {
+        appToken = parsed.appToken;
+      }
+    } catch {
+      // se o storage estiver corrompido, só ignora e segue sem auth
+      appToken = null;
+    }
+  }
 
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(appToken ? { Authorization: `Bearer ${appToken}` } : {}),
       ...(options.headers || {}),
     },
   });
@@ -38,3 +57,5 @@ function safeJson(text: string) {
     return text;
   }
 }
+
+export * from "./api";
