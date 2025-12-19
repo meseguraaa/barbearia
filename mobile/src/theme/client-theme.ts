@@ -1,3 +1,5 @@
+import { StyleSheet } from "react-native";
+
 export const UI = {
   brand: {
     name: "BarberShop",
@@ -6,19 +8,32 @@ export const UI = {
   },
   colors: {
     bg: "#05070C",
-    card: "#0B0F17",
+    card: "#4c4c4c",
     cardBorder: "rgba(255,255,255,0.08)",
     text: "#F8FAFC",
     textMuted: "#9CA3AF",
     textDim: "rgba(255,255,255,0.65)",
     danger: "#F97373",
-    success: "#86EFAC",
+    success: "#00ff3c",
     divider: "rgba(255,255,255,0.12)",
     white: "#FFFFFF",
+    black: "#0B0B10",
+
+    // ✅ overlays/utilidades (pra reduzir hardcode espalhado)
+    overlay08: "rgba(255,255,255,0.08)",
+    overlay10: "rgba(255,255,255,0.10)",
+    overlay12: "rgba(255,255,255,0.12)",
+    overlay18: "rgba(255,255,255,0.18)",
+    black28: "rgba(0,0,0,0.28)",
+    black05: "rgba(0,0,0,0.05)",
+    black08: "rgba(0,0,0,0.08)",
+    black10: "rgba(0,0,0,0.10)",
+    black45: "rgba(0,0,0,0.45)",
   },
   radius: {
     card: 18,
     input: 12,
+    pill: 999,
   },
   spacing: {
     screenX: 22,
@@ -36,7 +51,7 @@ export const UI = {
   },
 } as const;
 
-export const styles = {
+export const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: UI.colors.bg },
 
   header: {
@@ -66,7 +81,7 @@ export const styles = {
   },
 
   card: {
-    backgroundColor: `${UI.colors.card}B3`, // 70% de transparência
+    backgroundColor: `${UI.colors.card}B3`, // 70% transparência
     borderWidth: 1.5,
     borderColor: UI.brand.primary,
     borderRadius: UI.radius.card,
@@ -134,6 +149,7 @@ export const styles = {
     borderColor: "rgba(255,255,255,0.18)",
     position: "relative",
   },
+
   avatarHeader: {
     width: 34,
     height: 34,
@@ -142,4 +158,83 @@ export const styles = {
     borderColor: "rgba(255,255,255,0.70)",
     backgroundColor: UI.colors.card,
   },
-} as const;
+
+  /* ------------------------------------------------------------------
+   * ✅ Novos globais (reutilizados em Home/Products)
+   * ------------------------------------------------------------------ */
+
+  // base do header escuro (sem altura fixa)
+  stickyRowBase: {
+    backgroundColor: UI.colors.bg,
+    paddingHorizontal: UI.spacing.screenX,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  avatar42: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    borderWidth: 2,
+    borderColor: UI.brand.primary,
+  },
+
+  iconBtn42: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: UI.colors.overlay08,
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+    borderWidth: 1,
+    borderColor: UI.colors.cardBorder,
+  },
+
+  iconDot: {
+    position: "absolute",
+    top: 10,
+    right: 11,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: UI.brand.primary,
+  },
+
+  glassCard: {
+    backgroundColor: UI.colors.overlay08,
+    borderRadius: UI.radius.card,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: UI.colors.cardBorder,
+  },
+
+  pillPrimary: {
+    backgroundColor: UI.brand.primary,
+    borderRadius: UI.radius.pill,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  pillPrimaryText: {
+    color: UI.colors.white,
+    fontWeight: "800",
+  },
+
+  pillOutline: {
+    borderRadius: UI.radius.pill,
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: UI.colors.white,
+  },
+
+  pillOutlineText: {
+    color: UI.brand.primaryText,
+    fontWeight: "700",
+  },
+} as const);

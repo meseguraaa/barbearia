@@ -4,9 +4,6 @@ import { FontAwesome } from "@expo/vector-icons";
 
 import { UI } from "../../../src/theme/client-theme";
 
-/* ---------------------------------------------------------
- * Ícone flutuante roxo (charme do app 😎)
- * ---------------------------------------------------------*/
 function FloatingIcon({ name }: { name: any }) {
   return (
     <View
@@ -17,7 +14,7 @@ function FloatingIcon({ name }: { name: any }) {
         backgroundColor: UI.brand.primary,
         alignItems: "center",
         justifyContent: "center",
-        marginBottom: 40, // sobe o botão
+        marginBottom: 40,
         shadowOffset: { width: 0, height: 6 },
         elevation: 10,
       }}
@@ -36,7 +33,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: UI.brand.primary,
         tabBarInactiveTintColor: "#fff",
         tabBarStyle: {
-          backgroundColor: "#141414",
+          backgroundColor: UI.colors.bg,
           borderTopWidth: 0,
           height: 64,
         },
@@ -47,7 +44,6 @@ export default function TabsLayout() {
         },
       }}
     >
-      {/* HOME */}
       <Tabs.Screen
         name="home"
         options={{
@@ -61,7 +57,27 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* PERFIL */}
+      <Tabs.Screen
+        name="products"
+        options={{
+          title: "Produtos",
+          tabBarIcon: ({ focused }) =>
+            focused ? (
+              <FloatingIcon name="shopping-bag" />
+            ) : (
+              <FontAwesome name="shopping-bag" size={20} color="#fff" />
+            ),
+        }}
+      />
+
+      {/* ✅ detalhe escondido (não vira aba) */}
+      <Tabs.Screen
+        name="products/[id]"
+        options={{
+          href: null,
+        }}
+      />
+
       <Tabs.Screen
         name="profile"
         options={{

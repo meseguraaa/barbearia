@@ -1,11 +1,12 @@
-import { useMemo } from "react";
+import React, { memo, useCallback, useMemo } from "react";
 import {
   View,
   Text,
-  ScrollView,
   Pressable,
   Image,
   StyleSheet,
+  FlatList,
+  ListRenderItemInfo,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -13,6 +14,70 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UI } from "../../../src/theme/client-theme";
 
 const STICKY_ROW_H = 74;
+
+type Product = {
+  id: string;
+  name: string;
+  price: string;
+  oldPrice: string;
+  image: string;
+};
+
+type HistoryItem = {
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+  icon: string;
+};
+
+const ProductCard = memo(function ProductCard({
+  item,
+  showDivider,
+}: {
+  item: Product;
+  showDivider: boolean;
+}) {
+  return (
+    <View style={S.productCard}>
+      <Image source={{ uri: item.image }} style={S.productImage} />
+      <Text style={S.productName}>{item.name}</Text>
+      <Text style={S.productOldPrice}>{item.oldPrice}</Text>
+      <Text style={S.productPrice}>{item.price}</Text>
+
+      {showDivider ? <View style={S.productDivider} /> : null}
+    </View>
+  );
+});
+
+const HistoryRow = memo(function HistoryRow({
+  item,
+  showDivider,
+}: {
+  item: HistoryItem;
+  showDivider: boolean;
+}) {
+  return (
+    <View style={S.historyItem}>
+      <View style={S.historyLeft}>
+        <View style={S.historyIcon}>
+          <FontAwesome
+            name={item.icon as any}
+            size={18}
+            color={UI.brand.primaryText}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={S.historyTitle}>{item.title}</Text>
+          <Text style={S.historyDesc}>{item.description}</Text>
+          <Text style={S.historyDate}>{item.date}</Text>
+        </View>
+      </View>
+
+      {showDivider ? <View style={S.historyDivider} /> : null}
+    </View>
+  );
+});
 
 export default function Home() {
   const insets = useSafeAreaInsets();
@@ -36,7 +101,7 @@ export default function Home() {
     [],
   );
 
-  const products = useMemo(
+  const products = useMemo<Product[]>(
     () => [
       {
         id: "1",
@@ -70,7 +135,7 @@ export default function Home() {
     [],
   );
 
-  const history = useMemo(
+  const history = useMemo<HistoryItem[]>(
     () => [
       {
         id: "1",
@@ -113,55 +178,52 @@ export default function Home() {
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
 
-  return (
-    <View style={S.page}>
-      {/* ✅ TOPO FIXO */}
-      <View style={S.fixedTop}>
-        {/* ✅ SAFE AREA ROXA */}
-        <View
-          style={{ height: insets.top, backgroundColor: UI.brand.primary }}
-        />
+  const safeTopStyle = useMemo(
+    () => ({ height: insets.top, backgroundColor: UI.brand.primary }),
+    [insets.top],
+  );
 
-        {/* ✅ LINHA FIXA */}
-        <View style={S.stickyRow}>
-          <View style={S.profileRow}>
-            <Image source={{ uri: me.avatar }} style={S.avatar} />
-            <View>
-              <Text style={S.hello}>Olá,</Text>
-              <Text style={S.name}>{me.name}</Text>
-            </View>
-          </View>
+  const headerSpacerStyle = useMemo(
+    () => ({ height: TOP_OFFSET, backgroundColor: UI.colors.bg }),
+    [TOP_OFFSET],
+  );
 
-          <Pressable style={S.iconBtn}>
-            <FontAwesome name="bell-o" size={20} color="#fff" />
-            <View style={S.dot} />
-          </Pressable>
-        </View>
-      </View>
+  // pintor do bounce superior (bem grande pra nunca "vazar branco" ao puxar pra baixo)
+  const topBounceHeight = useMemo(() => TOP_OFFSET + 1400, [TOP_OFFSET]);
 
-      {/* ✅ SCROLL:
-          - puxar pra BAIXO: aparece #141414 (top bounce dark)
-          - puxar pra CIMA no final: aparece branco (background do ScrollView) */}
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        style={S.scroll} // ✅ branco (bottom bounce branco)
-        contentContainerStyle={{ paddingBottom: 24 }}
-      >
-        {/* ✅ “pintura” do bounce de CIMA (iOS): um bloco gigante escuro atrás do topo */}
+  const keyProduct = useCallback((item: Product) => item.id, []);
+  const renderProduct = useCallback(
+    ({ item, index }: ListRenderItemInfo<Product>) => (
+      <ProductCard item={item} showDivider={index < products.length - 1} />
+    ),
+    [products.length],
+  );
+
+  const keyHistory = useCallback((item: HistoryItem) => item.id, []);
+  const renderHistory = useCallback(
+    ({ item, index }: ListRenderItemInfo<HistoryItem>) => (
+      <HistoryRow item={item} showDivider={index < history.length - 1} />
+    ),
+    [history.length],
+  );
+
+  const Header = useMemo(() => {
+    return (
+      <View>
+        {/* ✅ garante topo escuro no overscroll */}
         <View
           pointerEvents="none"
-          style={[S.topBounceDark, { height: TOP_OFFSET + 1200 }]}
+          style={[S.topBounceDark, { height: topBounceHeight }]}
         />
 
-        {/* spacer pra compensar o topo fixo */}
-        <View style={{ height: TOP_OFFSET, backgroundColor: "#141414" }} />
+        {/* spacer do topo fixo */}
+        <View style={headerSpacerStyle} />
 
-        {/* ✅ BLOCO ESCURO (com borda arredondada embaixo, por cima do branco) */}
+        {/* bloco escuro */}
         <View style={S.darkShell}>
           <View style={S.darkInner}>
             <View style={S.heroCard}>
               <Text style={S.heroTitle}>Seu agendamento</Text>
-
               <Text style={S.apptService}>{next.serviceName}</Text>
 
               <View style={S.metaRow}>
@@ -176,7 +238,7 @@ export default function Home() {
                   <FontAwesome
                     name="check"
                     size={12}
-                    color="#fff"
+                    color={UI.colors.black}
                     style={{ marginRight: 6 }}
                   />
                   <Text style={S.statusText}>{next.statusLabel}</Text>
@@ -195,25 +257,22 @@ export default function Home() {
           </View>
         </View>
 
-        {/* ✅ CONTEÚDO BRANCO (ocupa o resto da tela) */}
+        {/* início do branco */}
         <View style={S.whiteArea}>
           <View style={S.whiteContent}>
             <Text style={S.sectionTitle}>Produtos</Text>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {products.map((p, idx) => (
-                <View key={p.id} style={S.productCard}>
-                  <Image source={{ uri: p.image }} style={S.productImage} />
-                  <Text style={S.productName}>{p.name}</Text>
-                  <Text style={S.productOldPrice}>{p.oldPrice}</Text>
-                  <Text style={S.productPrice}>{p.price}</Text>
-
-                  {idx < products.length - 1 && (
-                    <View style={S.productDivider} />
-                  )}
-                </View>
-              ))}
-            </ScrollView>
+            <FlatList
+              data={products}
+              keyExtractor={keyProduct}
+              renderItem={renderProduct}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              removeClippedSubviews
+              initialNumToRender={3}
+              maxToRenderPerBatch={4}
+              windowSize={5}
+            />
 
             <Pressable style={S.moreBtn}>
               <Text style={S.moreBtnText}>
@@ -221,41 +280,72 @@ export default function Home() {
               </Text>
             </Pressable>
 
-            <Text style={[S.sectionTitle, { marginTop: 28 }]}>Histórico</Text>
-
-            {history.map((item, idx) => (
-              <View key={item.id} style={S.historyItem}>
-                <View style={S.historyLeft}>
-                  <View style={S.historyIcon}>
-                    <FontAwesome
-                      name={item.icon as any}
-                      size={18}
-                      color="#0B0B10"
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={S.historyTitle}>{item.title}</Text>
-                    <Text style={S.historyDesc}>{item.description}</Text>
-                    <Text style={S.historyDate}>{item.date}</Text>
-                  </View>
-                </View>
-
-                {idx < history.length - 1 && <View style={S.historyDivider} />}
-              </View>
-            ))}
-
-            <Pressable style={S.historyMoreBtn}>
-              <Text style={S.historyMoreText}>Ver tudo</Text>
-            </Pressable>
+            <Text style={[S.sectionTitle, S.sectionTitleSpacing]}>
+              Histórico
+            </Text>
           </View>
         </View>
-      </ScrollView>
+      </View>
+    );
+  }, [
+    headerSpacerStyle,
+    keyProduct,
+    next.barberName,
+    next.serviceName,
+    next.startsAtLabel,
+    next.statusLabel,
+    next.unitName,
+    products.length,
+    renderProduct,
+    topBounceHeight,
+  ]);
+
+  return (
+    <View style={S.page}>
+      {/* TOPO FIXO */}
+      <View style={S.fixedTop}>
+        <View style={safeTopStyle} />
+
+        <View style={S.stickyRow}>
+          <View style={S.profileRow}>
+            <Image source={{ uri: me.avatar }} style={S.avatar} />
+            <View>
+              <Text style={S.hello}>Olá,</Text>
+              <Text style={S.name}>{me.name}</Text>
+            </View>
+          </View>
+
+          <Pressable style={S.iconBtn}>
+            <FontAwesome name="bell-o" size={20} color={UI.colors.white} />
+            <View style={S.dot} />
+          </Pressable>
+        </View>
+      </View>
+
+      {/* ✅ LISTA:
+          - background branco aqui garante bottom overscroll branco
+          - topo escuro é garantido pelo topBounceDark */}
+      <FlatList
+        data={history}
+        keyExtractor={keyHistory}
+        renderItem={renderHistory}
+        showsVerticalScrollIndicator={false}
+        style={S.list}
+        contentContainerStyle={S.listContent}
+        ListHeaderComponent={Header}
+        removeClippedSubviews
+        initialNumToRender={6}
+        maxToRenderPerBatch={8}
+        windowSize={7}
+        updateCellsBatchingPeriod={50}
+      />
     </View>
   );
 }
 
 const S = StyleSheet.create({
-  page: { flex: 1, backgroundColor: "#FFFFFF" },
+  // mundo por trás é escuro
+  page: { flex: 1, backgroundColor: UI.colors.bg },
 
   fixedTop: {
     position: "absolute",
@@ -267,7 +357,7 @@ const S = StyleSheet.create({
 
   stickyRow: {
     height: STICKY_ROW_H,
-    backgroundColor: "#141414",
+    backgroundColor: UI.colors.bg,
     paddingHorizontal: UI.spacing.screenX,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -282,8 +372,8 @@ const S = StyleSheet.create({
     borderWidth: 2,
     borderColor: UI.brand.primary,
   },
-  hello: { color: "#9CA3AF", fontSize: 12 },
-  name: { color: "#fff", fontSize: 16, fontWeight: "800" },
+  hello: { color: UI.colors.textMuted, fontSize: 12 },
+  name: { color: UI.colors.text, fontSize: 16, fontWeight: "700" },
 
   iconBtn: {
     width: 42,
@@ -292,6 +382,8 @@ const S = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.08)",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: UI.colors.cardBorder,
   },
   dot: {
     position: "absolute",
@@ -303,22 +395,21 @@ const S = StyleSheet.create({
     backgroundColor: UI.brand.primary,
   },
 
-  scroll: {
-    flex: 1,
-    backgroundColor: "#FFFFFF", // ✅ bottom bounce branco
-  },
+  // ✅ fundo branco garante o rodapé branco ao puxar pra cima
+  list: { flex: 1, backgroundColor: UI.colors.white },
+  listContent: { paddingBottom: 24 },
 
-  // ✅ isso “pinta” o bounce de cima de escuro
+  // ✅ garante topo escuro ao puxar pra baixo
   topBounceDark: {
     position: "absolute",
     left: 0,
     right: 0,
-    top: -1200,
-    backgroundColor: "#141414",
+    top: -1400,
+    backgroundColor: UI.colors.bg,
   },
 
   darkShell: {
-    backgroundColor: "#141414",
+    backgroundColor: UI.colors.bg,
     borderBottomLeftRadius: 28,
     borderBottomRightRadius: 28,
     overflow: "hidden",
@@ -329,46 +420,53 @@ const S = StyleSheet.create({
   },
 
   heroCard: {
-    backgroundColor: "#4c4c4c",
-    borderRadius: 18,
-    padding: 24,
+    marginTop: 14,
+    backgroundColor: "rgba(124,108,255,0.22)",
+    borderRadius: UI.radius.card,
+    padding: UI.spacing.cardPad,
+    borderWidth: 1,
+    borderColor: "rgba(124,108,255,0.35)",
   },
-  heroTitle: { color: "#fff", fontSize: 22, fontWeight: "700" },
-  apptService: { color: "#fff", fontSize: 18, fontWeight: "800", marginTop: 6 },
-  apptMeta: { color: "#fff", fontSize: 13, opacity: 0.85 },
+  heroTitle: { color: UI.colors.text, fontSize: 18, fontWeight: "600" },
+  apptService: {
+    color: UI.colors.text,
+    fontSize: 16,
+    fontWeight: "700",
+    marginTop: 6,
+  },
+  apptMeta: { color: UI.colors.textDim, fontSize: 13, marginTop: 2 },
 
   metaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 6,
+    marginTop: 10,
     alignItems: "center",
+    gap: 12,
   },
 
   statusPill: {
     flexDirection: "row",
-    backgroundColor: "rgb(34,197,94)",
+    backgroundColor: UI.colors.success,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
     alignItems: "center",
   },
-  statusText: { color: "#fff", fontSize: 12, fontWeight: "700" },
+  statusText: { color: UI.colors.black, fontSize: 12, fontWeight: "700" },
 
   actionsRow: { flexDirection: "row", gap: 10, marginTop: 14 },
   actionBtn: {
     flex: 1,
-    backgroundColor: "#141414",
+    backgroundColor: UI.brand.primary,
     borderRadius: 999,
     paddingVertical: 12,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: UI.colors.cardBorder,
   },
-  actionText: { color: "#fff", fontWeight: "800" },
+  actionText: { color: UI.colors.text, fontWeight: "700" },
 
-  whiteArea: {
-    backgroundColor: "#FFFFFF", // ✅ garante branco ocupando tudo abaixo
-    paddingBottom: 24,
-  },
-
+  whiteArea: { backgroundColor: UI.colors.white },
   whiteContent: {
     paddingHorizontal: UI.spacing.screenX,
     paddingTop: 18,
@@ -376,10 +474,11 @@ const S = StyleSheet.create({
 
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "500",
+    fontWeight: "600",
     marginBottom: 12,
-    color: "#0B0B10",
+    color: UI.brand.primaryText,
   },
+  sectionTitleSpacing: { marginTop: 28 },
 
   productCard: {
     width: 220,
@@ -389,20 +488,24 @@ const S = StyleSheet.create({
   },
   productImage: {
     height: 140,
-    borderRadius: 12,
+    borderRadius: UI.radius.input,
     marginBottom: 12,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "rgba(0,0,0,0.05)",
   },
-  productName: { fontSize: 16, fontWeight: "700", color: "#0B0B10" },
+  productName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: UI.brand.primaryText,
+  },
   productOldPrice: {
     textDecorationLine: "line-through",
-    color: "rgba(0,0,0,0.4)",
+    color: "rgba(0,0,0,0.45)",
     marginTop: 6,
   },
   productPrice: {
     fontSize: 20,
-    fontWeight: "500",
-    color: "#0B0B10",
+    fontWeight: "700",
+    color: UI.brand.primaryText,
     marginTop: 6,
   },
   productDivider: {
@@ -411,54 +514,48 @@ const S = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 1,
-    backgroundColor: "rgba(0,0,0,0.1)",
+    backgroundColor: "rgba(0,0,0,0.10)",
   },
 
+  // ✅ AGORA ROXO IGUAL "Alterar" e "Cancelar"
   moreBtn: {
     marginTop: 18,
     height: 56,
-    backgroundColor: "#141414",
+    backgroundColor: UI.brand.primary,
     borderRadius: 999,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: UI.colors.cardBorder,
   },
-  moreBtnText: { color: "#fff", fontSize: 16 },
+  moreBtnText: { color: UI.colors.text, fontSize: 15, fontWeight: "700" },
 
   historyItem: {
     paddingVertical: 16,
+    paddingHorizontal: UI.spacing.screenX,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    backgroundColor: UI.colors.white,
   },
   historyLeft: { flexDirection: "row", gap: 14, flex: 1, alignItems: "center" },
   historyIcon: {
     width: 36,
     height: 36,
-    backgroundColor: "#F3F4F6",
+    backgroundColor: "rgba(0,0,0,0.05)",
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
   },
-  historyTitle: { fontWeight: "700", color: "#0B0B10" },
-  historyDesc: { fontSize: 13, color: "#374151", marginTop: 2 },
-  historyDate: { fontSize: 12, color: "#9CA3AF", marginTop: 2 },
+  historyTitle: { fontWeight: "700", color: UI.brand.primaryText },
+  historyDesc: { fontSize: 13, color: "rgba(0,0,0,0.65)", marginTop: 2 },
+  historyDate: { fontSize: 12, color: "rgba(0,0,0,0.40)", marginTop: 2 },
   historyDivider: {
     position: "absolute",
-    left: 0,
-    right: 0,
+    left: UI.spacing.screenX,
+    right: UI.spacing.screenX,
     bottom: 0,
     height: 1,
     backgroundColor: "rgba(0,0,0,0.08)",
   },
-
-  historyMoreBtn: {
-    marginTop: 12,
-    height: 48,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.15)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  historyMoreText: { fontWeight: "600", color: "#0B0B10" },
 });
