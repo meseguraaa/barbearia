@@ -4,7 +4,7 @@ import { useAuth } from "../src/auth/auth-context";
 import { UI } from "../src/theme/client-theme";
 
 export default function Index() {
-  const { token, isBooting } = useAuth();
+  const { isBooting } = useAuth();
 
   // Loader enquanto o AuthProvider faz o boot
   if (isBooting) {
@@ -22,10 +22,6 @@ export default function Index() {
     );
   }
 
-  // Token decide tudo
-  if (token) {
-    return <Redirect href="/(app)/(tabs)/home" />;
-  }
-
+  // Sem token no contexto → fluxo padrão para login
   return <Redirect href="/(auth)/login" />;
 }
