@@ -319,7 +319,7 @@ export default function Products() {
           <View style={S.profileRow}>
             <Image source={{ uri: avatarUrl }} style={styles.avatar42} />
             <View>
-              <Text style={S.hello}>Olá</Text>
+              <Text style={S.hello}>Olá,</Text>
               <Text style={S.name} numberOfLines={1}>
                 {displayName}
                 {meLoading ? "…" : ""}
@@ -377,7 +377,7 @@ const S = StyleSheet.create({
   },
 
   profileRow: { flexDirection: "row", gap: 12, alignItems: "center" },
-  hello: { color: UI.colors.textMuted, fontSize: 12, fontWeight: "500" },
+  hello: { color: UI.colors.textMuted, fontSize: 12, fontWeight: "700" },
   name: { color: UI.colors.text, fontSize: 16, fontWeight: "700" },
 
   topRightRow: { flexDirection: "row", gap: 10, alignItems: "center" },

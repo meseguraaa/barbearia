@@ -9,7 +9,8 @@ import React, {
 import * as SecureStore from "expo-secure-store";
 import { router, useSegments } from "expo-router";
 
-import { apiFetch } from "../lib/api"; // ✅ ajusta se teu path for diferente
+import { api } from "../services/api"; // ✅ usa o MESMO client do app
+import { AUTH_TOKEN_KEY } from "../services/api"; // ✅ chave única do token
 
 const AUTH_STORAGE_KEY = "auth_session";
 
@@ -32,24 +33,15 @@ type StoredSession = {
 };
 
 type AuthContextValue = {
-  /** Bearer token do app (use em Authorization: Bearer ...) */
   appToken: string | null;
-
-  /** Usuário logado (vindo do backend) */
   user: AuthUser | null;
-
-  /** Sessão inteira em JSON (se você quiser debugar/logar) */
   sessionJson: string | null;
 
   isBooting: boolean;
-
-  /** Loading do /api/mobile/me (pra UI colocar "…" se quiser) */
   meLoading: boolean;
 
-  /** Força revalidar usuário (re-fetch do /me) */
   refreshMe: () => Promise<void>;
 
-  /** Recebe JSON string (compatível com teu Login.tsx atual) */
   signIn: (sessionJson: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -64,7 +56,6 @@ function parseSession(sessionJson: string): StoredSession | null {
   try {
     const parsed = JSON.parse(sessionJson);
 
-    // Aceita o formato novo: { appToken, user }
     if (
       parsed &&
       typeof parsed === "object" &&
@@ -89,12 +80,16 @@ function parseSession(sessionJson: string): StoredSession | null {
 
 function isAuthInvalidError(e: any) {
   const msg = String(e?.message || "");
+  const status = Number(e?.status || e?.response?.status || 0);
+
   return (
+    status === 401 ||
     msg.includes("missing_token") ||
     msg.includes("invalid_token") ||
     msg.includes("user_not_found") ||
     msg.includes("HTTP 401") ||
-    msg.includes("401")
+    msg.includes("401") ||
+    msg.toLowerCase().includes("não autorizado")
   );
 }
 
@@ -105,18 +100,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [sessionJson, setSessionJson] = useState<string | null>(null);
   const [isBooting, setIsBooting] = useState(true);
-
   const [meLoading, setMeLoading] = useState(false);
 
-  // Evita re-fetch repetido do /me quando já buscamos pra esse token
   const fetchedMeForTokenRef = useRef<string | null>(null);
 
   const signOut = async () => {
     await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+    await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY); // ✅ apaga token “real” também
+
     setAppToken(null);
     setUser(null);
     setSessionJson(null);
     fetchedMeForTokenRef.current = null;
+
     devLog("signOut OK");
   };
 
@@ -126,12 +122,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setMeLoading(true);
 
-      const res = await apiFetch<{ user: any }>("/api/mobile/me");
-      const u = res?.user;
+      // ✅ usa o MESMO client que injeta Bearer
+      const res = await api.get<{ user: any }>("/api/mobile/me");
+      const u = (res as any)?.user;
 
       setUser((prev) => {
         if (!prev) return prev;
-
         return {
           ...prev,
           name: (u?.name ?? prev.name) as any,
@@ -179,11 +175,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!s) {
           devLog("boot: invalid session shape -> clearing");
           await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+          await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
           setAppToken(null);
           setUser(null);
           setSessionJson(null);
           return;
         }
+
+        // ✅ garante que a api.ts sempre vai achar o token certo
+        await SecureStore.setItemAsync(AUTH_TOKEN_KEY, s.appToken);
 
         setAppToken(s.appToken);
         setUser(s.user);
@@ -199,7 +199,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  // 2) Guard de rotas (redirect automático)
+  // 2) Guard de rotas
   useEffect(() => {
     if (isBooting) return;
 
@@ -220,7 +220,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [appToken, isBooting, segments]);
 
-  // 3) Centraliza o "/me": quando tiver token, carrega dados do usuário uma vez
+  // 3) Boot-refresh do /me quando token mudar
   useEffect(() => {
     if (isBooting) return;
     if (!appToken) return;
@@ -234,10 +234,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         setMeLoading(true);
 
-        const res = await apiFetch<{ user: any }>("/api/mobile/me");
+        const res = await api.get<{ user: any }>("/api/mobile/me");
         if (!alive) return;
 
-        const u = res?.user;
+        const u = (res as any)?.user;
 
         setUser((prev) => {
           if (!prev) return prev;
@@ -289,6 +289,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!s) {
           devLog("signIn: invalid session payload");
           await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+          await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
           setAppToken(null);
           setUser(null);
           setSessionJson(null);
@@ -298,11 +299,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         await SecureStore.setItemAsync(AUTH_STORAGE_KEY, newSessionJson);
 
+        // ✅ aqui está o pulo do gato: salva o token “solto”
+        await SecureStore.setItemAsync(AUTH_TOKEN_KEY, s.appToken);
+
         setAppToken(s.appToken);
         setUser(s.user);
         setSessionJson(newSessionJson);
 
-        // libera novo fetch do /me pro token novo
         fetchedMeForTokenRef.current = null;
 
         devLog("signIn OK");

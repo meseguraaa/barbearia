@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo } from "react";
+import React, { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -7,12 +7,16 @@ import {
   StyleSheet,
   FlatList,
   ListRenderItemInfo,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useFocusEffect, useRouter } from "expo-router";
 
 import { UI } from "../../../src/theme/client-theme";
 import { useAuth } from "../../../src/auth/auth-context";
+import { api } from "../../../src/services/api";
 
 const STICKY_ROW_H = 74;
 
@@ -30,6 +34,28 @@ type HistoryItem = {
   description: string;
   date: string;
   icon: string;
+};
+
+type NextAppt = {
+  id: string;
+  serviceName: string;
+  unitName: string;
+  barberName: string;
+  startsAtLabel: string; // ex: "20/12/2025 • 14:30"
+  statusLabel: string;
+
+  // ✅ opcional (se backend mandar, usamos)
+  status?: string | null;
+
+  unitId?: string | null;
+  serviceId?: string | null;
+  barberId?: string | null;
+
+  // ✅ políticas (quando backend passar a mandar)
+  canReschedule?: boolean;
+  canCancel?: boolean;
+  cancellationFeeEligible?: boolean;
+  cancellationFeeNotice?: string | null;
 };
 
 const ProductCard = memo(function ProductCard({
@@ -81,6 +107,7 @@ const HistoryRow = memo(function HistoryRow({
 });
 
 export default function Home() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, meLoading } = useAuth();
 
@@ -94,15 +121,68 @@ export default function Home() {
     [user?.image],
   );
 
-  const next = useMemo(
-    () => ({
-      serviceName: "Corte + Barba",
-      unitName: "Unidade Centro",
-      barberName: "Rafael",
-      startsAtLabel: "Hoje • 15:30",
-      statusLabel: "CONFIRMADO",
-    }),
-    [],
+  const [next, setNext] = useState<NextAppt | null>(null);
+  const [nextLoading, setNextLoading] = useState(true);
+
+  // ✅ Histórico preview (até 5)
+  const [historyPreview, setHistoryPreview] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  // ✅ trava real (não depende do state)
+  const fetchingRef = useRef(false);
+  const fetchingHistoryRef = useRef(false);
+
+  const fetchNext = useCallback(async () => {
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+
+    try {
+      setNextLoading(true);
+
+      const res = await api.get<{ ok: boolean; next: NextAppt | null }>(
+        "/api/mobile/me/appointments/next",
+      );
+
+      setNext(res?.next ?? null);
+    } catch (err: any) {
+      console.log("[home] next error:", err?.data ?? err?.message ?? err);
+      setNext(null);
+    } finally {
+      setNextLoading(false);
+      fetchingRef.current = false;
+    }
+  }, []);
+
+  const fetchHistoryPreview = useCallback(async () => {
+    if (fetchingHistoryRef.current) return;
+    fetchingHistoryRef.current = true;
+
+    try {
+      setHistoryLoading(true);
+
+      const res = await api.get<{ ok: boolean; items: HistoryItem[] }>(
+        "/api/mobile/me/history/preview",
+      );
+
+      setHistoryPreview(Array.isArray(res?.items) ? res.items.slice(0, 5) : []);
+    } catch (err: any) {
+      console.log(
+        "[home] history preview error:",
+        err?.data ?? err?.message ?? err,
+      );
+      setHistoryPreview([]);
+    } finally {
+      setHistoryLoading(false);
+      fetchingHistoryRef.current = false;
+    }
+  }, []);
+
+  // ✅ recarrega quando entrar/voltar pra Home (inclui primeira vez)
+  useFocusEffect(
+    useCallback(() => {
+      fetchNext();
+      fetchHistoryPreview();
+    }, [fetchNext, fetchHistoryPreview]),
   );
 
   const products = useMemo<Product[]>(
@@ -139,47 +219,6 @@ export default function Home() {
     [],
   );
 
-  const history = useMemo<HistoryItem[]>(
-    () => [
-      {
-        id: "1",
-        title: "Corte + Barba",
-        description: "Unidade Centro • Aprovado",
-        date: "Hoje às 15:30",
-        icon: "scissors",
-      },
-      {
-        id: "2",
-        title: "Pomada Matte",
-        description: "Compra de produto",
-        date: "Ontem às 18:12",
-        icon: "shopping-bag",
-      },
-      {
-        id: "3",
-        title: "Corte Masculino",
-        description: "Unidade Sul • Cancelado",
-        date: "10 de dez. às 14:20",
-        icon: "calendar",
-      },
-      {
-        id: "4",
-        title: "Óleo de Barba",
-        description: "Compra de produto",
-        date: "08 de dez. às 19:01",
-        icon: "shopping-bag",
-      },
-      {
-        id: "5",
-        title: "Barba",
-        description: "Unidade Centro • Concluído",
-        date: "05 de dez. às 11:45",
-        icon: "check",
-      },
-    ],
-    [],
-  );
-
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
 
   const safeTopStyle = useMemo(
@@ -192,7 +231,6 @@ export default function Home() {
     [TOP_OFFSET],
   );
 
-  // pintor do bounce superior (bem grande pra nunca "vazar branco" ao puxar pra baixo)
   const topBounceHeight = useMemo(() => TOP_OFFSET + 1400, [TOP_OFFSET]);
 
   const keyProduct = useCallback((item: Product) => item.id, []);
@@ -206,62 +244,207 @@ export default function Home() {
   const keyHistory = useCallback((item: HistoryItem) => item.id, []);
   const renderHistory = useCallback(
     ({ item, index }: ListRenderItemInfo<HistoryItem>) => (
-      <HistoryRow item={item} showDivider={index < history.length - 1} />
+      <HistoryRow item={item} showDivider={index < historyPreview.length - 1} />
     ),
-    [history.length],
+    [historyPreview.length],
   );
 
+  const goToBooking = useCallback(() => {
+    router.push("/booking/unit");
+  }, [router]);
+
+  const goToHistory = useCallback(() => {
+    router.push("/client/history");
+  }, [router]);
+
+  // ✅ ALTERAR: entra no mesmo fluxo do booking, mas em modo edição
+  const onPressReschedule = useCallback(() => {
+    if (!next) return;
+
+    router.push({
+      pathname: "/booking/unit",
+      params: {
+        mode: "edit",
+        appointmentId: next.id,
+      },
+    });
+  }, [next, router]);
+
+  const cancelApiCall = useCallback(
+    async (appointmentId: string) => {
+      try {
+        const res = await api.post<{ ok: boolean; error?: string }>(
+          `/api/mobile/me/appointments/${appointmentId}/cancel`,
+          {},
+        );
+
+        if (!res?.ok) {
+          Alert.alert(
+            "Não foi possível cancelar",
+            res?.error || "Tente novamente.",
+          );
+          return;
+        }
+
+        Alert.alert(
+          "Cancelado ✅",
+          "Seu agendamento foi cancelado com sucesso.",
+        );
+        await fetchNext();
+        await fetchHistoryPreview();
+      } catch (err: any) {
+        const msg =
+          err?.data?.error ||
+          err?.message ||
+          "Erro ao cancelar. Tente novamente.";
+        Alert.alert("Erro", String(msg));
+      }
+    },
+    [fetchNext, fetchHistoryPreview],
+  );
+
+  const onPressCancel = useCallback(() => {
+    if (!next) return;
+
+    const feeEligible = !!next.cancellationFeeEligible;
+    const notice =
+      next.cancellationFeeNotice?.trim() ||
+      "Este cancelamento pode ser cobrado em um próximo atendimento, conforme a política do estabelecimento.";
+
+    const message = feeEligible
+      ? `${notice}\n\nDeseja cancelar mesmo assim?`
+      : "Ao cancelar, este horário ficará livre na agenda.\n\nDeseja cancelar agora?";
+
+    Alert.alert("Cancelar agendamento?", message, [
+      { text: "Voltar", style: "cancel" },
+      {
+        text: "Cancelar",
+        style: "destructive",
+        onPress: () => cancelApiCall(next.id),
+      },
+    ]);
+  }, [cancelApiCall, next]);
+
   const Header = useMemo(() => {
+    const hasNext = !!next;
+
+    const startsAtInline = hasNext
+      ? String(next!.startsAtLabel || "").replace(" • ", " - ")
+      : "";
+
+    // ✅ ATENDIMENTO: some botões
+    const isInService =
+      hasNext &&
+      (String(next!.status || "").toUpperCase() === "IN_SERVICE" ||
+        String(next!.status || "").toUpperCase() === "ATENDIMENTO" ||
+        String(next!.statusLabel || "").toUpperCase() === "ATENDIMENTO");
+
+    // ✅ políticas (quando backend mandar). Por enquanto default true.
+    const canReschedule = hasNext ? next!.canReschedule !== false : false;
+    const canCancel = hasNext ? next!.canCancel !== false : false;
+
+    // ✅ SEM MOSTRA: enquanto NÃO for ATENDIMENTO, a linha aparece (mesmo sem flags)
+    const showActions = hasNext && !isInService;
+
     return (
       <View>
-        {/* ✅ garante topo escuro no overscroll */}
         <View
           pointerEvents="none"
           style={[S.topBounceDark, { height: topBounceHeight }]}
         />
 
-        {/* spacer do topo fixo */}
         <View style={headerSpacerStyle} />
 
-        {/* bloco escuro */}
         <View style={S.darkShell}>
           <View style={S.darkInner}>
             <View style={S.heroCard}>
-              <Text style={S.heroTitle}>Seu agendamento</Text>
-              <Text style={S.apptService}>{next.serviceName}</Text>
+              {hasNext ? (
+                <>
+                  <View style={S.heroTitleRow}>
+                    <Text style={S.heroTitle} numberOfLines={1}>
+                      Seu agendamento - {startsAtInline}
+                    </Text>
+                  </View>
 
-              <View style={S.metaRow}>
-                <View>
-                  <Text style={S.apptMeta}>
-                    {next.unitName} • {next.barberName}
+                  <Text style={S.apptService} numberOfLines={1}>
+                    {next!.serviceName} com {next!.barberName}
                   </Text>
-                  <Text style={S.apptMeta}>{next.startsAtLabel}</Text>
-                </View>
 
-                <View style={S.statusPill}>
-                  <FontAwesome
-                    name="check"
-                    size={12}
-                    color={UI.colors.black}
-                    style={{ marginRight: 6 }}
-                  />
-                  <Text style={S.statusText}>{next.statusLabel}</Text>
-                </View>
-              </View>
+                  <View style={S.metaRow}>
+                    <View style={{ flex: 1, paddingRight: 10 }}>
+                      <Text style={S.apptMeta} numberOfLines={1}>
+                        {next!.unitName}
+                      </Text>
+                    </View>
 
-              <View style={S.actionsRow}>
-                <Pressable style={S.actionBtn}>
-                  <Text style={S.actionText}>Alterar</Text>
-                </Pressable>
-                <Pressable style={S.actionBtn}>
-                  <Text style={S.actionText}>Cancelar</Text>
-                </Pressable>
-              </View>
+                    <View
+                      style={[
+                        S.statusPill,
+                        isInService ? S.statusPillInService : null,
+                      ]}
+                    >
+                      <FontAwesome
+                        name={isInService ? "play" : "check"}
+                        size={12}
+                        color={UI.colors.black}
+                        style={{ marginRight: 6 }}
+                      />
+                      <Text style={S.statusText}>
+                        {isInService ? "ATENDIMENTO" : next!.statusLabel}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {showActions ? (
+                    <View style={S.actionsRow}>
+                      {canReschedule ? (
+                        <Pressable
+                          style={S.actionBtn}
+                          onPress={onPressReschedule}
+                        >
+                          <Text style={S.actionText}>Alterar</Text>
+                        </Pressable>
+                      ) : null}
+
+                      {canCancel ? (
+                        <Pressable style={S.actionBtn} onPress={onPressCancel}>
+                          <Text style={S.actionText}>Cancelar</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <Text style={S.emptyApptText}>
+                    {nextLoading
+                      ? "Carregando seu próximo horário…"
+                      : "Reserve agora mesmo o seu horário com a gente!"}
+                  </Text>
+
+                  <View style={S.actionsRow}>
+                    <Pressable
+                      style={S.actionBtn}
+                      onPress={goToBooking}
+                      disabled={nextLoading}
+                    >
+                      <Text style={S.actionText}>
+                        {nextLoading ? "Aguarde…" : "Novo agendamento"}
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {nextLoading ? (
+                    <View style={{ marginTop: 10, alignItems: "center" }}>
+                      <ActivityIndicator />
+                    </View>
+                  ) : null}
+                </>
+              )}
             </View>
           </View>
         </View>
 
-        {/* início do branco */}
         <View style={S.whiteArea}>
           <View style={S.whiteContent}>
             <Text style={S.sectionTitle}>Produtos</Text>
@@ -284,21 +467,31 @@ export default function Home() {
               </Text>
             </Pressable>
 
-            <Text style={[S.sectionTitle, S.sectionTitleSpacing]}>
-              Histórico
-            </Text>
+            <View style={[S.historyHeaderRow, S.sectionTitleSpacing]}>
+              <Text style={S.sectionTitle}>Histórico</Text>
+
+              <Pressable style={S.seeMoreBtn} onPress={goToHistory}>
+                <Text style={S.seeMoreText}>Ver mais</Text>
+                <FontAwesome
+                  name="angle-right"
+                  size={18}
+                  color={UI.brand.primaryText}
+                />
+              </Pressable>
+            </View>
           </View>
         </View>
       </View>
     );
   }, [
+    goToBooking,
+    goToHistory,
     headerSpacerStyle,
     keyProduct,
-    next.barberName,
-    next.serviceName,
-    next.startsAtLabel,
-    next.statusLabel,
-    next.unitName,
+    next,
+    nextLoading,
+    onPressCancel,
+    onPressReschedule,
     products.length,
     renderProduct,
     topBounceHeight,
@@ -306,7 +499,6 @@ export default function Home() {
 
   return (
     <View style={S.page}>
-      {/* TOPO FIXO */}
       <View style={S.fixedTop}>
         <View style={safeTopStyle} />
 
@@ -329,17 +521,30 @@ export default function Home() {
         </View>
       </View>
 
-      {/* ✅ LISTA:
-          - background branco aqui garante bottom overscroll branco
-          - topo escuro é garantido pelo topBounceDark */}
       <FlatList
-        data={history}
+        data={historyPreview}
         keyExtractor={keyHistory}
         renderItem={renderHistory}
         showsVerticalScrollIndicator={false}
         style={S.list}
         contentContainerStyle={S.listContent}
         ListHeaderComponent={Header}
+        ListEmptyComponent={
+          <View style={S.emptyHistoryBox}>
+            {historyLoading ? (
+              <>
+                <ActivityIndicator />
+                <Text style={S.emptyHistoryText}>
+                  Carregando seu histórico…
+                </Text>
+              </>
+            ) : (
+              <Text style={S.emptyHistoryText}>
+                Você ainda não tem histórico por aqui.
+              </Text>
+            )}
+          </View>
+        }
         removeClippedSubviews
         initialNumToRender={6}
         maxToRenderPerBatch={8}
@@ -351,7 +556,6 @@ export default function Home() {
 }
 
 const S = StyleSheet.create({
-  // mundo por trás é escuro
   page: { flex: 1, backgroundColor: UI.colors.bg },
 
   fixedTop: {
@@ -379,7 +583,7 @@ const S = StyleSheet.create({
     borderWidth: 2,
     borderColor: UI.brand.primary,
   },
-  hello: { color: UI.colors.textMuted, fontSize: 12 },
+  hello: { color: UI.colors.textMuted, fontSize: 12, fontWeight: "700" },
   name: { color: UI.colors.text, fontSize: 16, fontWeight: "700" },
 
   iconBtn: {
@@ -402,11 +606,9 @@ const S = StyleSheet.create({
     backgroundColor: UI.brand.primary,
   },
 
-  // ✅ fundo branco garante o rodapé branco ao puxar pra cima
   list: { flex: 1, backgroundColor: UI.colors.white },
   listContent: { paddingBottom: 24 },
 
-  // ✅ garante topo escuro ao puxar pra baixo
   topBounceDark: {
     position: "absolute",
     left: 0,
@@ -434,14 +636,23 @@ const S = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(124,108,255,0.35)",
   },
-  heroTitle: { color: UI.colors.text, fontSize: 18, fontWeight: "600" },
+
+  heroTitleRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  heroTitle: { color: UI.colors.text, fontSize: 16, fontWeight: "600" },
+
   apptService: {
     color: UI.colors.text,
     fontSize: 16,
     fontWeight: "700",
     marginTop: 6,
   },
-  apptMeta: { color: UI.colors.textDim, fontSize: 13, marginTop: 2 },
+  apptMeta: { color: UI.colors.textDim, fontSize: 16, marginTop: 2 },
 
   metaRow: {
     flexDirection: "row",
@@ -459,6 +670,12 @@ const S = StyleSheet.create({
     borderRadius: 999,
     alignItems: "center",
   },
+
+  // ✅ corrigido: não depende de UI.colors.warning (que não existe)
+  statusPillInService: {
+    backgroundColor: "rgba(255,193,7,0.95)",
+  },
+
   statusText: { color: UI.colors.black, fontSize: 12, fontWeight: "700" },
 
   actionsRow: { flexDirection: "row", gap: 10, marginTop: 14 },
@@ -473,6 +690,15 @@ const S = StyleSheet.create({
   },
   actionText: { color: UI.colors.text, fontWeight: "700" },
 
+  emptyApptText: {
+    marginTop: 6,
+    color: UI.colors.text,
+    fontSize: 13,
+    fontWeight: "500",
+    lineHeight: 18,
+    textAlign: "center",
+  },
+
   whiteArea: { backgroundColor: UI.colors.white },
   whiteContent: {
     paddingHorizontal: UI.spacing.screenX,
@@ -486,6 +712,31 @@ const S = StyleSheet.create({
     color: UI.brand.primaryText,
   },
   sectionTitleSpacing: { marginTop: 28 },
+
+  historyHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+
+  seeMoreBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.04)",
+    borderWidth: 1,
+    borderColor: "rgba(0,0,0,0.06)",
+  },
+
+  seeMoreText: {
+    color: UI.brand.primaryText,
+    fontSize: 13,
+    fontWeight: "700",
+  },
 
   productCard: {
     width: 220,
@@ -524,7 +775,6 @@ const S = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.10)",
   },
 
-  // ✅ AGORA ROXO IGUAL "Alterar" e "Cancelar"
   moreBtn: {
     marginTop: 18,
     height: 56,
@@ -564,5 +814,19 @@ const S = StyleSheet.create({
     bottom: 0,
     height: 1,
     backgroundColor: "rgba(0,0,0,0.08)",
+  },
+
+  emptyHistoryBox: {
+    paddingHorizontal: UI.spacing.screenX,
+    paddingVertical: 18,
+    alignItems: "center",
+    gap: 10,
+  },
+
+  emptyHistoryText: {
+    color: "rgba(0,0,0,0.55)",
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
   },
 });

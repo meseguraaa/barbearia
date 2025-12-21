@@ -9,7 +9,13 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <AuthProvider>
         <StatusBar style="light" backgroundColor={UI.brand.primary} />
-        <Stack screenOptions={{ headerShown: false }} />
+        <Stack screenOptions={{ headerShown: false }}>
+          {/* Tabs */}
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+
+          {/* Wizard de agendamento (fora das tabs) */}
+          <Stack.Screen name="booking" options={{ headerShown: false }} />
+        </Stack>
       </AuthProvider>
     </SafeAreaProvider>
   );
