@@ -70,14 +70,6 @@ export default function TabsLayout() {
         }}
       />
 
-      {/* ✅ detalhe escondido (não vira aba) */}
-      <Tabs.Screen
-        name="products/[id]"
-        options={{
-          href: null,
-        }}
-      />
-
       <Tabs.Screen
         name="profile"
         options={{

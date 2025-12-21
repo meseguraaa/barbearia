@@ -32,32 +32,11 @@ function parseLimit(raw: string | null): number {
   return Math.min(50, Math.floor(n));
 }
 
-function parseQuantity(input: any): number {
-  const n = Number(input);
+function parseQuantity(v: any): number {
+  const n = Number(v);
   if (!Number.isFinite(n)) return 1;
   const q = Math.floor(n);
   return q >= 1 ? q : 1;
-}
-
-/**
- * ✅ Fallback de roteamento:
- * Em alguns cenários (conflito app/ vs src/app, build antigo, etc),
- * o GET que deveria cair em /orders/[id] acaba caindo aqui.
- *
- * Então, se a URL for /api/mobile/orders/<id>, a gente trata como detalhe.
- */
-function extractOrderIdFromPathname(pathname: string): string | null {
-  const parts = pathname.split("/").filter(Boolean);
-  const idx = parts.lastIndexOf("orders");
-  if (idx === -1) return null;
-
-  const maybeId = parts[idx + 1] ?? "";
-  if (!maybeId) return null;
-
-  const id = String(maybeId).trim();
-  if (!id || id === "route.ts") return null;
-
-  return id;
 }
 
 export async function OPTIONS() {
@@ -71,14 +50,17 @@ export async function OPTIONS() {
  * - productId: string
  * - quantity: number (default 1)
  *
- * Regras:
- * ✅ NÃO baixa estoque
- * ✅ NÃO registra ProductSale
- * ✅ Cria/atualiza Order status PENDING_CHECKIN (sacolinha)
- * ✅ unitId obrigatório (via produto)
+ * Regras (igual web):
+ * - NÃO baixa estoque
+ * - NÃO registra ProductSale
+ * - Cria Order com status PENDING_CHECKIN
+ * - reservedUntil baseado no pickupDeadlineDays
  *
- * Regra do app:
- * ✅ Se reservar o mesmo produto 2x, incrementa quantidade
+ * Regra adicional do app:
+ * - Se reservar o mesmo produto 2x -> incrementa quantidade
+ *
+ * Response:
+ * - { ok: true, orderId, reservedUntil }
  */
 export async function POST(req: Request) {
   const headers = corsHeaders();
@@ -93,31 +75,32 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = await req.json().catch(() => null);
-    const productId = String((body as any)?.productId ?? "").trim();
-    const quantity = parseQuantity((body as any)?.quantity);
+    const body = await req.json().catch(() => ({}));
+    const productId = String(body?.productId ?? "").trim();
+    const quantity = parseQuantity(body?.quantity);
 
     if (!productId) {
       return NextResponse.json(
-        { error: "Dados inválidos (productId)." },
+        { error: "invalid_productId" },
         { status: 400, headers },
       );
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1) Produto ativo
       const product = await tx.product.findFirst({
         where: { id: productId, isActive: true },
         select: {
           id: true,
-          price: true,
+          price: true, // Decimal
           stockQuantity: true,
           pickupDeadlineDays: true,
           unitId: true,
         },
       });
 
-      if (!product) throw new Error("Produto não encontrado ou inativo.");
+      if (!product) {
+        throw new Error("Produto não encontrado ou inativo.");
+      }
 
       if (!product.unitId) {
         throw new Error(
@@ -125,12 +108,10 @@ export async function POST(req: Request) {
         );
       }
 
-      // Mesmo sem baixar estoque agora, garantimos que a quantidade faz sentido
       if (product.stockQuantity < quantity) {
         throw new Error("Quantidade indisponível no estoque.");
       }
 
-      // (Sem expiração agora, mas mantemos reservedUntil como informativo)
       const deadlineDays =
         typeof product.pickupDeadlineDays === "number" &&
         Number.isFinite(product.pickupDeadlineDays) &&
@@ -138,59 +119,52 @@ export async function POST(req: Request) {
           ? product.pickupDeadlineDays
           : 2;
 
+      const reservedUntil = new Date();
+      reservedUntil.setDate(reservedUntil.getDate() + deadlineDays);
+
+      const unitPrice = product.price;
+      const itemTotal = unitPrice.mul(quantity);
+
       const now = new Date();
-      const desiredReservedUntil = new Date(now);
-      desiredReservedUntil.setDate(
-        desiredReservedUntil.getDate() + deadlineDays,
-      );
 
-      const unitPrice = product.price; // Decimal
-
-      // 2) Reaproveita um pedido pendente (mesma unidade)
-      // ⚠️ Sem expiração: não filtramos por reservedUntil
+      // ✅ reaproveita pedido pendente do cliente (mesma unidade) se existir e não expirado
       const existingOrder = await tx.order.findFirst({
         where: {
           clientId: auth.sub,
           status: "PENDING_CHECKIN",
           unitId: product.unitId,
+          OR: [{ reservedUntil: null }, { reservedUntil: { gt: now } }],
         },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: {
           id: true,
-          reservedUntil: true,
           totalAmount: true,
+          reservedUntil: true,
           items: {
             where: { productId: product.id },
-            select: {
-              id: true,
-              quantity: true,
-              totalPrice: true,
-            },
+            select: { id: true, quantity: true, totalPrice: true },
             take: 1,
           },
         },
       });
 
-      // helper: reservedUntil = max(current, desired)
       const nextReservedUntil = (() => {
-        if (!existingOrder?.reservedUntil) return desiredReservedUntil;
-        return existingOrder.reservedUntil > desiredReservedUntil
+        if (!existingOrder?.reservedUntil) return reservedUntil;
+        return existingOrder.reservedUntil > reservedUntil
           ? existingOrder.reservedUntil
-          : desiredReservedUntil;
+          : reservedUntil;
       })();
 
+      // ✅ se não existe pedido pendente: cria
       if (!existingOrder) {
-        // 3) Cria novo pedido
-        const totalPrice = unitPrice.mul(quantity);
-
         const order = await tx.order.create({
           data: {
             clientId: auth.sub,
             appointmentId: null,
             barberId: null,
             status: "PENDING_CHECKIN",
-            reservedUntil: desiredReservedUntil,
-            totalAmount: totalPrice,
+            reservedUntil,
+            totalAmount: itemTotal,
             unitId: product.unitId,
             items: {
               create: [
@@ -198,7 +172,7 @@ export async function POST(req: Request) {
                   productId: product.id,
                   quantity,
                   unitPrice,
-                  totalPrice,
+                  totalPrice: itemTotal,
                 },
               ],
             },
@@ -209,9 +183,9 @@ export async function POST(req: Request) {
         return { orderId: order.id, reservedUntil: order.reservedUntil };
       }
 
-      // 4) Atualiza pedido existente: incrementa quantidade do item (se já existe)
       const existingItem = existingOrder.items?.[0] ?? null;
 
+      // ✅ já tem o item: incrementa (opção A)
       if (existingItem) {
         const newQty = existingItem.quantity + quantity;
 
@@ -219,15 +193,15 @@ export async function POST(req: Request) {
           throw new Error("Quantidade indisponível no estoque.");
         }
 
-        const newItemTotal = unitPrice.mul(newQty);
-        const delta = newItemTotal.sub(existingItem.totalPrice);
+        const newTotal = unitPrice.mul(newQty);
+        const delta = newTotal.sub(existingItem.totalPrice);
 
         await tx.orderItem.update({
           where: { id: existingItem.id },
           data: {
             quantity: newQty,
             unitPrice,
-            totalPrice: newItemTotal,
+            totalPrice: newTotal,
           },
         });
 
@@ -243,9 +217,7 @@ export async function POST(req: Request) {
         return { orderId: existingOrder.id, reservedUntil: nextReservedUntil };
       }
 
-      // 5) Pedido existe mas não tem esse produto ainda: cria item
-      const itemTotal = unitPrice.mul(quantity);
-
+      // ✅ pedido existe, mas ainda não tem esse produto: cria item
       await tx.orderItem.create({
         data: {
           orderId: existingOrder.id,
@@ -297,6 +269,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // negócio / validações
     if (
       msg.includes("Produto não encontrado") ||
       msg.includes("Quantidade indisponível") ||
@@ -315,21 +288,14 @@ export async function POST(req: Request) {
 
 /**
  * GET /api/mobile/orders
- * GET /api/mobile/orders/:id   ✅ fallback tratado aqui também
  *
  * Query:
- * - view: "bag" | "history"  (atalho do app)
- *     - bag => status=PENDING_CHECKIN
- *     - history => status=COMPLETED
- * - status: optional (tem prioridade sobre view)
+ * - status: optional (ex: PENDING_CHECKIN, PAID, CANCELED...)  [match exato]
  * - cursor: orderId
  * - limit: number (default 20, max 50)
  *
- * Response (lista):
+ * Response:
  * - { ok, orders, items, count, nextCursor }
- *
- * Response (detalhe):
- * - { ok: true, order }
  */
 export async function GET(req: Request) {
   const headers = corsHeaders();
@@ -337,6 +303,7 @@ export async function GET(req: Request) {
   try {
     const auth = await requireMobileAuth(req);
 
+    // "Meus pedidos" é visão de CLIENT
     if (auth.role !== "CLIENT") {
       return NextResponse.json(
         { error: "forbidden" },
@@ -346,88 +313,9 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
 
-    // ✅ fallback: se vier /orders/<id>, devolve detalhe
-    const orderIdFromPath = extractOrderIdFromPathname(url.pathname);
-    if (orderIdFromPath) {
-      const o = await prisma.order.findFirst({
-        where: { id: orderIdFromPath, clientId: auth.sub },
-        select: {
-          id: true,
-          status: true,
-          reservedUntil: true,
-          totalAmount: true,
-          createdAt: true,
-          unitId: true,
-          unit: { select: { id: true, name: true } },
-          items: {
-            select: {
-              id: true,
-              quantity: true,
-              unitPrice: true,
-              totalPrice: true,
-              productId: true,
-              product: {
-                select: {
-                  id: true,
-                  name: true,
-                  imageUrl: true,
-                  category: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      if (!o) {
-        return NextResponse.json(
-          { error: "not_found" },
-          { status: 404, headers },
-        );
-      }
-
-      const order = {
-        id: o.id,
-        status: o.status,
-        createdAt: o.createdAt,
-        reservedUntil: o.reservedUntil,
-        totalAmount: Number(o.totalAmount),
-        unitId: o.unitId,
-        unitName: o.unit?.name ?? "—",
-        items: o.items.map((it) => ({
-          id: it.id,
-          productId: it.productId,
-          quantity: it.quantity,
-          unitPrice: Number(it.unitPrice),
-          totalPrice: Number(it.totalPrice),
-          product: it.product
-            ? {
-                id: it.product.id,
-                name: it.product.name,
-                imageUrl: it.product.imageUrl ?? null,
-                category: it.product.category ?? null,
-              }
-            : null,
-        })),
-      };
-
-      return NextResponse.json({ ok: true, order }, { status: 200, headers });
-    }
-
-    // ✅ comportamento normal: lista
-    const view = (url.searchParams.get("view") ?? "").trim(); // bag | history
-    const statusRaw = (url.searchParams.get("status") ?? "").trim();
+    const status = (url.searchParams.get("status") ?? "").trim();
     const cursor = (url.searchParams.get("cursor") ?? "").trim();
     const limit = parseLimit(url.searchParams.get("limit"));
-
-    // view é um atalho. status explícito tem prioridade.
-    const status =
-      statusRaw ||
-      (view === "bag"
-        ? "PENDING_CHECKIN"
-        : view === "history"
-          ? "COMPLETED"
-          : "");
 
     const where: any = {
       clientId: auth.sub,
@@ -528,7 +416,7 @@ export async function GET(req: Request) {
       );
     }
 
-    console.error("[mobile orders GET] error:", e);
+    console.error("[mobile orders] error:", e);
     return NextResponse.json(
       { error: "server_error" },
       { status: 500, headers },

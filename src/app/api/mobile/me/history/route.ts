@@ -52,7 +52,6 @@ async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
 }
 
 function formatDate(d: Date) {
-  // no histórico completo, prefiro sempre data completa (sem "Hoje/Ontem")
   return format(d, "dd/MM/yyyy • HH:mm", { locale: ptBR });
 }
 
@@ -65,24 +64,26 @@ export async function GET(req: Request) {
     const me = await requireMobileAuth(req);
     const clientId = me.sub;
 
-    // MVP: traz uma quantidade boa. Depois a gente pagina se quiser.
     const TAKE = 50;
 
     const [doneAppointments, canceledAppointments, orders] = await Promise.all([
       prisma.appointment.findMany({
-        where: { clientId, status: "DONE" },
+        where: { clientId, status: "DONE" }, // ✅ só enum válido
         orderBy: { scheduleAt: "desc" },
         take: TAKE,
         include: { barber: true, service: true },
       }),
       prisma.appointment.findMany({
-        where: { clientId, status: "CANCELED" },
+        where: { clientId, status: "CANCELED" }, // ✅ só enum válido
         orderBy: { scheduleAt: "desc" },
         take: TAKE,
         include: { barber: true, service: true },
       }),
       prisma.order.findMany({
-        where: { clientId },
+        where: {
+          clientId,
+          status: "COMPLETED", // ✅ histórico: só checkout concluído
+        },
         orderBy: { createdAt: "desc" },
         take: TAKE,
         include: {
@@ -93,8 +94,11 @@ export async function GET(req: Request) {
       }),
     ]);
 
+    // Só pedidos que têm pelo menos 1 produto
     const productOrders = orders.filter((order) =>
-      order.items.some((item) => item.productId != null),
+      order.items.some(
+        (item) => item.productId != null || item.product != null,
+      ),
     );
 
     const done: HistoryItem[] = doneAppointments.map((appt) => {
@@ -127,28 +131,16 @@ export async function GET(req: Request) {
       const d = new Date(order.createdAt);
 
       const itemsLabel = order.items
-        .filter((i) => i.productId != null)
+        .filter((i) => i.productId != null || i.product != null)
         .map((i) => `${i.quantity}x ${i.product?.name ?? "Produto"}`)
         .join(", ");
-
-      // status em pt-br simples (MVP)
-      const statusLabel =
-        order.status === "COMPLETED"
-          ? "Concluído"
-          : order.status === "PENDING_CHECKIN"
-            ? "Reservado"
-            : order.status === "EXPIRED"
-              ? "Expirado"
-              : order.status === "CANCELED"
-                ? "Cancelado"
-                : String(order.status || "Pedido");
 
       return {
         id: `order:${order.id}`,
         title: `Pedido #${String(order.id).slice(0, 8)}`,
         description: itemsLabel
-          ? `${statusLabel} • ${itemsLabel}`
-          : `${statusLabel} • Compra de produto`,
+          ? `Retirado • ${itemsLabel}`
+          : "Retirado • Compra de produto",
         date: formatDate(d),
         icon: "shopping-bag",
       };

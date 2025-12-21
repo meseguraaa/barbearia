@@ -71,6 +71,21 @@ function assertOrderInActiveUnit(
   }
 }
 
+/**
+ * ✅ Estoque: não permite checkout se não houver quantidade suficiente.
+ * (Mais seguro do que “zerar” e fingir que deu certo.)
+ */
+function assertEnoughStock(
+  product: { name: string; stockQuantity: number },
+  qty: number,
+) {
+  if (product.stockQuantity < qty) {
+    throw new Error(
+      `Estoque insuficiente para "${product.name}". Disponível: ${product.stockQuantity}, solicitado: ${qty}.`,
+    );
+  }
+}
+
 /* ---------------------------------------------------------
  * NOVO: CONTA DO CLIENTE (Opção A)
  * ---------------------------------------------------------*/
@@ -99,10 +114,7 @@ export async function finalizeClientOpenOrders(formData: FormData) {
           status: "PENDING",
           ...(activeUnitId ? { unitId: activeUnitId } : {}),
           items: { some: { serviceId: { not: null } } },
-          OR: [
-            { clientId }, // quando o pedido guarda o cliente
-            { appointment: { clientId } }, // quando o cliente está no appointment
-          ],
+          OR: [{ clientId }, { appointment: { clientId } }],
         } as any,
         select: {
           id: true,
@@ -139,7 +151,7 @@ export async function finalizeClientOpenOrders(formData: FormData) {
     // Nada aberto? só sai
     if (serviceOrders.length === 0 && productOrders.length === 0) return;
 
-    // Guard rails (evita finalizar coisa errada por bug de dados)
+    // Guard rails
     const anyServiceOrderInvalid = serviceOrders.some(
       (o) => !(o.items ?? []).some((it: any) => it.serviceId != null),
     );
@@ -158,7 +170,7 @@ export async function finalizeClientOpenOrders(formData: FormData) {
       );
     }
 
-    // Se houver produtos pendentes, barberId vira obrigatório (mesma regra do fluxo antigo)
+    // Se houver produtos pendentes, barberId vira obrigatório
     if (productOrders.length > 0 && !barberId) {
       throw new Error(
         "Selecione o barbeiro responsável para finalizar a venda de produtos.",
@@ -228,12 +240,10 @@ export async function finalizeClientOpenOrders(formData: FormData) {
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1) Finaliza serviços (status do pedido + reflete no appointment)
+      // 1) Finaliza serviços
       for (const order of serviceOrders) {
-        // dupla checagem de status (evita corrida)
         if (order.status !== "PENDING") continue;
 
-        // blindagem por unidade (server-side)
         assertOrderInActiveUnit({ unitId: order.unitId ?? null }, activeUnitId);
 
         await tx.order.update({
@@ -243,9 +253,7 @@ export async function finalizeClientOpenOrders(formData: FormData) {
           },
         });
 
-        // ✅ Se esse pedido é de um atendimento, marque o atendimento como DONE
         if (order.appointmentId) {
-          // Só finaliza se ainda não estiver concluído/cancelado (idempotência)
           await tx.appointment.updateMany({
             where: {
               id: order.appointmentId,
@@ -262,11 +270,47 @@ export async function finalizeClientOpenOrders(formData: FormData) {
 
       // 2) Finaliza produtos (baixa estoque + cria productSale + status completed)
       for (const order of productOrders) {
-        // dupla checagem (evita mexer se já mudou)
         if (order.status !== "PENDING_CHECKIN") continue;
 
-        // blindagem por unidade (server-side)
         assertOrderInActiveUnit({ unitId: order.unitId ?? null }, activeUnitId);
+
+        if (!order.unitId) {
+          throw new Error(
+            "Pedido de produto sem unidade vinculada. Não é possível finalizar.",
+          );
+        }
+
+        // ✅ Idempotência (anti-clique duplo / corrida):
+        // re-busca status dentro da transação e só segue se ainda estiver PENDING_CHECKIN
+        const fresh = await tx.order.findUnique({
+          where: { id: order.id },
+          select: { id: true, status: true },
+        });
+
+        if (!fresh || fresh.status !== "PENDING_CHECKIN") {
+          continue;
+        }
+
+        // ✅ valida barbeiro pertence à unidade do pedido (segurança extra)
+        const barberOk = await tx.barber.findFirst({
+          where: {
+            id: barberId!,
+            isActive: true,
+            units: {
+              some: {
+                unitId: order.unitId,
+                isActive: true,
+              },
+            },
+          },
+          select: { id: true },
+        });
+
+        if (!barberOk) {
+          throw new Error(
+            "O profissional selecionado não pertence à unidade deste(s) pedido(s) de produto.",
+          );
+        }
 
         const productItems = order.items.filter(
           (item) => item.productId != null,
@@ -275,28 +319,29 @@ export async function finalizeClientOpenOrders(formData: FormData) {
         for (const item of productItems) {
           if (!item.productId || !item.product) continue;
 
+          // ✅ valida estoque antes de baixar
+          assertEnoughStock(
+            {
+              name: item.product.name,
+              stockQuantity: item.product.stockQuantity,
+            },
+            item.quantity,
+          );
+
           const newQuantity = item.product.stockQuantity - item.quantity;
 
           await tx.product.update({
             where: { id: item.productId },
             data: {
-              stockQuantity: newQuantity < 0 ? 0 : newQuantity,
+              stockQuantity: newQuantity,
             },
           });
-
-          // ✅ unitId: vem do order (multi-unidade)
-          if (!order.unitId) {
-            throw new Error(
-              "Pedido de produto sem unidade vinculada. Não é possível finalizar.",
-            );
-          }
 
           await tx.productSale.create({
             data: {
               product: { connect: { id: item.productId } },
               barber: { connect: { id: barberId! } },
               unit: { connect: { id: order.unitId } },
-
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               totalPrice: item.totalPrice,
@@ -333,8 +378,6 @@ export async function cancelClientOpenOrders(formData: FormData) {
   });
 
   await withRevalidate(async () => {
-    // ✅ Cancela tudo que estiver “aberto” para checkout (respeitando unidade ativa)
-    // 🔸 serviço pode estar com client no appointment
     await prisma.order.updateMany({
       where: {
         status: { in: ["PENDING", "PENDING_CHECKIN"] },
@@ -345,11 +388,6 @@ export async function cancelClientOpenOrders(formData: FormData) {
         status: "CANCELED",
       },
     });
-
-    // ⚠️ Observação:
-    // Não mexo automaticamente em Appointment aqui porque:
-    // - "cancelar conta" pode significar só cancelar o checkout/pedido, não o agendamento.
-    // Se você quiser que isso cancele o atendimento também, eu ajusto depois.
   });
 
   redirect(getRedirectTo(formData));
@@ -389,14 +427,12 @@ export async function finalizeProductOrder(formData: FormData) {
       throw new Error("Pedido não encontrado.");
     }
 
-    // blindagem por unidade (server-side)
     assertOrderInActiveUnit({ unitId: order.unitId ?? null }, activeUnitId);
 
     if (order.status !== "PENDING_CHECKIN") {
       return;
     }
 
-    // guard rail: garantir que é pedido de produto
     if (!order.items.some((it) => it.productId != null)) {
       throw new Error("Este pedido não possui itens de produto.");
     }
@@ -409,6 +445,13 @@ export async function finalizeProductOrder(formData: FormData) {
           "Pedido de produto sem unidade vinculada. Não é possível finalizar.",
         );
       }
+
+      // ✅ recheck status dentro da transação (idempotência)
+      const fresh = await tx.order.findUnique({
+        where: { id: orderId },
+        select: { status: true },
+      });
+      if (!fresh || fresh.status !== "PENDING_CHECKIN") return;
 
       // ✅ valida barbeiro pertence à unidade do pedido
       const barberOk = await tx.barber.findFirst({
@@ -434,21 +477,29 @@ export async function finalizeProductOrder(formData: FormData) {
       for (const item of productItems) {
         if (!item.productId || !item.product) continue;
 
+        // ✅ valida estoque antes de baixar
+        assertEnoughStock(
+          {
+            name: item.product.name,
+            stockQuantity: item.product.stockQuantity,
+          },
+          item.quantity,
+        );
+
         const newQuantity = item.product.stockQuantity - item.quantity;
 
         await tx.product.update({
           where: { id: item.productId },
           data: {
-            stockQuantity: newQuantity < 0 ? 0 : newQuantity,
+            stockQuantity: newQuantity,
           },
         });
 
         await tx.productSale.create({
           data: {
             product: { connect: { id: item.productId } },
-            barber: { connect: { id: barberId } }, // barberId aqui já é string
+            barber: { connect: { id: barberId } },
             unit: { connect: { id: order.unitId } },
-
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             totalPrice: item.totalPrice,
@@ -498,15 +549,12 @@ export async function cancelProductOrder(formData: FormData) {
       throw new Error("Pedido não encontrado.");
     }
 
-    // blindagem por unidade (server-side)
     assertOrderInActiveUnit({ unitId: order.unitId ?? null }, activeUnitId);
 
-    // ✅ aqui restringe: só cancela produto se estiver no status do fluxo de produto
     if (order.status !== "PENDING_CHECKIN") {
       return;
     }
 
-    // guard rail: garantir que é pedido de produto
     if (!(order.items ?? []).some((it: any) => it.productId != null)) {
       throw new Error("Este pedido não possui itens de produto.");
     }
@@ -542,7 +590,6 @@ export async function finalizeServiceOrder(formData: FormData) {
   await withRevalidate(async () => {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      // ✅ precisamos do appointmentId pra refletir no Appointment
       select: {
         id: true,
         status: true,
@@ -556,27 +603,29 @@ export async function finalizeServiceOrder(formData: FormData) {
       throw new Error("Pedido não encontrado.");
     }
 
-    // blindagem por unidade (server-side)
     assertOrderInActiveUnit({ unitId: order.unitId ?? null }, activeUnitId);
 
     if (order.status !== "PENDING") {
       return;
     }
 
-    // guard rail: garantir que é pedido de serviço
     if (!(order.items ?? []).some((it: any) => it.serviceId != null)) {
       throw new Error("Este pedido não possui itens de serviço.");
     }
 
     await prisma.$transaction(async (tx) => {
+      // ✅ idempotência
+      const fresh = await tx.order.findUnique({
+        where: { id: orderId },
+        select: { status: true },
+      });
+      if (!fresh || fresh.status !== "PENDING") return;
+
       await tx.order.update({
         where: { id: orderId },
-        data: {
-          status: "COMPLETED",
-        },
+        data: { status: "COMPLETED" },
       });
 
-      // ✅ Se for um pedido ligado a atendimento, conclui o atendimento também
       if (order.appointmentId) {
         await tx.appointment.updateMany({
           where: {
@@ -613,7 +662,6 @@ export async function cancelServiceOrder(formData: FormData) {
   await withRevalidate(async () => {
     const order = await prisma.order.findUnique({
       where: { id: orderId },
-      // ✅ precisamos do appointmentId pra refletir no Appointment
       select: {
         id: true,
         status: true,
@@ -627,27 +675,29 @@ export async function cancelServiceOrder(formData: FormData) {
       throw new Error("Pedido não encontrado.");
     }
 
-    // blindagem por unidade (server-side)
     assertOrderInActiveUnit({ unitId: order.unitId ?? null }, activeUnitId);
 
     if (order.status !== "PENDING") {
       return;
     }
 
-    // guard rail: garantir que é pedido de serviço
     if (!(order.items ?? []).some((it: any) => it.serviceId != null)) {
       throw new Error("Este pedido não possui itens de serviço.");
     }
 
     await prisma.$transaction(async (tx) => {
+      // ✅ idempotência
+      const fresh = await tx.order.findUnique({
+        where: { id: orderId },
+        select: { status: true },
+      });
+      if (!fresh || fresh.status !== "PENDING") return;
+
       await tx.order.update({
         where: { id: orderId },
-        data: {
-          status: "CANCELED",
-        },
+        data: { status: "CANCELED" },
       });
 
-      // ✅ Se era um atendimento e ele ainda estava pendente, marca como cancelado
       if (order.appointmentId) {
         await tx.appointment.updateMany({
           where: {

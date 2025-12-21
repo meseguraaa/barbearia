@@ -54,6 +54,8 @@ type NextAppt = {
   cancellationFeeNotice?: string | null;
 };
 
+type HistoryWithTs = HistoryItem & { ts: number };
+
 function formatBRL(value: number) {
   try {
     return new Intl.NumberFormat("pt-BR", {
@@ -65,6 +67,245 @@ function formatBRL(value: number) {
     return `R$ ${v.toFixed(2).replace(".", ",")}`;
   }
 }
+
+function sumQtyFromOrder(order: any): number {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const total = items.reduce((acc: number, it: any) => {
+    const q = Number(it?.quantity ?? 0);
+    return acc + (Number.isFinite(q) ? q : 0);
+  }, 0);
+  return total > 0 ? total : 0;
+}
+
+// ---------- helpers: histórico unificado (agendados + realizados + cancelados + pedidos) ----------
+
+function safeDateFromAny(v: any): Date | null {
+  if (!v) return null;
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
+
+  // number timestamp
+  if (typeof v === "number") {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  // ISO-ish string
+  if (typeof v === "string") {
+    const d = new Date(v);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+
+  return null;
+}
+
+function getTsFromRaw(raw: any): number {
+  // tenta achar algum campo típico de datas
+  const candidates = [
+    raw?.performedAt,
+    raw?.finishedAt,
+    raw?.completedAt,
+    raw?.cancelledAt,
+    raw?.canceledAt,
+    raw?.createdAt,
+    raw?.updatedAt,
+    raw?.startsAt,
+    raw?.scheduleAt,
+    raw?.date,
+    raw?.at,
+  ];
+
+  for (const c of candidates) {
+    const d = safeDateFromAny(c);
+    if (d) return d.getTime();
+  }
+
+  // fallback: tenta usar um label que às vezes vem como ISO
+  const d2 = safeDateFromAny(raw?.startsAtLabel);
+  if (d2) return d2.getTime();
+
+  return 0;
+}
+
+function formatDatePtBR(ts: number) {
+  if (!ts) return "";
+  try {
+    const d = new Date(ts);
+    return d.toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+function normalizeHistoryItem(raw: any): HistoryWithTs | null {
+  if (!raw) return null;
+
+  // Se já veio no formato do app (endpoint antigo)
+  if (raw?.id && raw?.title && raw?.description && raw?.date && raw?.icon) {
+    const ts = getTsFromRaw(raw) || getTsFromRaw({ date: raw?.date });
+    return { ...raw, ts };
+  }
+
+  const kind = String(
+    raw?.kind ?? raw?.type ?? raw?.eventType ?? "",
+  ).toUpperCase();
+  const status = String(
+    raw?.status ?? raw?.appointmentStatus ?? "",
+  ).toUpperCase();
+
+  // heurística pra classificar quando backend não manda "type"
+  const looksLikeOrder =
+    !!raw?.items ||
+    !!raw?.orderId ||
+    !!raw?.total ||
+    String(raw?.code ?? "")
+      .toUpperCase()
+      .includes("ORDER");
+
+  const looksLikeAppointment =
+    !!raw?.serviceName ||
+    !!raw?.barberName ||
+    !!raw?.unitName ||
+    !!raw?.startsAt;
+
+  const looksLikeServiceDone =
+    status === "DONE" ||
+    status === "COMPLETED" ||
+    status === "FINISHED" ||
+    status === "REALIZADO" ||
+    !!raw?.performedAt ||
+    !!raw?.finishedAt ||
+    !!raw?.completedAt;
+
+  const looksLikeCancelled =
+    status === "CANCELLED" ||
+    status === "CANCELED" ||
+    status === "CANCELADO" ||
+    !!raw?.cancelledAt ||
+    !!raw?.canceledAt;
+
+  const ts = getTsFromRaw(raw);
+
+  // Pedido de produto
+  if (kind === "ORDER" || kind === "PRODUCT_ORDER" || looksLikeOrder) {
+    const id = String(raw?.id ?? raw?.orderId ?? "");
+    if (!id) return null;
+
+    const qty = sumQtyFromOrder(raw);
+    const total = Number(raw?.total ?? raw?.amount ?? 0);
+    const totalLabel =
+      Number.isFinite(total) && total > 0 ? formatBRL(total) : "";
+
+    return {
+      id: `order:${id}`,
+      title: "Pedido de produtos",
+      description:
+        qty > 0 && totalLabel
+          ? `${qty} item(s) • ${totalLabel}`
+          : qty > 0
+            ? `${qty} item(s)`
+            : totalLabel
+              ? totalLabel
+              : "Pedido registrado",
+      date: raw?.dateLabel || raw?.createdAtLabel || formatDatePtBR(ts),
+      icon: "shopping-bag",
+      ts,
+    };
+  }
+
+  // Serviço realizado
+  if (kind === "SERVICE_DONE" || kind === "DONE" || looksLikeServiceDone) {
+    const id = String(raw?.id ?? raw?.appointmentId ?? raw?.serviceLogId ?? "");
+    if (!id) return null;
+
+    const serviceName = String(raw?.serviceName ?? raw?.service ?? "Serviço");
+    const barberName = String(raw?.barberName ?? raw?.barber ?? "");
+    const unitName = String(raw?.unitName ?? raw?.unit ?? "");
+
+    const who = barberName ? ` com ${barberName}` : "";
+    const where = unitName ? ` • ${unitName}` : "";
+
+    return {
+      id: `done:${id}`,
+      title: "Serviço realizado ✅",
+      description: `${serviceName}${who}${where}`.trim(),
+      date:
+        raw?.dateLabel ||
+        raw?.finishedAtLabel ||
+        raw?.completedAtLabel ||
+        formatDatePtBR(ts),
+      icon: "scissors",
+      ts,
+    };
+  }
+
+  // Cancelado
+  if (kind === "CANCELLED" || looksLikeCancelled) {
+    const id = String(raw?.id ?? raw?.appointmentId ?? "");
+    if (!id) return null;
+
+    const serviceName = String(
+      raw?.serviceName ?? raw?.service ?? "Agendamento",
+    );
+    const unitName = String(raw?.unitName ?? raw?.unit ?? "");
+
+    return {
+      id: `cancel:${id}`,
+      title: "Cancelado",
+      description: unitName ? `${serviceName} • ${unitName}` : serviceName,
+      date:
+        raw?.dateLabel ||
+        raw?.cancelledAtLabel ||
+        raw?.canceledAtLabel ||
+        raw?.startsAtLabel ||
+        formatDatePtBR(ts),
+      icon: "times-circle",
+      ts,
+    };
+  }
+
+  // Agendamento (fallback)
+  if (kind === "APPOINTMENT" || looksLikeAppointment) {
+    const id = String(raw?.id ?? raw?.appointmentId ?? "");
+    if (!id) return null;
+
+    const serviceName = String(
+      raw?.serviceName ?? raw?.service ?? "Agendamento",
+    );
+    const barberName = String(raw?.barberName ?? raw?.barber ?? "");
+    const unitName = String(raw?.unitName ?? raw?.unit ?? "");
+
+    const desc = `${serviceName}${barberName ? ` com ${barberName}` : ""}${
+      unitName ? ` • ${unitName}` : ""
+    }`.trim();
+
+    return {
+      id: `appt:${id}`,
+      title: "Agendamento",
+      description: desc,
+      date: raw?.dateLabel || raw?.startsAtLabel || formatDatePtBR(ts),
+      icon: "calendar-check-o",
+      ts,
+    };
+  }
+
+  return null;
+}
+
+function sortDescAndTake5(list: HistoryWithTs[]) {
+  return list
+    .filter((x) => !!x?.id)
+    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
+    .slice(0, 5)
+    .map(({ ts, ...rest }) => rest);
+}
+
+// ------------------------------------------------------------------------------------------------
 
 const ProductCard = memo(function ProductCard({
   item,
@@ -112,7 +353,6 @@ const ProductCard = memo(function ProductCard({
         <Text style={S.productPrice}>{priceLabel}</Text>
 
         <View style={S.productFooter}>
-          {/* ✅ CTA visual (card inteiro já é clicável) */}
           <Pressable onPress={goDetails} style={S.detailsBtn} hitSlop={8}>
             <View style={S.btnCenterRow}>
               <Text style={S.detailsBtnText}>Ver detalhes</Text>
@@ -146,7 +386,7 @@ const HistoryRow = memo(function HistoryRow({
           <FontAwesome
             name={item.icon as any}
             size={18}
-            color={UI.brand.primaryText}
+            color={UI.brand.primary}
           />
         </View>
         <View style={{ flex: 1 }}>
@@ -185,6 +425,13 @@ export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [productsLoading, setProductsLoading] = useState(true);
 
+  // ✅ sacolinha pendente + badge count
+  const [pendingCartOrderId, setPendingCartOrderId] = useState<string | null>(
+    null,
+  );
+  const [pendingCartCount, setPendingCartCount] = useState<number>(0);
+  const cartFetchingRef = useRef(false);
+
   const fetchingRef = useRef(false);
   const fetchingHistoryRef = useRef(false);
   const fetchingProductsRef = useRef(false);
@@ -217,11 +464,20 @@ export default function Home() {
     try {
       setHistoryLoading(true);
 
-      const res = await api.get<{ ok: boolean; items: HistoryItem[] }>(
-        "/api/mobile/me/history/preview",
+      const res = await api.get<{
+        ok: boolean;
+        items: HistoryItem[];
+        _debug?: any;
+      }>("/api/mobile/me/history/preview");
+
+      // ✅ agora você VAI ver no console do app
+      console.log("[home] history preview _debug:", res?._debug);
+      console.log(
+        "[home] history preview items:",
+        Array.isArray(res?.items) ? res.items : [],
       );
 
-      setHistoryPreview(Array.isArray(res?.items) ? res.items.slice(0, 5) : []);
+      setHistoryPreview(res?.ok && Array.isArray(res?.items) ? res.items : []);
     } catch (err: any) {
       console.log(
         "[home] history preview error:",
@@ -278,12 +534,49 @@ export default function Home() {
     }
   }, []);
 
+  // ✅ pega sacolinha + soma quantidades (badge)
+  const fetchPendingCart = useCallback(async () => {
+    if (cartFetchingRef.current) return { id: null as string | null, count: 0 };
+    cartFetchingRef.current = true;
+
+    try {
+      const res: any = await api.get("/api/mobile/orders?view=bag&limit=1");
+
+      const list = (res?.orders ?? res?.items ?? []) as any[];
+      const first = Array.isArray(list) && list.length ? list[0] : null;
+
+      const id = first?.id ? String(first.id) : null;
+      const count = first ? sumQtyFromOrder(first) : 0;
+
+      setPendingCartOrderId(id);
+      setPendingCartCount(count);
+
+      return { id, count };
+    } catch (err: any) {
+      console.log(
+        "[home] fetchPendingCart error:",
+        err?.data ?? err?.message ?? err,
+      );
+      setPendingCartOrderId(null);
+      setPendingCartCount(0);
+      return { id: null as string | null, count: 0 };
+    } finally {
+      cartFetchingRef.current = false;
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       fetchNext();
       fetchHistoryPreview();
       fetchProductsPreview();
-    }, [fetchNext, fetchHistoryPreview, fetchProductsPreview]),
+      fetchPendingCart();
+    }, [
+      fetchNext,
+      fetchHistoryPreview,
+      fetchProductsPreview,
+      fetchPendingCart,
+    ]),
   );
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
@@ -313,6 +606,32 @@ export default function Home() {
     },
     [router],
   );
+
+  const goCart = useCallback(async () => {
+    try {
+      const currentId = pendingCartOrderId;
+      if (currentId) {
+        router.push({
+          pathname: "/client/cart",
+          params: { orderId: currentId },
+        });
+        return;
+      }
+
+      const fresh = await fetchPendingCart();
+      if (fresh?.id) {
+        router.push({
+          pathname: "/client/cart",
+          params: { orderId: fresh.id },
+        });
+        return;
+      }
+
+      router.push("/client/cart");
+    } catch {
+      router.push("/client/cart");
+    }
+  }, [fetchPendingCart, pendingCartOrderId, router]);
 
   const onPressReschedule = useCallback(() => {
     if (!next) return;
@@ -605,10 +924,27 @@ export default function Home() {
             </View>
           </View>
 
-          <Pressable style={S.iconBtn}>
-            <FontAwesome name="bell-o" size={20} color={UI.colors.white} />
-            <View style={S.dot} />
-          </Pressable>
+          <View style={S.topRightRow}>
+            <Pressable style={S.iconBtn} onPress={goCart}>
+              <FontAwesome
+                name="shopping-bag"
+                size={18}
+                color={UI.colors.white}
+              />
+
+              {pendingCartCount > 0 ? (
+                <View style={S.badge}>
+                  <Text style={S.badgeText}>
+                    {pendingCartCount > 99 ? "99+" : String(pendingCartCount)}
+                  </Text>
+                </View>
+              ) : null}
+            </Pressable>
+
+            <Pressable style={S.iconBtn}>
+              <FontAwesome name="bell-o" size={20} color={UI.colors.white} />
+            </Pressable>
+          </View>
         </View>
       </View>
 
@@ -670,6 +1006,8 @@ const S = StyleSheet.create({
   hello: { color: UI.colors.textMuted, fontSize: 12, fontWeight: "700" },
   name: { color: UI.colors.text, fontSize: 16, fontWeight: "700" },
 
+  topRightRow: { flexDirection: "row", gap: 10, alignItems: "center" },
+
   iconBtn: {
     width: 42,
     height: 42,
@@ -680,14 +1018,29 @@ const S = StyleSheet.create({
     borderWidth: 1,
     borderColor: UI.colors.cardBorder,
   },
-  dot: {
+
+  // ✅ badge mais pra direita e mais pra cima (alinhamento topo)
+  badge: {
     position: "absolute",
-    top: 10,
-    right: 11,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    top: -6,
+    right: -6,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 999,
     backgroundColor: UI.brand.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: UI.colors.bg,
+  },
+
+  badgeText: {
+    color: UI.colors.white,
+    fontSize: 11,
+    fontWeight: "900",
+    includeFontPadding: false,
+    textAlignVertical: "center",
   },
 
   list: { flex: 1, backgroundColor: UI.colors.white },
@@ -934,7 +1287,7 @@ const S = StyleSheet.create({
 
   outlineBtnText: {
     color: UI.brand.primary,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "500",
   },
 
@@ -952,7 +1305,7 @@ const S = StyleSheet.create({
   historyIcon: {
     width: 36,
     height: 36,
-    backgroundColor: "rgba(0,0,0,0.05)",
+    backgroundColor: "rgba(124,108,255,0.18)", // roxinho suave
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",

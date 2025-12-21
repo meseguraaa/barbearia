@@ -10,11 +10,9 @@ export default function RootLayout() {
       <AuthProvider>
         <StatusBar style="light" backgroundColor={UI.brand.primary} />
         <Stack screenOptions={{ headerShown: false }}>
-          {/* Tabs */}
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-
-          {/* Wizard de agendamento (fora das tabs) */}
-          <Stack.Screen name="booking" options={{ headerShown: false }} />
+          {/* ✅ Agora esses grupos vão existir porque vamos criar os _layout deles */}
+          <Stack.Screen name="(app)" options={{ headerShown: false }} />
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         </Stack>
       </AuthProvider>
     </SafeAreaProvider>

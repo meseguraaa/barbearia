@@ -5,15 +5,25 @@ const AUTH_SESSION_KEY = "auth_session";
 
 /**
  * Base URL do backend
+ *
+ * ✅ Regra: sem EXPO_PUBLIC_API_URL, usamos localhost como fallback (DEV),
+ * para evitar cair num ngrok antigo e gerar 403 misterioso.
  */
 const API_URL =
-  process.env.EXPO_PUBLIC_API_URL ||
-  "https://vagarious-gravely-filiberto.ngrok-free.dev";
+  process.env.EXPO_PUBLIC_API_URL?.trim() ||
+  (__DEV__ ? "http://localhost:3000" : "");
 
 if (!process.env.EXPO_PUBLIC_API_URL) {
   console.warn(
     "[api] EXPO_PUBLIC_API_URL não definido. Usando fallback:",
     API_URL,
+  );
+}
+
+// Em produção, não aceitamos base vazia.
+if (!API_URL) {
+  throw new Error(
+    "[api] EXPO_PUBLIC_API_URL é obrigatório em produção. Defina no .env do app.",
   );
 }
 
@@ -76,6 +86,12 @@ async function getAuthToken(): Promise<string | null> {
   return null;
 }
 
+function joinUrl(base: string, path: string) {
+  const b = base.endsWith("/") ? base.slice(0, -1) : base;
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${b}${p}`;
+}
+
 async function request<T = any>(
   path: string,
   options: RequestOptions = {},
@@ -85,10 +101,11 @@ async function request<T = any>(
 
   if (__DEV__) {
     console.log("[api]", options.method ?? "GET", path);
+    console.log("[api] base:", API_URL);
     console.log("[api] token:", token ? `len=${token.length}` : "NONE");
   }
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(joinUrl(API_URL, path), {
     method: options.method ?? "GET",
     headers: {
       "Content-Type": "application/json",

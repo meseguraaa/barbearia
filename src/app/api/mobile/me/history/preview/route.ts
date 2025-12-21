@@ -57,6 +57,33 @@ function formatPreviewDate(d: Date) {
   return format(d, "dd/MM/yyyy • HH:mm", { locale: ptBR });
 }
 
+// ✅ data do EVENTO (ação), não do agendamento
+function pickApptOccurredAt(appt: any) {
+  // se no seu schema existir canceledAt/completedAt/finishedAt, ele usa
+  const d =
+    appt?.canceledAt ??
+    appt?.cancelledAt ??
+    appt?.completedAt ??
+    appt?.finishedAt ??
+    appt?.performedAt ??
+    appt?.updatedAt ?? // ✅ normalmente existe e reflete quando mudou status
+    appt?.scheduleAt;
+
+  return new Date(d);
+}
+
+// ✅ pedidos: evento é quando mudou status (updatedAt) se já finalizou/cancelou
+function pickOrderOccurredAt(order: any) {
+  const status = String(order?.status ?? "").toUpperCase();
+
+  const isFinal =
+    status === "COMPLETED" || status === "CANCELED" || status === "CANCELLED";
+
+  const d = isFinal ? (order?.updatedAt ?? order?.createdAt) : order?.createdAt;
+
+  return new Date(d);
+}
+
 export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders() });
 }
@@ -66,99 +93,91 @@ export async function GET(req: Request) {
     const me = await requireMobileAuth(req);
     const clientId = me.sub;
 
-    // Pega um pouco mais de cada (10) pra garantir que a mistura final tenha 5 bons itens
     const [doneAppointments, canceledAppointments, orders] = await Promise.all([
       prisma.appointment.findMany({
-        where: {
-          clientId,
-          status: "DONE",
-        },
+        where: { clientId, status: "DONE" },
+        // ✅ ordem por scheduleAt não importa mais, vamos ordenar depois por occurredAt
         orderBy: { scheduleAt: "desc" },
         take: 10,
-        include: {
-          barber: true,
-          service: true,
-        },
+        include: { barber: true, service: true },
       }),
       prisma.appointment.findMany({
-        where: {
-          clientId,
-          status: "CANCELED",
-        },
+        where: { clientId, status: "CANCELED" },
         orderBy: { scheduleAt: "desc" },
         take: 10,
-        include: {
-          barber: true,
-          service: true,
-        },
+        include: { barber: true, service: true },
       }),
       prisma.order.findMany({
-        where: {
-          clientId,
-        },
+        where: { clientId },
+        // ✅ pegamos vários e filtramos no JS (evita erro de enum)
         orderBy: { createdAt: "desc" },
-        take: 10,
-        include: {
-          items: {
-            include: {
-              product: true,
-              service: true,
-            },
-          },
-        },
+        take: 20,
+        include: { items: { include: { product: true, service: true } } },
       }),
     ]);
 
-    // Só pedidos que têm pelo menos 1 produto
-    const productOrders = orders.filter((order) =>
-      order.items.some((item) => item.productId != null),
-    );
+    // ✅ só pedidos com produto e fora “sacolinha”
+    const productOrders = orders
+      .filter((order) =>
+        order.items.some(
+          (item: any) => item?.productId != null || item?.product?.id != null,
+        ),
+      )
+      .filter((order) => {
+        const st = String(order?.status ?? "").toUpperCase();
+        // remove bag/sacolinha
+        return st !== "PENDING_CHECKIN";
+      });
 
-    // Normalize -> um array único pra ordenar por data
-    const normalized: Array<{
-      occurredAt: Date;
-      item: HistoryItem;
-    }> = [];
+    const normalized: Array<{ occurredAt: Date; item: HistoryItem }> = [];
 
     for (const appt of doneAppointments) {
-      const occurredAt = new Date(appt.scheduleAt);
+      const occurredAt = pickApptOccurredAt(appt); // ✅ mudou aqui
       const barberPart = appt.barber?.name ? ` • ${appt.barber.name}` : "";
 
       normalized.push({
         occurredAt,
         item: {
-          id: `appt:${appt.id}`,
+          id: `done:${appt.id}`,
           title: appt.description || appt.service?.name || "Serviço",
           description: `Concluído${barberPart}`,
-          date: formatPreviewDate(occurredAt),
+          date: formatPreviewDate(occurredAt), // ✅ data do evento
           icon: "scissors",
         },
       });
     }
 
     for (const appt of canceledAppointments) {
-      const occurredAt = new Date(appt.scheduleAt);
+      const occurredAt = pickApptOccurredAt(appt); // ✅ mudou aqui
       const barberPart = appt.barber?.name ? ` • ${appt.barber.name}` : "";
 
       normalized.push({
         occurredAt,
         item: {
-          id: `appt:${appt.id}`,
+          id: `cancel:${appt.id}`,
           title: appt.description || appt.service?.name || "Serviço",
           description: `Cancelado${barberPart}`,
-          date: formatPreviewDate(occurredAt),
+          date: formatPreviewDate(occurredAt), // ✅ data do evento
           icon: "calendar",
         },
       });
     }
 
     for (const order of productOrders) {
-      const occurredAt = new Date(order.createdAt);
+      const occurredAt = pickOrderOccurredAt(order); // ✅ mudou aqui
 
       const itemsLabel = order.items
-        .filter((i) => i.productId != null)
+        .filter((i: any) => i?.productId != null || i?.product?.id != null)
         .map((i) => `${i.quantity}x ${i.product?.name ?? "Produto"}`)
         .join(", ");
+
+      const status = String(order.status ?? "").toUpperCase();
+      const statusLabel =
+        status === "COMPLETED"
+          ? "Retirado"
+          : status === "CANCELED" || status === "CANCELLED"
+            ? "Cancelado"
+            : "Pedido";
 
       normalized.push({
         occurredAt,
@@ -166,22 +185,37 @@ export async function GET(req: Request) {
           id: `order:${order.id}`,
           title: `Pedido #${String(order.id).slice(0, 8)}`,
           description: itemsLabel
-            ? `Compra de produto • ${itemsLabel}`
-            : "Compra de produto",
-          date: formatPreviewDate(occurredAt),
+            ? `${statusLabel} • ${itemsLabel}`
+            : `${statusLabel} • Compra de produto`,
+          date: formatPreviewDate(occurredAt), // ✅ data do evento
           icon: "shopping-bag",
         },
       });
     }
 
+    // ✅ agora sim: ordem decrescente pelas ações (updatedAt/canceledAt/etc)
     normalized.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
     const items = normalized.slice(0, 5).map((x) => x.item);
 
-    return NextResponse.json({ ok: true, items }, { headers: corsHeaders() });
+    // (mantive seu debug que estava ajudando demais)
+    const _debug = {
+      apptsTotal: doneAppointments.length + canceledAppointments.length,
+      doneCount: doneAppointments.length,
+      canceledCount: canceledAppointments.length,
+      ordersTotal: orders.length,
+      productOrdersCount: productOrders.length,
+      normalizedCount: normalized.length,
+      topTypes: items.map((it) => String(it.id).split(":")[0]),
+    };
+
+    return NextResponse.json(
+      { ok: true, items, _debug },
+      { headers: corsHeaders() },
+    );
   } catch (err: any) {
     const message = err?.message || "Erro inesperado";
     return NextResponse.json(
-      { ok: false, error: message },
+      { ok: false, error: message, _debug: { where: "catch", message } },
       { status: 401, headers: corsHeaders() },
     );
   }

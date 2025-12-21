@@ -53,6 +53,7 @@ export default function ProductDetails() {
 
   const [loading, setLoading] = useState(true);
   const [product, setProduct] = useState<ApiProduct | null>(null);
+  const [reserving, setReserving] = useState(false);
 
   const fetchingRef = useRef(false);
 
@@ -144,14 +145,32 @@ export default function ProductDetails() {
       return;
     }
 
-    // ✅ Aqui é onde vamos ligar com o fluxo real de reserva:
-    // POST /api/mobile/orders/product-sale { productId, quantity: 1 }
-    // Por enquanto, deixo um placeholder bem claro:
-    Alert.alert(
-      "Reserva",
-      "Agora é só ligar o endpoint de reserva/pedido. Próximo passo ✅",
-    );
-  }, [product]);
+    if (reserving) return;
+
+    try {
+      setReserving(true);
+
+      // ✅ sem token manual (api já deve cuidar)
+      const res = await api.post<{
+        ok: boolean;
+        orderId?: string;
+        reservedUntil?: string;
+      }>("/api/mobile/orders", { productId, quantity: 1 });
+
+      const orderId = res?.orderId;
+
+      if (!res?.ok || !orderId) {
+        throw new Error("invalid_response");
+      }
+
+      router.push({ pathname: "/client/cart", params: { orderId } });
+    } catch (err) {
+      console.log("[reserve details] error:", err);
+      Alert.alert("Erro", "Não foi possível reservar agora. Tente novamente.");
+    } finally {
+      setReserving(false);
+    }
+  }, [product, reserving, router]);
 
   if (loading) {
     return (
@@ -254,7 +273,6 @@ export default function ProductDetails() {
         />
         <View style={S.heroOverlay} />
 
-        {/* ✅ Badge simples de estoque (sem mudar layout) */}
         <View style={S.stockPill}>
           <FontAwesome
             name={product.isOutOfStock ? "times" : "check"}
@@ -268,7 +286,6 @@ export default function ProductDetails() {
         </View>
       </View>
 
-      {/* HEADER FLOAT */}
       <View style={[S.headerFloat, { top: insets.top + 10 }]}>
         <Pressable onPress={() => router.back()} style={styles.iconBtn42}>
           <FontAwesome name="angle-left" size={20} color={UI.colors.white} />
@@ -280,7 +297,6 @@ export default function ProductDetails() {
         style={S.scroll}
         contentContainerStyle={{ paddingBottom: 140 }}
       >
-        {/* BLOCO PRINCIPAL (BRANCO) */}
         <View style={S.mainShell}>
           <View style={S.mainInner}>
             <Text style={S.category}>{product.category ?? "Produto"}</Text>
@@ -292,7 +308,6 @@ export default function ProductDetails() {
           </View>
         </View>
 
-        {/* CONTEÚDO */}
         <View style={S.whiteArea}>
           <View style={S.whiteContent}>
             <Text style={S.sectionTitle}>Sobre o produto</Text>
@@ -312,20 +327,31 @@ export default function ProductDetails() {
         </View>
       </ScrollView>
 
-      {/* CTA FIXO */}
       <View style={[S.ctaBar, { paddingBottom: insets.bottom + 12 }]}>
         <Pressable
           style={[
             styles.pillPrimary,
             S.ctaBtn,
-            product.isOutOfStock ? { opacity: 0.55 } : null,
+            product.isOutOfStock || reserving ? { opacity: 0.75 } : null,
           ]}
           onPress={onPressReserve}
-          disabled={product.isOutOfStock}
+          disabled={product.isOutOfStock || reserving}
         >
-          <FontAwesome name="shopping-bag" size={16} color={UI.colors.white} />
+          {reserving ? (
+            <ActivityIndicator />
+          ) : (
+            <FontAwesome
+              name="shopping-bag"
+              size={16}
+              color={UI.colors.white}
+            />
+          )}
           <Text style={styles.pillPrimaryText}>
-            {product.isOutOfStock ? "Esgotado" : "Reservar"}
+            {product.isOutOfStock
+              ? "Esgotado"
+              : reserving
+                ? "Reservando…"
+                : "Reservar"}
           </Text>
         </Pressable>
       </View>

@@ -41,10 +41,10 @@ type Product = {
   id: string;
   name: string;
   price: string;
-  oldPrice: string; // por enquanto vazio (API não tem)
+  oldPrice: string;
   image: string;
   isOutOfStock: boolean;
-  category: string | null; // ✅ vem do cadastro (API)
+  category: string | null;
 };
 
 function formatBRL(value: number) {
@@ -57,6 +57,15 @@ function formatBRL(value: number) {
     const v = Number.isFinite(value) ? value : 0;
     return `R$ ${v.toFixed(2).replace(".", ",")}`;
   }
+}
+
+function sumQtyFromOrder(order: any): number {
+  const items = Array.isArray(order?.items) ? order.items : [];
+  const total = items.reduce((acc: number, it: any) => {
+    const q = Number(it?.quantity ?? 0);
+    return acc + (Number.isFinite(q) ? q : 0);
+  }, 0);
+  return total > 0 ? total : 0;
 }
 
 type ProductsHeaderProps = {
@@ -92,9 +101,13 @@ const CategoryChip = memo(function CategoryChip({
 const ProductTile = memo(function ProductTile({
   item,
   onOpen,
+  onReserve,
+  reserving,
 }: {
   item: Product;
   onOpen: (id: string) => void;
+  onReserve: (id: string) => void;
+  reserving: boolean;
 }) {
   const hasOldPrice = !!item.oldPrice?.trim();
 
@@ -103,7 +116,6 @@ const ProductTile = memo(function ProductTile({
       <View style={S.productImgWrap}>
         <Image source={{ uri: item.image }} style={S.productImage} />
 
-        {/* ✅ único badge: ESGOTADO (roxinho) */}
         {item.isOutOfStock ? (
           <View style={S.outOfStockPill}>
             <Text style={S.outOfStockText}>ESGOTADO</Text>
@@ -141,20 +153,26 @@ const ProductTile = memo(function ProductTile({
           </Pressable>
         ) : (
           <Pressable
-            onPress={() => {
-              Alert.alert(
-                "Reservar",
-                "Em seguida vamos ligar o fluxo de reserva ✅",
-              );
-            }}
-            style={[styles.pillPrimary, S.reserveBtn]}
+            onPress={() => onReserve(item.id)}
+            disabled={reserving}
+            style={[
+              styles.pillPrimary,
+              S.reserveBtn,
+              reserving ? S.reserveBtnDisabled : null,
+            ]}
           >
-            <FontAwesome
-              name="shopping-bag"
-              size={14}
-              color={UI.colors.white}
-            />
-            <Text style={styles.pillPrimaryText}>Reservar</Text>
+            {reserving ? (
+              <ActivityIndicator />
+            ) : (
+              <FontAwesome
+                name="shopping-bag"
+                size={14}
+                color={UI.colors.white}
+              />
+            )}
+            <Text style={styles.pillPrimaryText}>
+              {reserving ? "Reservando…" : "Reservar"}
+            </Text>
           </Pressable>
         )}
       </View>
@@ -263,7 +281,6 @@ const ProductsHeader = memo(function ProductsHeader({
         <View style={S.whiteContent}>
           <View style={S.sectionRow}>
             <Text style={S.sectionTitle}>Catálogo</Text>
-
             <Text style={S.sectionMeta}>
               {loading ? "Carregando…" : `${totalCount} produto(s)`}
             </Text>
@@ -274,11 +291,18 @@ const ProductsHeader = memo(function ProductsHeader({
   );
 });
 
-const ProductsFooter = memo(function ProductsFooter() {
+const ProductsFooter = memo(function ProductsFooter({
+  onGoCart,
+}: {
+  onGoCart: () => void;
+}) {
   return (
     <View style={S.footerWrap}>
       <View style={S.bottomCTA}>
-        <Pressable style={[styles.pillPrimary, S.checkoutBtn]}>
+        <Pressable
+          style={[styles.pillPrimary, S.checkoutBtn]}
+          onPress={onGoCart}
+        >
           <Text style={[styles.pillPrimaryText, S.checkoutText]}>
             Ir para o carrinho
           </Text>
@@ -291,6 +315,7 @@ const ProductsFooter = memo(function ProductsFooter() {
 export default function Products() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+
   const { user, meLoading } = useAuth();
 
   const displayName = useMemo(
@@ -308,7 +333,16 @@ export default function Products() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [reservingId, setReservingId] = useState<string | null>(null);
+
+  // ✅ sacolinha pendente + badge count
+  const [pendingCartOrderId, setPendingCartOrderId] = useState<string | null>(
+    null,
+  );
+  const [pendingCartCount, setPendingCartCount] = useState<number>(0);
+
   const fetchingRef = useRef(false);
+  const cartFetchingRef = useRef(false);
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
 
@@ -324,6 +358,99 @@ export default function Products() {
       router.push({ pathname: "/(app)/(tabs)/products/[id]", params: { id } });
     },
     [router],
+  );
+
+  const fetchPendingCart = useCallback(async () => {
+    if (cartFetchingRef.current) return { id: null as string | null, count: 0 };
+    cartFetchingRef.current = true;
+
+    try {
+      const res: any = await api.get("/api/mobile/orders?view=bag&limit=1");
+
+      const list = (res?.orders ?? res?.items ?? []) as any[];
+      const first = Array.isArray(list) && list.length ? list[0] : null;
+
+      const id = first?.id ? String(first.id) : null;
+      const count = first ? sumQtyFromOrder(first) : 0;
+
+      setPendingCartOrderId(id);
+      setPendingCartCount(count);
+
+      return { id, count };
+    } catch (err: any) {
+      console.log(
+        "[products] fetchPendingCart error:",
+        err?.data ?? err?.message ?? err,
+      );
+      setPendingCartOrderId(null);
+      setPendingCartCount(0);
+      return { id: null as string | null, count: 0 };
+    } finally {
+      cartFetchingRef.current = false;
+    }
+  }, []);
+
+  const goCart = useCallback(async () => {
+    try {
+      const currentId = pendingCartOrderId;
+      if (currentId) {
+        router.push({
+          pathname: "/client/cart",
+          params: { orderId: currentId },
+        });
+        return;
+      }
+
+      const fresh = await fetchPendingCart();
+      if (fresh?.id) {
+        router.push({
+          pathname: "/client/cart",
+          params: { orderId: fresh.id },
+        });
+        return;
+      }
+
+      router.push("/client/cart");
+    } catch {
+      router.push("/client/cart");
+    }
+  }, [fetchPendingCart, pendingCartOrderId, router]);
+
+  const reserveProduct = useCallback(
+    async (productId: string) => {
+      if (!productId) return;
+      if (reservingId) return;
+
+      try {
+        setReservingId(productId);
+
+        const res = await api.post<{
+          ok: boolean;
+          orderId?: string;
+          reservedUntil?: string;
+        }>("/api/mobile/orders", { productId, quantity: 1 });
+
+        const orderId = res?.orderId;
+
+        if (!res?.ok || !orderId) {
+          throw new Error("invalid_response");
+        }
+
+        setPendingCartOrderId(String(orderId));
+        await fetchPendingCart();
+
+        router.push({ pathname: "/client/cart", params: { orderId } });
+      } catch (err) {
+        console.log("[reserve] error:", err);
+        Alert.alert(
+          "Erro",
+          "Não foi possível reservar agora. Tente novamente.",
+        );
+      } finally {
+        setReservingId(null);
+      }
+    },
+    [fetchPendingCart, reservingId, router],
   );
 
   const fetchAllProducts = useCallback(async () => {
@@ -352,7 +479,7 @@ export default function Products() {
         const page: ApiProduct[] = Array.isArray(res?.items) ? res.items : [];
         all.push(...page);
 
-        cursor = res?.nextCursor ?? null;
+        cursor = (res as any)?.nextCursor ?? null;
 
         if (!cursor) break;
         if (all.length >= MAX) break;
@@ -368,7 +495,7 @@ export default function Products() {
             id: String(p.id),
             name: String(p.name ?? "Produto"),
             price: formatBRL(Number(p.price ?? 0)),
-            oldPrice: "", // sem suporte na API por enquanto
+            oldPrice: "",
             image,
             isOutOfStock: !!p.isOutOfStock,
             category: p.category ? String(p.category) : null,
@@ -378,7 +505,6 @@ export default function Products() {
 
       setProducts(mapped);
 
-      // ✅ se a categoria ativa não existir mais, volta pra "all"
       const activeExists =
         activeCategory === "all" ||
         mapped.some(
@@ -404,10 +530,10 @@ export default function Products() {
   useFocusEffect(
     useCallback(() => {
       fetchAllProducts();
-    }, [fetchAllProducts]),
+      fetchPendingCart();
+    }, [fetchAllProducts, fetchPendingCart]),
   );
 
-  // ✅ Categorias vindas do cadastro (API)
   const categories = useMemo<Category[]>(() => {
     const normalize = (s: string) => s.trim().toLowerCase();
 
@@ -432,7 +558,6 @@ export default function Products() {
     );
   }, [products]);
 
-  // ✅ Busca sempre pelo título (name) + filtro por categoria
   const filteredProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
 
@@ -451,9 +576,14 @@ export default function Products() {
 
   const renderProduct = useCallback(
     ({ item }: ListRenderItemInfo<Product>) => (
-      <ProductTile item={item} onOpen={openProduct} />
+      <ProductTile
+        item={item}
+        onOpen={openProduct}
+        onReserve={reserveProduct}
+        reserving={reservingId === item.id}
+      />
     ),
-    [openProduct],
+    [openProduct, reserveProduct, reservingId],
   );
 
   const ListHeader = useMemo(
@@ -499,13 +629,20 @@ export default function Products() {
           </View>
 
           <View style={S.topRightRow}>
-            <Pressable style={styles.iconBtn42}>
+            <Pressable style={styles.iconBtn42} onPress={goCart}>
               <FontAwesome
                 name="shopping-bag"
                 size={18}
                 color={UI.colors.white}
               />
-              <View style={styles.iconDot} />
+
+              {pendingCartCount > 0 ? (
+                <View style={S.badge}>
+                  <Text style={S.badgeText}>
+                    {pendingCartCount > 99 ? "99+" : String(pendingCartCount)}
+                  </Text>
+                </View>
+              ) : null}
             </Pressable>
 
             <Pressable style={styles.iconBtn42}>
@@ -547,7 +684,7 @@ export default function Products() {
           style={S.list}
           contentContainerStyle={S.listContent}
           ListHeaderComponent={ListHeader}
-          ListFooterComponent={<ProductsFooter />}
+          ListFooterComponent={<ProductsFooter onGoCart={goCart} />}
           ListEmptyComponent={
             <View style={{ padding: 18 }}>
               <Text
@@ -584,8 +721,8 @@ const S = StyleSheet.create({
   },
 
   filtersCard: {
-    padding: UI.spacing.cardPad, // ✅ mesmo “ar” do heroCard da home
-    marginTop: 14, // ✅ mesmo respiro
+    padding: UI.spacing.cardPad,
+    marginTop: 14,
   },
 
   profileRow: { flexDirection: "row", gap: 12, alignItems: "center" },
@@ -593,6 +730,30 @@ const S = StyleSheet.create({
   name: { color: UI.colors.text, fontSize: 16, fontWeight: "700" },
 
   topRightRow: { flexDirection: "row", gap: 10, alignItems: "center" },
+
+  // ✅ badge mais pra direita e mais pra cima (alinhamento topo)
+  badge: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 6,
+    borderRadius: 999,
+    backgroundColor: UI.brand.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: UI.colors.bg,
+  },
+
+  badgeText: {
+    color: UI.colors.white,
+    fontSize: 11,
+    fontWeight: "900",
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
 
   list: { flex: 1, backgroundColor: UI.colors.white },
   listContent: { paddingBottom: 28 },
@@ -725,6 +886,9 @@ const S = StyleSheet.create({
   reserveBtn: {
     height: 40,
   },
+  reserveBtnDisabled: {
+    opacity: 0.75,
+  },
 
   heroBtn: {
     marginTop: 14,
@@ -795,7 +959,6 @@ const S = StyleSheet.create({
   },
   productImage: { height: 124, width: "100%" },
 
-  // ✅ ESGOTADO roxinho
   outOfStockPill: {
     position: "absolute",
     right: 10,
@@ -841,8 +1004,6 @@ const S = StyleSheet.create({
     fontSize: 12,
   },
 
-  addBtn: { height: 40, marginTop: 12 },
-
   footerWrap: {
     paddingHorizontal: UI.spacing.screenX,
     paddingTop: 8,
@@ -852,5 +1013,5 @@ const S = StyleSheet.create({
 
   bottomCTA: { gap: 10 },
   checkoutBtn: { height: 40 },
-  checkoutText: { fontSize: 16 },
+  checkoutText: { fontSize: 14 },
 });
