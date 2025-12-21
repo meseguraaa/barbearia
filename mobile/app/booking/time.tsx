@@ -1,4 +1,12 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+// app/booking/time.tsx
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   View,
   Text,
@@ -15,6 +23,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { UI } from "../../src/theme/client-theme";
 import { api } from "../../src/services/api";
+
+import { ScreenGate } from "../../src/components/layout/ScreenGate";
+import { BookingTimeSkeleton } from "../../src/components/loading/BookingTimeSkeleton";
 
 const STICKY_ROW_H = 74;
 
@@ -45,10 +56,7 @@ function weekdayShortPt(d: Date) {
   return map[d.getDay()] ?? "Dia";
 }
 
-/**
- * Pega a "data" (YYYY-MM-DD) de um ISO usando UTC parts (evita virar dia).
- * Ex: 2025-12-20T12:00:00.000Z -> 2025-12-20
- */
+/** YYYY-MM-DD via UTC parts */
 function isoDayKeyUTC(dateISO: string) {
   const d = new Date(dateISO);
   if (Number.isNaN(d.getTime())) return "";
@@ -57,10 +65,7 @@ function isoDayKeyUTC(dateISO: string) {
   )}`;
 }
 
-/**
- * Normaliza um horário para "HH:mm"
- * (resolve casos tipo "15:30:00", "15:30 ", "15:30:00.000")
- */
+/** Normaliza pra "HH:mm" */
 function normTime(t: string) {
   const s = String(t ?? "").trim();
   if (!s) return "";
@@ -74,19 +79,6 @@ type AppointmentGetResponse = {
   appointment: {
     id: string;
     status: string;
-    scheduleAtISO: string;
-    startsAtLabel: string;
-
-    unitId: string | null;
-    unitName: string | null;
-
-    serviceId: string | null;
-    serviceName: string | null;
-
-    barberId: string | null;
-    barberName: string | null;
-
-    serviceDurationMinutes: number;
 
     // ✅ para preservar o slot no edit
     dateISO: string; // ISO noon -03
@@ -161,11 +153,9 @@ export default function BookingTime() {
 
     serviceDurationMinutes?: string;
 
-    // ✅ edit mode
     mode?: string;
     appointmentId?: string;
 
-    // (opcional) se alguma tela já passar, usamos como fallback imediato
     currentDateISO?: string;
     currentStartTime?: string;
   }>();
@@ -203,13 +193,18 @@ export default function BookingTime() {
     [params.appointmentId],
   );
 
-  // ✅ estado interno do “horário original do agendamento”
+  // ✅ “horário original do agendamento”
   const [currentDateISO, setCurrentDateISO] = useState(
     String(params.currentDateISO ?? "").trim(),
   );
   const [currentStartTime, setCurrentStartTime] = useState(
     normTime(String(params.currentStartTime ?? "")),
   );
+
+  // ✅ Gate flags (pra não ficar preso)
+  const [dataReady, setDataReady] = useState(false);
+  const didEditFetchRef = useRef(false);
+  const didSlotsFetchRef = useRef(false);
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
   const safeTopStyle = useMemo(
@@ -231,21 +226,19 @@ export default function BookingTime() {
           ? `Hoje (${weekdayShortPt(d)})`
           : i === 1
             ? `Amanhã (${weekdayShortPt(d)})`
-            : `${weekdayShortPt(d)} • ${pad2(d.getDate())}/${pad2(
-                d.getMonth() + 1,
-              )}`;
+            : `${weekdayShortPt(d)} • ${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
 
       list.push({ key, label, dateISO: toISOAtNoon(d) });
     }
     return list;
   }, []);
 
-  // ✅ busca o agendamento no edit pra pegar dateISO/startTime com 100% de certeza
   const fetchCurrentAppointmentIfNeeded = useCallback(async () => {
-    if (!isEdit) return;
-    if (!appointmentId) return;
-
+    // ✅ sempre marca como concluído no finally
     try {
+      if (!isEdit) return;
+      if (!appointmentId) return;
+
       const res = await api.get<AppointmentGetResponse>(
         `/api/mobile/me/appointments/${encodeURIComponent(appointmentId)}`,
       );
@@ -268,6 +261,11 @@ export default function BookingTime() {
         "[booking/time][edit] get appointment error:",
         err?.data ?? err?.message ?? err,
       );
+      // não bloqueia a tela: segue com fallback do params
+    } finally {
+      didEditFetchRef.current = true;
+      // se não é edit, a gente nem precisa desse fetch pra liberar o gate
+      if (!isEdit) didEditFetchRef.current = true;
     }
   }, [appointmentId, isEdit, router]);
 
@@ -275,7 +273,6 @@ export default function BookingTime() {
     fetchCurrentAppointmentIfNeeded();
   }, [fetchCurrentAppointmentIfNeeded]);
 
-  // ✅ se estiver editando e tivermos currentDateISO, já seleciona esse dia (se estiver dentro dos 14)
   const initialSelectedDayKey = useMemo(() => {
     if (!isEdit || !currentDateISO) return days[0]?.key ?? "";
     const currentKey = isoDayKeyUTC(currentDateISO);
@@ -300,6 +297,20 @@ export default function BookingTime() {
   const [loading, setLoading] = useState(true);
   const [slots, setSlots] = useState<string[]>([]);
 
+  const syncGateReady = useCallback(() => {
+    // ✅ regra do gate:
+    // - modo normal: libera quando o primeiro fetch de slots terminar
+    // - modo edit: libera quando (edit fetch terminou) E (slots fetch terminou)
+    if (!isEdit) {
+      if (didSlotsFetchRef.current) setDataReady(true);
+      return;
+    }
+
+    if (didEditFetchRef.current && didSlotsFetchRef.current) {
+      setDataReady(true);
+    }
+  }, [isEdit]);
+
   const fetchSlots = useCallback(async () => {
     try {
       if (!unitId || !serviceId || !barberId || !selectedDateISO) {
@@ -311,20 +322,15 @@ export default function BookingTime() {
       setLoading(true);
 
       const res = await api.get<{ ok: boolean; slots: string[] }>(
-        `/api/mobile/availability?barberId=${encodeURIComponent(
-          barberId,
-        )}&unitId=${encodeURIComponent(unitId)}&serviceId=${encodeURIComponent(
-          serviceId,
-        )}&dateISO=${encodeURIComponent(selectedDateISO)}${
+        `/api/mobile/availability?barberId=${encodeURIComponent(barberId)}&unitId=${encodeURIComponent(
+          unitId,
+        )}&serviceId=${encodeURIComponent(serviceId)}&dateISO=${encodeURIComponent(selectedDateISO)}${
           serviceDurationMinutes
-            ? `&serviceDurationInMinutes=${encodeURIComponent(
-                serviceDurationMinutes,
-              )}`
+            ? `&serviceDurationInMinutes=${encodeURIComponent(serviceDurationMinutes)}`
             : ""
         }`,
       );
 
-      // ✅ normaliza para garantir comparação com currentStartTime
       setSlots((res?.slots ?? []).map(normTime).filter(Boolean));
     } catch (err: any) {
       console.log("[booking/time] error:", err?.data ?? err?.message ?? err);
@@ -335,6 +341,8 @@ export default function BookingTime() {
       );
     } finally {
       setLoading(false);
+      didSlotsFetchRef.current = true;
+      syncGateReady();
     }
   }, [
     barberId,
@@ -343,11 +351,17 @@ export default function BookingTime() {
     serviceId,
     unitId,
     serviceDurationMinutes,
+    syncGateReady,
   ]);
 
   useEffect(() => {
     fetchSlots();
   }, [fetchSlots]);
+
+  // ✅ re-avalia o gate quando o fetch do edit terminar (pra não depender da ordem)
+  useEffect(() => {
+    syncGateReady();
+  }, [currentDateISO, currentStartTime, syncGateReady]);
 
   const sameDayAsCurrent = useMemo(() => {
     if (!isEdit || !currentDateISO || !selectedDateISO) return false;
@@ -438,120 +452,125 @@ export default function BookingTime() {
   );
 
   return (
-    <View style={S.page}>
-      <View style={S.fixedTop}>
-        <View style={safeTopStyle} />
+    <ScreenGate dataReady={dataReady} skeleton={<BookingTimeSkeleton />}>
+      <View style={S.page}>
+        <View style={S.fixedTop}>
+          <View style={safeTopStyle} />
 
-        <View style={S.stickyRow}>
-          <Pressable onPress={goBack} style={S.backBtn}>
-            <FontAwesome
-              name="chevron-left"
-              size={18}
-              color={UI.colors.white}
-            />
-          </Pressable>
+          <View style={S.stickyRow}>
+            <Pressable onPress={goBack} style={S.backBtn}>
+              <FontAwesome
+                name="chevron-left"
+                size={18}
+                color={UI.colors.white}
+              />
+            </Pressable>
 
-          <Text style={S.title}>
-            {isEdit ? "Alterar agendamento" : "Agendamento"}
-          </Text>
-          <View style={{ width: 42, height: 42 }} />
+            <Text style={S.title}>
+              {isEdit ? "Alterar agendamento" : "Agendamento"}
+            </Text>
+            <View style={{ width: 42, height: 42 }} />
+          </View>
         </View>
-      </View>
 
-      <View
-        pointerEvents="none"
-        style={[S.topBounceDark, { height: topBounceHeight }]}
-      />
-      <View style={{ height: TOP_OFFSET }} />
+        <View
+          pointerEvents="none"
+          style={[S.topBounceDark, { height: topBounceHeight }]}
+        />
+        <View style={{ height: TOP_OFFSET }} />
 
-      <View style={S.darkShell}>
-        <View style={S.darkInner}>
-          <View style={S.heroCard}>
-            <Text style={S.heroTitle}>Escolha o horário</Text>
+        <View style={S.darkShell}>
+          <View style={S.darkInner}>
+            <View style={S.heroCard}>
+              <Text style={S.heroTitle}>Escolha o horário</Text>
 
-            <Text style={S.heroDesc}>
-              {unitName ? `Unidade: ${unitName}` : " "}
-              {serviceName ? `\nServiço: ${serviceName}` : ""}
-              {barberName ? `\nProfissional: ${barberName}` : ""}
-            </Text>
+              <Text style={S.heroDesc}>
+                {unitName ? `Unidade: ${unitName}` : " "}
+                {serviceName ? `\nServiço: ${serviceName}` : ""}
+                {barberName ? `\nProfissional: ${barberName}` : ""}
+              </Text>
 
-            <Text style={S.heroNote}>
-              Primeiro selecione o dia. Depois, o horário.
-            </Text>
+              <Text style={S.heroNote}>
+                Primeiro selecione o dia. Depois, o horário.
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={S.whiteArea}>
+          <View style={S.whiteContent}>
+            <Text style={S.sectionTitle}>Dia</Text>
+
+            <FlatList
+              data={days}
+              keyExtractor={keyDay}
+              renderItem={renderDay}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ paddingBottom: 12 }}
+            />
+
+            {isEdit && currentStartTime ? (
+              <View style={{ marginTop: 6 }}>
+                <Pressable
+                  onPress={onKeepCurrentTime}
+                  disabled={!canKeepCurrentTime || loading}
+                  style={[
+                    S.keepBtn,
+                    !canKeepCurrentTime || loading ? { opacity: 0.5 } : null,
+                  ]}
+                >
+                  <Text style={S.keepBtnText}>
+                    Manter horário atual: {normTime(currentStartTime)}
+                  </Text>
+                </Pressable>
+
+                {!loading && sameDayAsCurrent && !canKeepCurrentTime ? (
+                  <Text style={S.keepHint}>
+                    Este horário não está disponível para a seleção atual.
+                  </Text>
+                ) : null}
+
+                {!loading && !sameDayAsCurrent ? (
+                  <Text style={S.keepHint}>
+                    Para manter o mesmo horário, selecione o mesmo dia do
+                    agendamento atual.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+
+            <Text style={[S.sectionTitle, { marginTop: 14 }]}>Horários</Text>
+
+            {loading ? (
+              <View style={S.centerBox}>
+                <ActivityIndicator />
+                <Text style={S.centerText}>Carregando…</Text>
+              </View>
+            ) : slots.length === 0 ? (
+              <View style={S.centerBox}>
+                <Text style={S.emptyTitle}>Sem horários para este dia</Text>
+                <Text style={S.centerText}>
+                  Tente outro dia ou volte e troque o profissional.
+                </Text>
+
+                <Pressable style={S.secondaryBtn} onPress={fetchSlots}>
+                  <Text style={S.secondaryBtnText}>Tentar novamente</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <FlatList
+                data={slots}
+                keyExtractor={keySlot}
+                renderItem={renderSlot}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 18 }}
+              />
+            )}
           </View>
         </View>
       </View>
-
-      <View style={S.whiteArea}>
-        <View style={S.whiteContent}>
-          <Text style={S.sectionTitle}>Dia</Text>
-
-          <FlatList
-            data={days}
-            keyExtractor={keyDay}
-            renderItem={renderDay}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 12 }}
-          />
-
-          {/* ✅ Manter horário atual (somente no editar) */}
-          {isEdit && currentStartTime ? (
-            <View style={{ marginTop: 6 }}>
-              <Pressable
-                onPress={onKeepCurrentTime}
-                disabled={!canKeepCurrentTime || loading}
-                style={[
-                  S.keepBtn,
-                  !canKeepCurrentTime || loading ? { opacity: 0.5 } : null,
-                ]}
-              >
-                <Text style={S.keepBtnText}>
-                  Manter horário atual: {normTime(currentStartTime)}
-                </Text>
-              </Pressable>
-
-              {!loading && sameDayAsCurrent && !canKeepCurrentTime ? (
-                <Text style={S.keepHint}>
-                  Este horário não está disponível para a seleção atual.
-                </Text>
-              ) : null}
-
-              {!loading && !sameDayAsCurrent ? (
-                <Text style={S.keepHint}>
-                  Para manter o mesmo horário, selecione o mesmo dia do
-                  agendamento atual.
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
-
-          <Text style={[S.sectionTitle, { marginTop: 14 }]}>Horários</Text>
-
-          {loading ? (
-            <View style={S.centerBox}>
-              <ActivityIndicator />
-              <Text style={S.centerText}>Carregando…</Text>
-            </View>
-          ) : slots.length === 0 ? (
-            <View style={S.centerBox}>
-              <Text style={S.emptyTitle}>Sem horários para este dia</Text>
-              <Text style={S.centerText}>
-                Tente outro dia ou volte e troque o profissional.
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              data={slots}
-              keyExtractor={keySlot}
-              renderItem={renderSlot}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 18 }}
-            />
-          )}
-        </View>
-      </View>
-    </View>
+    </ScreenGate>
   );
 }
 
@@ -651,6 +670,17 @@ const S = StyleSheet.create({
     fontSize: 16,
     textAlign: "center",
   },
+
+  secondaryBtn: {
+    marginTop: 8,
+    height: 52,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 18,
+  },
+  secondaryBtnText: { color: UI.brand.primaryText, fontWeight: "700" },
 
   dayChip: {
     height: 44,

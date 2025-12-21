@@ -1,4 +1,12 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+// app/booking/unit.tsx
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   View,
   Text,
@@ -16,11 +24,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UI } from "../../src/theme/client-theme";
 import { api } from "../../src/services/api";
 
+import { ScreenGate } from "../../src/components/layout/ScreenGate";
+import { BookingUnitSkeleton } from "../../src/components/loading/BookingUnitSkeleton";
+
 const STICKY_ROW_H = 74;
 
 type Unit = { id: string; name: string };
 
-// ✅ resposta real do GET /api/mobile/me/appointments/:id (pelo seu route.ts)
 type AppointmentGetResponse = {
   ok: boolean;
   appointment: {
@@ -90,9 +100,11 @@ export default function BookingUnit() {
 
   const [loading, setLoading] = useState(true);
   const [units, setUnits] = useState<Unit[]>([]);
-
-  // ✅ no edit, guardamos só o unitId atual do agendamento
   const [currentUnitId, setCurrentUnitId] = useState<string | null>(null);
+
+  // ✅ gate: sempre libera depois do primeiro ciclo (mesmo que bypass navegue)
+  const didBootRef = useRef(false);
+  const [dataReady, setDataReady] = useState(false);
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
 
@@ -189,19 +201,18 @@ export default function BookingUnit() {
         "/api/mobile/units",
       );
 
-      const list: Unit[] = res?.units ?? [];
+      const list: Unit[] = Array.isArray(res?.units) ? res.units : [];
       setUnits(list);
 
       if (__DEV__) console.log("[booking/unit] units:", list.length);
 
-      // ✅ BYPASS AQUI (sem depender de useEffect)
-      // 1) se só tem 1 unidade, pula direto
+      // ✅ bypass: 1 unidade
       if (list.length === 1) {
         goService(list[0], true);
         return;
       }
 
-      // 2) se edit e existe unitId atual dentro da lista, pula direto nela
+      // ✅ bypass: edit com unit atual
       if (isEdit && currentUnitId) {
         const current = list.find((u) => u.id === currentUnitId);
         if (current) {
@@ -225,10 +236,25 @@ export default function BookingUnit() {
   }, [currentUnitId, goService, isEdit]);
 
   useEffect(() => {
-    // ✅ no edit, primeiro pega o unitId atual. Depois carrega units e faz bypass.
-    fetchCurrentAppointmentIfNeeded().finally(() => {
-      fetchUnits();
-    });
+    let alive = true;
+
+    (async () => {
+      try {
+        // ✅ no edit, primeiro pega unitId do agendamento
+        await fetchCurrentAppointmentIfNeeded();
+        if (!alive) return;
+
+        await fetchUnits();
+      } finally {
+        // ✅ anti-loading eterno: libera a tela depois do primeiro boot
+        didBootRef.current = true;
+        if (alive) setDataReady(true);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
   }, [fetchCurrentAppointmentIfNeeded, fetchUnits]);
 
   const key = useCallback((item: Unit) => item.id, []);
@@ -244,79 +270,83 @@ export default function BookingUnit() {
   );
 
   return (
-    <View style={S.page}>
-      <View style={S.fixedTop}>
-        <View style={safeTopStyle} />
-        <View style={S.stickyRow}>
-          <Pressable onPress={goBack} style={S.backBtn}>
-            <FontAwesome
-              name="chevron-left"
-              size={18}
-              color={UI.colors.white}
-            />
-          </Pressable>
+    <ScreenGate dataReady={dataReady} skeleton={<BookingUnitSkeleton />}>
+      <View style={S.page}>
+        <View style={S.fixedTop}>
+          <View style={safeTopStyle} />
+          <View style={S.stickyRow}>
+            <Pressable onPress={goBack} style={S.backBtn}>
+              <FontAwesome
+                name="chevron-left"
+                size={18}
+                color={UI.colors.white}
+              />
+            </Pressable>
 
-          <Text style={S.title}>
-            {isEdit ? "Alterar agendamento" : "Agendamento"}
-          </Text>
-          <View style={{ width: 42, height: 42 }} />
-        </View>
-      </View>
-
-      <View
-        pointerEvents="none"
-        style={[S.topBounceDark, { height: topBounceHeight }]}
-      />
-
-      <View style={{ height: TOP_OFFSET }} />
-
-      <View style={S.darkShell}>
-        <View style={S.darkInner}>
-          <View style={S.heroCard}>
-            <Text style={S.heroTitle}>Escolha a unidade</Text>
-            <Text style={S.heroDesc}>
-              Se houver apenas uma, a gente pula automaticamente.
+            <Text style={S.title}>
+              {isEdit ? "Alterar agendamento" : "Agendamento"}
             </Text>
+            <View style={{ width: 42, height: 42 }} />
+          </View>
+        </View>
 
-            {isEdit ? (
+        <View
+          pointerEvents="none"
+          style={[S.topBounceDark, { height: topBounceHeight }]}
+        />
+
+        <View style={{ height: TOP_OFFSET }} />
+
+        <View style={S.darkShell}>
+          <View style={S.darkInner}>
+            <View style={S.heroCard}>
+              <Text style={S.heroTitle}>Escolha a unidade</Text>
               <Text style={S.heroDesc}>
-                {"\n"}Estamos abrindo a edição do seu agendamento.
+                Se houver apenas uma, a gente pula automaticamente.
               </Text>
-            ) : null}
+
+              {isEdit ? (
+                <Text style={S.heroDesc}>
+                  {"\n"}Estamos abrindo a edição do seu agendamento.
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        </View>
+
+        <View style={S.whiteArea}>
+          <View style={S.whiteContent}>
+            <Text style={S.sectionTitle}>Unidades</Text>
+
+            {loading ? (
+              <View style={S.centerBox}>
+                <ActivityIndicator />
+                <Text style={S.centerText}>Carregando…</Text>
+              </View>
+            ) : units.length === 0 ? (
+              <View style={S.centerBox}>
+                <Text style={S.emptyTitle}>Nenhuma unidade disponível</Text>
+                <Text style={S.centerText}>
+                  Não encontramos unidades ativas.
+                </Text>
+
+                <Pressable style={S.secondaryBtn} onPress={fetchUnits}>
+                  <Text style={S.secondaryBtnText}>Tentar novamente</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <FlatList
+                data={units}
+                keyExtractor={key}
+                renderItem={render}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 18 }}
+              />
+            )}
           </View>
         </View>
       </View>
-
-      <View style={S.whiteArea}>
-        <View style={S.whiteContent}>
-          <Text style={S.sectionTitle}>Unidades</Text>
-
-          {loading ? (
-            <View style={S.centerBox}>
-              <ActivityIndicator />
-              <Text style={S.centerText}>Carregando…</Text>
-            </View>
-          ) : units.length === 0 ? (
-            <View style={S.centerBox}>
-              <Text style={S.emptyTitle}>Nenhuma unidade disponível</Text>
-              <Text style={S.centerText}>Não encontramos unidades ativas.</Text>
-
-              <Pressable style={S.secondaryBtn} onPress={fetchUnits}>
-                <Text style={S.secondaryBtnText}>Tentar novamente</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <FlatList
-              data={units}
-              keyExtractor={key}
-              renderItem={render}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 18 }}
-            />
-          )}
-        </View>
-      </View>
-    </View>
+    </ScreenGate>
   );
 }
 

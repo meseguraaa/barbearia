@@ -1,4 +1,4 @@
-import React, { memo, useEffect, useMemo, useState } from "react";
+import React, { memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -21,8 +21,13 @@ import { UI, styles } from "../../../src/theme/client-theme";
 import { useAuth } from "../../../src/auth/auth-context";
 import { apiFetch } from "../../../src/lib/api";
 
+import { ScreenGate } from "../../../src/components/layout/ScreenGate";
+import { ProfileSkeleton } from "../../../src/components/loading/ProfileSkeleton";
+
 const STICKY_ROW_H = 74;
 const IOS_ACCESSORY_ID = "profileEmptyAccessory";
+
+const AVATAR_PLACEHOLDER = "https://i.pravatar.cc/200?img=12";
 
 /* ===========================
  * Máscaras (sem libs)
@@ -122,7 +127,6 @@ const Field = memo(function Field({
           editable={editable}
           onChangeText={onChangeText}
           keyboardType={keyboardType}
-          // ✅ remove Next/Done bar no iOS
           inputAccessoryViewID={
             Platform.OS === "ios" ? IOS_ACCESSORY_ID : undefined
           }
@@ -144,10 +148,14 @@ export default function Profile() {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [avatar, setAvatar] = useState("https://i.pravatar.cc/200?img=12");
+  const [avatar, setAvatar] = useState(AVATAR_PLACEHOLDER);
 
   const [phone, setPhone] = useState("");
   const [birth, setBirth] = useState("");
+
+  // ✅ gate: só precisa garantir que /me terminou 1 vez
+  const didMeRef = useRef(false);
+  const [dataReady, setDataReady] = useState(false);
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
   const topBounceHeight = useMemo(() => TOP_OFFSET + 1400, [TOP_OFFSET]);
@@ -170,6 +178,7 @@ export default function Profile() {
     }
   }
 
+  // Carrega /me (1x por mount). Se você quiser recarregar ao focar depois, eu adapto.
   useEffect(() => {
     let alive = true;
 
@@ -184,15 +193,24 @@ export default function Profile() {
 
         setName(u.name ?? "");
         setEmail(u.email ?? "");
-        // ✅ foto do provider (Google/Facebook) salva em user.image (NextAuth)
-        setAvatar(u.image ?? "https://i.pravatar.cc/200?img=12");
+
+        // ✅ avatar vem do provider (ou placeholder)
+        setAvatar(u.image?.trim() ? u.image : AVATAR_PLACEHOLDER);
 
         setPhone(u.phone ? maskPhone(u.phone) : "");
         setBirth(maskDate(formatBirthdayBR(u.birthday)));
       } catch {
         Alert.alert("Erro", "Não foi possível carregar seus dados.");
+        setAvatar(AVATAR_PLACEHOLDER);
       } finally {
-        if (alive) setLoadingMe(false);
+        if (!alive) return;
+        setLoadingMe(false);
+
+        // ✅ libera uma vez e não mexe mais (evita skeleton piscando)
+        if (!didMeRef.current) {
+          didMeRef.current = true;
+          setDataReady(true);
+        }
       }
     })();
 
@@ -228,7 +246,6 @@ export default function Profile() {
         }),
       });
 
-      // ✅ depois de salvar → home
       router.replace("/(app)/(tabs)/home");
     } catch (e: any) {
       Alert.alert("Erro", e?.message || "Não foi possível salvar.");
@@ -238,159 +255,159 @@ export default function Profile() {
   }
 
   return (
-    <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? STICKY_ROW_H : 0}
-    >
-      <View style={S.page}>
-        {/* ✅ iOS acessório vazio: remove Next/Done */}
-        {Platform.OS === "ios" ? (
-          <InputAccessoryView nativeID={IOS_ACCESSORY_ID}>
-            <View />
-          </InputAccessoryView>
-        ) : null}
+    <ScreenGate dataReady={dataReady} skeleton={<ProfileSkeleton />}>
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? STICKY_ROW_H : 0}
+      >
+        <View style={S.page}>
+          {Platform.OS === "ios" ? (
+            <InputAccessoryView nativeID={IOS_ACCESSORY_ID}>
+              <View />
+            </InputAccessoryView>
+          ) : null}
 
-        {/* TOPO FIXO */}
-        <View style={S.fixedTop}>
-          <View style={safeTopStyle} />
-          <View style={S.stickyRow}>
-            <Text style={S.title}>Perfil</Text>
+          {/* TOPO FIXO */}
+          <View style={S.fixedTop}>
+            <View style={safeTopStyle} />
+            <View style={S.stickyRow}>
+              <Text style={S.title}>Perfil</Text>
+            </View>
           </View>
-        </View>
 
-        <ScrollView
-          style={S.scroll}
-          contentContainerStyle={scrollContentStyle}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="interactive"
-          {...(Platform.OS === "ios"
-            ? ({ automaticallyAdjustKeyboardInsets: true } as any)
-            : null)}
-        >
-          {/* topo escuro no overscroll */}
-          <View
-            pointerEvents="none"
-            style={[S.topBounceDark, { height: topBounceHeight }]}
-          />
+          <ScrollView
+            style={S.scroll}
+            contentContainerStyle={scrollContentStyle}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
+            {...(Platform.OS === "ios"
+              ? ({ automaticallyAdjustKeyboardInsets: true } as any)
+              : null)}
+          >
+            <View
+              pointerEvents="none"
+              style={[S.topBounceDark, { height: topBounceHeight }]}
+            />
 
-          {/* spacer topo fixo */}
-          <View style={{ height: TOP_OFFSET, backgroundColor: UI.colors.bg }} />
+            <View
+              style={{ height: TOP_OFFSET, backgroundColor: UI.colors.bg }}
+            />
 
-          {/* BLOCO ESCURO */}
-          <View style={S.darkShell}>
-            <View style={S.darkInner}>
-              <View style={styles.glassCard}>
-                <View style={S.profileHeroRow}>
-                  {/* ✅ sem upload: foto vem do provider */}
-                  <View style={S.avatarWrap}>
-                    <Image source={{ uri: avatar }} style={S.avatarBig} />
-                    <View style={S.avatarBadge}>
-                      <FontAwesome
-                        name="user"
-                        size={12}
-                        color={UI.colors.white}
-                      />
+            {/* BLOCO ESCURO */}
+            <View style={S.darkShell}>
+              <View style={S.darkInner}>
+                <View style={styles.glassCard}>
+                  <View style={S.profileHeroRow}>
+                    <View style={S.avatarWrap}>
+                      <Image source={{ uri: avatar }} style={S.avatarBig} />
+                      <View style={S.avatarBadge}>
+                        <FontAwesome
+                          name="user"
+                          size={12}
+                          color={UI.colors.white}
+                        />
+                      </View>
+                    </View>
+
+                    <View style={S.heroTextCol}>
+                      <Text style={S.heroHello}>
+                        Seus dados{loadingMe ? "…" : ""}
+                      </Text>
+                      <Text style={S.heroName} numberOfLines={1}>
+                        {name || " "}
+                      </Text>
+                      <Text style={S.heroEmail} numberOfLines={1}>
+                        {email || " "}
+                      </Text>
                     </View>
                   </View>
+                </View>
 
-                  <View style={S.heroTextCol}>
-                    <Text style={S.heroHello}>
-                      Seus dados{loadingMe ? "…" : ""}
-                    </Text>
-                    <Text style={S.heroName} numberOfLines={1}>
-                      {name || " "}
-                    </Text>
-                    <Text style={S.heroEmail} numberOfLines={1}>
-                      {email || " "}
-                    </Text>
-                  </View>
+                <View style={S.hintRow}>
+                  <FontAwesome
+                    name="lock"
+                    size={14}
+                    color="rgba(255,255,255,0.75)"
+                  />
+                  <Text style={S.hintText}>
+                    A foto vem do login social. Upload fica pra depois.
+                  </Text>
                 </View>
               </View>
+            </View>
 
-              <View style={S.hintRow}>
-                <FontAwesome
-                  name="lock"
-                  size={14}
-                  color="rgba(255,255,255,0.75)"
-                />
-                <Text style={S.hintText}>
-                  A foto vem do login social. Upload fica pra depois.
-                </Text>
+            {/* ÁREA BRANCA */}
+            <View style={S.whiteArea}>
+              <View style={S.whiteContent}>
+                <Text style={S.sectionTitle}>Informações</Text>
+
+                <View style={S.formCard}>
+                  <Field
+                    label="Nome"
+                    value={name}
+                    placeholder="Seu nome completo"
+                    icon="user"
+                    editable={false}
+                  />
+                  <View style={S.divider} />
+
+                  <Field
+                    label="E-mail"
+                    value={email}
+                    placeholder="seu@email.com"
+                    icon="envelope"
+                    editable={false}
+                  />
+                  <View style={S.divider} />
+
+                  <Field
+                    label="Telefone"
+                    value={phone}
+                    placeholder="(00) 00000-0000"
+                    icon="phone"
+                    editable={!loadingMe && !saving}
+                    onChangeText={(t) => setPhone(maskPhone(t))}
+                    keyboardType="number-pad"
+                  />
+                  <View style={S.divider} />
+
+                  <Field
+                    label="Data de nascimento"
+                    value={birth}
+                    placeholder="dd/mm/aaaa"
+                    icon="calendar"
+                    editable={!loadingMe && !saving}
+                    onChangeText={(t) => setBirth(maskDate(t))}
+                    keyboardType="number-pad"
+                  />
+                </View>
+
+                <Pressable
+                  style={[
+                    S.primaryBtn,
+                    saving || loadingMe ? { opacity: 0.85 } : null,
+                  ]}
+                  onPress={handleSave}
+                  disabled={saving || loadingMe}
+                >
+                  {saving ? (
+                    <ActivityIndicator color={UI.colors.white} />
+                  ) : (
+                    <Text style={S.primaryBtnText}>Salvar alterações</Text>
+                  )}
+                </Pressable>
+
+                <Pressable style={S.dangerLink} onPress={handleLogout}>
+                  <Text style={S.dangerText}>Sair da conta</Text>
+                </Pressable>
               </View>
             </View>
-          </View>
-
-          {/* ÁREA BRANCA */}
-          <View style={S.whiteArea}>
-            <View style={S.whiteContent}>
-              <Text style={S.sectionTitle}>Informações</Text>
-
-              <View style={S.formCard}>
-                <Field
-                  label="Nome"
-                  value={name}
-                  placeholder="Seu nome completo"
-                  icon="user"
-                  editable={false}
-                />
-                <View style={S.divider} />
-
-                <Field
-                  label="E-mail"
-                  value={email}
-                  placeholder="seu@email.com"
-                  icon="envelope"
-                  editable={false}
-                />
-                <View style={S.divider} />
-
-                <Field
-                  label="Telefone"
-                  value={phone}
-                  placeholder="(00) 00000-0000"
-                  icon="phone"
-                  editable={!loadingMe && !saving}
-                  onChangeText={(t) => setPhone(maskPhone(t))}
-                  keyboardType="number-pad"
-                />
-                <View style={S.divider} />
-
-                <Field
-                  label="Data de nascimento"
-                  value={birth}
-                  placeholder="dd/mm/aaaa"
-                  icon="calendar"
-                  editable={!loadingMe && !saving}
-                  onChangeText={(t) => setBirth(maskDate(t))}
-                  keyboardType="number-pad"
-                />
-              </View>
-
-              <Pressable
-                style={[
-                  S.primaryBtn,
-                  saving || loadingMe ? { opacity: 0.85 } : null,
-                ]}
-                onPress={handleSave}
-                disabled={saving || loadingMe}
-              >
-                {saving ? (
-                  <ActivityIndicator color={UI.colors.white} />
-                ) : (
-                  <Text style={S.primaryBtnText}>Salvar alterações</Text>
-                )}
-              </Pressable>
-
-              <Pressable style={S.dangerLink} onPress={handleLogout}>
-                <Text style={S.dangerText}>Sair da conta</Text>
-              </Pressable>
-            </View>
-          </View>
-        </ScrollView>
-      </View>
-    </KeyboardAvoidingView>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </ScreenGate>
   );
 }
 

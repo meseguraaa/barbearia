@@ -1,4 +1,12 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+// app/booking/service.tsx
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   View,
   Text,
@@ -16,6 +24,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UI } from "../../src/theme/client-theme";
 import { api } from "../../src/services/api";
 
+import { ScreenGate } from "../../src/components/layout/ScreenGate";
+import { BookingServiceSkeleton } from "../../src/components/loading/BookingServiceSkeleton";
+
 const STICKY_ROW_H = 74;
 
 type Service = {
@@ -23,7 +34,7 @@ type Service = {
   name: string;
   durationMinutes?: number | null;
   priceLabel?: string | null;
-  price?: any; // Prisma Decimal pode vir como string/number
+  price?: any;
 };
 
 type EditPayload = {
@@ -57,10 +68,7 @@ function formatMoneyBRL(value: any): string | null {
 
   if (Number.isNaN(n)) return null;
 
-  return n.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
 function normalizeDurationMinutes(v: any): number {
@@ -73,14 +81,6 @@ function pad2(n: number) {
   return String(n).padStart(2, "0");
 }
 
-/**
- * Converte scheduleAt (ISO) em:
- * - dateISO ao meio-dia (pra usar no seu padrão do BookingTime)
- * - startTime HH:mm
- *
- * Observação: a gente usa os campos "locais" do Date (getFullYear etc)
- * porque scheduleAt já vem com offset do servidor.
- */
 function splitScheduleAt(scheduleAt: string | Date): {
   dateISO: string;
   startTime: string;
@@ -88,21 +88,13 @@ function splitScheduleAt(scheduleAt: string | Date): {
   const d = new Date(scheduleAt);
   if (Number.isNaN(d.getTime())) return { dateISO: "", startTime: "" };
 
-  const yyyy = d.getFullYear();
-  const mm = pad2(d.getMonth() + 1);
-  const dd = pad2(d.getDate());
-
   const hh = pad2(d.getHours());
   const mi = pad2(d.getMinutes());
 
-  // dateISO "safe" ao meio-dia
   const noon = new Date(d);
   noon.setHours(12, 0, 0, 0);
 
-  return {
-    dateISO: noon.toISOString(),
-    startTime: `${hh}:${mi}`,
-  };
+  return { dateISO: noon.toISOString(), startTime: `${hh}:${mi}` };
 }
 
 const ServiceRow = memo(function ServiceRow({
@@ -171,7 +163,6 @@ export default function BookingService() {
   const params = useLocalSearchParams<{
     unitId?: string;
     unitName?: string;
-
     mode?: string;
     appointmentId?: string;
   }>();
@@ -191,14 +182,22 @@ export default function BookingService() {
   const [loading, setLoading] = useState(true);
   const [services, setServices] = useState<Service[]>([]);
 
-  // ✅ dados do agendamento atual (modo editar)
   const [currentServiceId, setCurrentServiceId] = useState<string | null>(null);
   const [currentBarberId, setCurrentBarberId] = useState<string | null>(null);
   const [currentScheduleAt, setCurrentScheduleAt] = useState<string>("");
 
-  // ✅ derivados do scheduleAt (pra preservar horário)
   const [currentDateISO, setCurrentDateISO] = useState<string>("");
   const [currentStartTime, setCurrentStartTime] = useState<string>("");
+
+  // ✅ gate: libera depois que pelo menos 1 fetch (edit + services) terminar
+  const didEditRef = useRef(false);
+  const didServicesRef = useRef(false);
+  const [dataReady, setDataReady] = useState(false);
+
+  const recomputeReady = useCallback(() => {
+    const ok = (isEdit ? didEditRef.current : true) && didServicesRef.current;
+    if (ok) setDataReady(true);
+  }, [isEdit]);
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
   const safeTopStyle = useMemo(
@@ -218,36 +217,55 @@ export default function BookingService() {
       return;
     }
 
-    const res = await api.get<EditPayload>(
-      `/api/mobile/me/appointments/${appointmentId}/edit`,
-    );
+    try {
+      const res = await api.get<EditPayload>(
+        `/api/mobile/me/appointments/${appointmentId}/edit`,
+      );
 
-    if (!res?.ok) {
-      Alert.alert("Erro", "Não foi possível validar a edição.");
+      if (!res?.ok) {
+        Alert.alert("Erro", "Não foi possível validar a edição.");
+        router.back();
+        return;
+      }
+
+      if (res.rules?.canReschedule === false) {
+        Alert.alert(
+          "Não é possível alterar",
+          res.rules?.reason || "Bloqueado.",
+        );
+        router.back();
+        return;
+      }
+
+      const appt = res.appointment;
+      const scheduleAtStr =
+        appt?.scheduleAt instanceof Date
+          ? appt.scheduleAt.toISOString()
+          : String(appt?.scheduleAt ?? "");
+
+      setCurrentServiceId(appt?.serviceId ?? null);
+      setCurrentBarberId(appt?.barberId ?? null);
+      setCurrentScheduleAt(scheduleAtStr);
+
+      const { dateISO, startTime } = splitScheduleAt(scheduleAtStr);
+      setCurrentDateISO(dateISO);
+      setCurrentStartTime(startTime);
+    } catch (err: any) {
+      console.log(
+        "[booking/service][edit] error:",
+        err?.data ?? err?.message ?? err,
+      );
+      const msg =
+        err?.data?.error ||
+        err?.message ||
+        "Não foi possível validar a edição do agendamento.";
+      Alert.alert("Erro", String(msg));
       router.back();
-      return;
+    } finally {
+      didEditRef.current = true;
+      recomputeReady();
     }
-
-    if (res.rules?.canReschedule === false) {
-      Alert.alert("Não é possível alterar", res.rules?.reason || "Bloqueado.");
-      router.back();
-      return;
-    }
-
-    const appt = res.appointment;
-    const scheduleAtStr =
-      appt?.scheduleAt instanceof Date
-        ? appt.scheduleAt.toISOString()
-        : String(appt?.scheduleAt ?? "");
-
-    setCurrentServiceId(appt?.serviceId ?? null);
-    setCurrentBarberId(appt?.barberId ?? null);
-    setCurrentScheduleAt(scheduleAtStr);
-
-    const { dateISO, startTime } = splitScheduleAt(scheduleAtStr);
-    setCurrentDateISO(dateISO);
-    setCurrentStartTime(startTime);
-  }, [appointmentId, isEdit, router]);
+  }, [appointmentId, isEdit, recomputeReady, router]);
 
   const fetchServices = useCallback(async () => {
     if (!unitId) {
@@ -256,9 +274,9 @@ export default function BookingService() {
       return;
     }
 
-    setLoading(true);
-
     try {
+      setLoading(true);
+
       const res = await api.get<{ ok?: boolean; services?: Service[] }>(
         `/api/mobile/services?unitId=${encodeURIComponent(unitId)}`,
       );
@@ -266,7 +284,6 @@ export default function BookingService() {
       const list = (res?.services ?? [])
         .slice()
         .sort((a, b) => a.name.localeCompare(b.name));
-
       setServices(list);
     } catch (err: any) {
       console.log("[booking/service] error:", err?.data ?? err?.message ?? err);
@@ -277,37 +294,24 @@ export default function BookingService() {
       setServices([]);
     } finally {
       setLoading(false);
+      didServicesRef.current = true;
+      recomputeReady();
     }
-  }, [router, unitId]);
+  }, [recomputeReady, router, unitId]);
 
   useEffect(() => {
     let alive = true;
 
     (async () => {
-      try {
-        if (isEdit) await fetchEditInfoIfNeeded();
-      } catch (err: any) {
-        if (!alive) return;
-        console.log(
-          "[booking/service][edit] error:",
-          err?.data ?? err?.message ?? err,
-        );
-        const msg =
-          err?.data?.error ||
-          err?.message ||
-          "Não foi possível validar a edição do agendamento.";
-        Alert.alert("Erro", msg);
-        router.back();
-        return;
-      }
-
-      if (alive) await fetchServices();
+      if (isEdit) await fetchEditInfoIfNeeded();
+      if (!alive) return;
+      await fetchServices();
     })();
 
     return () => {
       alive = false;
     };
-  }, [fetchEditInfoIfNeeded, fetchServices, isEdit, router]);
+  }, [fetchEditInfoIfNeeded, fetchServices, isEdit]);
 
   const pushProfessional = useCallback(
     (s: Service, replace?: boolean) => {
@@ -327,7 +331,6 @@ export default function BookingService() {
                 mode: "edit",
                 appointmentId,
 
-                // ✅ contexto do agendamento atual (pra preservar horário depois)
                 currentServiceId: currentServiceId ?? "",
                 currentBarberId: currentBarberId ?? "",
                 currentScheduleAt: currentScheduleAt ?? "",
@@ -337,18 +340,6 @@ export default function BookingService() {
             : {}),
         },
       } as const;
-
-      if (__DEV__) {
-        console.log("[booking/service] pick:", {
-          serviceId: s.id,
-          serviceName: s.name,
-          duration,
-          isEdit,
-          appointmentId: isEdit ? appointmentId : undefined,
-          currentDateISO,
-          currentStartTime,
-        });
-      }
 
       if (replace) router.replace(nav);
       else router.push(nav);
@@ -367,10 +358,10 @@ export default function BookingService() {
     ],
   );
 
+  // ✅ bypass: 1 serviço só -> pula direto
   useEffect(() => {
     if (loading) return;
     if (!services || services.length !== 1) return;
-
     pushProfessional(services[0], true);
   }, [loading, pushProfessional, services]);
 
@@ -393,89 +384,92 @@ export default function BookingService() {
   );
 
   return (
-    <View style={S.page}>
-      <View style={S.fixedTop}>
-        <View style={safeTopStyle} />
+    <ScreenGate dataReady={dataReady} skeleton={<BookingServiceSkeleton />}>
+      <View style={S.page}>
+        <View style={S.fixedTop}>
+          <View style={safeTopStyle} />
 
-        <View style={S.stickyRow}>
-          <Pressable onPress={goBack} style={S.backBtn}>
-            <FontAwesome
-              name="chevron-left"
-              size={18}
-              color={UI.colors.white}
-            />
-          </Pressable>
+          <View style={S.stickyRow}>
+            <Pressable onPress={goBack} style={S.backBtn}>
+              <FontAwesome
+                name="chevron-left"
+                size={18}
+                color={UI.colors.white}
+              />
+            </Pressable>
 
-          <Text style={S.title}>
-            {isEdit ? "Alterar agendamento" : "Agendamento"}
-          </Text>
-
-          <View style={{ width: 42, height: 42 }} />
-        </View>
-      </View>
-
-      <View
-        pointerEvents="none"
-        style={[S.topBounceDark, { height: topBounceHeight }]}
-      />
-      <View style={{ height: TOP_OFFSET }} />
-
-      <View style={S.darkShell}>
-        <View style={S.darkInner}>
-          <View style={S.heroCard}>
-            <Text style={S.heroTitle}>Escolha o serviço</Text>
-
-            <Text style={S.heroDesc}>
-              {unitName ? `Unidade: ${unitName}` : " "}
+            <Text style={S.title}>
+              {isEdit ? "Alterar agendamento" : "Agendamento"}
             </Text>
 
-            {isEdit ? (
-              <Text style={S.heroNote}>
-                Serviço atual marcado como{" "}
-                <Text style={{ fontWeight: "700" }}>Atual</Text>. Horário atual:{" "}
-                <Text style={{ fontWeight: "700" }}>
-                  {currentStartTime || "--:--"}
-                </Text>
+            <View style={{ width: 42, height: 42 }} />
+          </View>
+        </View>
+
+        <View
+          pointerEvents="none"
+          style={[S.topBounceDark, { height: topBounceHeight }]}
+        />
+        <View style={{ height: TOP_OFFSET }} />
+
+        <View style={S.darkShell}>
+          <View style={S.darkInner}>
+            <View style={S.heroCard}>
+              <Text style={S.heroTitle}>Escolha o serviço</Text>
+
+              <Text style={S.heroDesc}>
+                {unitName ? `Unidade: ${unitName}` : " "}
               </Text>
+
+              {isEdit ? (
+                <Text style={S.heroNote}>
+                  Serviço atual marcado como{" "}
+                  <Text style={{ fontWeight: "700" }}>Atual</Text>. Horário
+                  atual:{" "}
+                  <Text style={{ fontWeight: "700" }}>
+                    {currentStartTime || "--:--"}
+                  </Text>
+                </Text>
+              ) : (
+                <Text style={S.heroNote}>Exibidos em ordem alfabética.</Text>
+              )}
+            </View>
+          </View>
+        </View>
+
+        <View style={S.whiteArea}>
+          <View style={S.whiteContent}>
+            <Text style={S.sectionTitle}>Serviços</Text>
+
+            {loading ? (
+              <View style={S.centerBox}>
+                <ActivityIndicator />
+                <Text style={S.centerText}>Carregando…</Text>
+              </View>
+            ) : services.length === 0 ? (
+              <View style={S.centerBox}>
+                <Text style={S.emptyTitle}>Nenhum serviço disponível</Text>
+                <Text style={S.centerText}>
+                  Não encontramos serviços ativos para essa unidade.
+                </Text>
+
+                <Pressable style={S.secondaryBtn} onPress={fetchServices}>
+                  <Text style={S.secondaryBtnText}>Tentar novamente</Text>
+                </Pressable>
+              </View>
             ) : (
-              <Text style={S.heroNote}>Exibidos em ordem alfabética.</Text>
+              <FlatList
+                data={services}
+                keyExtractor={key}
+                renderItem={render}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 18 }}
+              />
             )}
           </View>
         </View>
       </View>
-
-      <View style={S.whiteArea}>
-        <View style={S.whiteContent}>
-          <Text style={S.sectionTitle}>Serviços</Text>
-
-          {loading ? (
-            <View style={S.centerBox}>
-              <ActivityIndicator />
-              <Text style={S.centerText}>Carregando…</Text>
-            </View>
-          ) : services.length === 0 ? (
-            <View style={S.centerBox}>
-              <Text style={S.emptyTitle}>Nenhum serviço disponível</Text>
-              <Text style={S.centerText}>
-                Não encontramos serviços ativos para essa unidade.
-              </Text>
-
-              <Pressable style={S.secondaryBtn} onPress={fetchServices}>
-                <Text style={S.secondaryBtnText}>Tentar novamente</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <FlatList
-              data={services}
-              keyExtractor={key}
-              renderItem={render}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 18 }}
-            />
-          )}
-        </View>
-      </View>
-    </View>
+    </ScreenGate>
   );
 }
 

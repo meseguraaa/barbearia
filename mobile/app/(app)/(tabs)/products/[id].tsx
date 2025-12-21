@@ -1,3 +1,4 @@
+// app/(app)/(tabs)/products/[id].tsx  (ajuste o path conforme seu projeto)
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -15,6 +16,9 @@ import { FontAwesome } from "@expo/vector-icons";
 
 import { UI, styles } from "../../../../src/theme/client-theme";
 import { api } from "../../../../src/services/api";
+
+import { ScreenGate } from "../../../../src/components/layout/ScreenGate";
+import { ProductDetailsSkeleton } from "../../../../src/components/loading/ProductDetailsSkeleton";
 
 const HERO_H = 320;
 
@@ -57,8 +61,20 @@ export default function ProductDetails() {
 
   const fetchingRef = useRef(false);
 
+  // ✅ gate: libera quando a primeira tentativa terminar (sucesso/erro/vazio)
+  const [dataReady, setDataReady] = useState(false);
+
   const fetchProduct = useCallback(async () => {
-    if (!productId) return;
+    // sempre “segura” o gate quando for refazer o fetch (ex: tentar novamente)
+    setDataReady(false);
+
+    if (!productId) {
+      setLoading(false);
+      setProduct(null);
+      setDataReady(true);
+      return;
+    }
+
     if (fetchingRef.current) return;
     fetchingRef.current = true;
 
@@ -104,6 +120,9 @@ export default function ProductDetails() {
     } finally {
       setLoading(false);
       fetchingRef.current = false;
+
+      // ✅ SEMPRE libera o gate
+      setDataReady(true);
     }
   }, [productId]);
 
@@ -150,7 +169,6 @@ export default function ProductDetails() {
     try {
       setReserving(true);
 
-      // ✅ sem token manual (api já deve cuidar)
       const res = await api.post<{
         ok: boolean;
         orderId?: string;
@@ -170,192 +188,197 @@ export default function ProductDetails() {
     } finally {
       setReserving(false);
     }
-  }, [product, reserving, router]);
-
-  if (loading) {
-    return (
-      <View
-        style={[S.page, { alignItems: "center", justifyContent: "center" }]}
-      >
-        <ActivityIndicator />
-        <Text
-          style={{
-            marginTop: 10,
-            color: "rgba(0,0,0,0.55)",
-            fontWeight: "600",
-          }}
-        >
-          Carregando produto…
-        </Text>
-      </View>
-    );
-  }
-
-  if (!product) {
-    return (
-      <View style={S.page}>
-        <View style={[S.headerFloat, { top: insets.top + 10 }]}>
-          <Pressable onPress={() => router.back()} style={styles.iconBtn42}>
-            <FontAwesome name="angle-left" size={20} color={UI.colors.white} />
-          </Pressable>
-        </View>
-
-        <View
-          style={{ padding: UI.spacing.screenX, paddingTop: insets.top + 90 }}
-        >
-          <Text
-            style={{
-              fontSize: 18,
-              fontWeight: "700",
-              color: UI.brand.primaryText,
-            }}
-          >
-            Produto não encontrado
-          </Text>
-
-          <Text
-            style={{ marginTop: 8, color: "rgba(0,0,0,0.65)", fontSize: 14 }}
-          >
-            Esse produto pode ter sido removido, desativado ou você está sem
-            conexão.
-          </Text>
-
-          <Pressable
-            onPress={fetchProduct}
-            style={[
-              styles.pillPrimary,
-              {
-                marginTop: 14,
-                height: 52,
-                alignItems: "center",
-                justifyContent: "center",
-              },
-            ]}
-          >
-            <Text style={styles.pillPrimaryText}>Tentar novamente</Text>
-          </Pressable>
-
-          <Pressable
-            onPress={() => router.back()}
-            style={[
-              {
-                marginTop: 10,
-                height: 52,
-                alignItems: "center",
-                justifyContent: "center",
-                borderRadius: 999,
-                backgroundColor: "rgba(0,0,0,0.04)",
-                borderWidth: 1,
-                borderColor: "rgba(0,0,0,0.06)",
-              },
-            ]}
-          >
-            <Text style={{ fontWeight: "800", color: UI.brand.primaryText }}>
-              Voltar
-            </Text>
-          </Pressable>
-        </View>
-      </View>
-    );
-  }
+  }, [product, reserving, router, productId]);
 
   return (
-    <View style={S.page}>
-      {/* HERO IMAGE */}
-      <View style={{ height: HERO_H }}>
-        <Image
-          source={{
-            uri:
-              product.imageUrl ||
-              "https://picsum.photos/seed/product-placeholder/900/900",
-          }}
-          style={S.heroImage}
-        />
-        <View style={S.heroOverlay} />
-
-        <View style={S.stockPill}>
-          <FontAwesome
-            name={product.isOutOfStock ? "times" : "check"}
-            size={12}
-            color={UI.colors.white}
-            style={{ marginRight: 6 }}
-          />
-          <Text style={S.stockPillText}>
-            {product.isOutOfStock ? "Esgotado" : `Estoque: ${stockLabel}`}
+    <ScreenGate dataReady={dataReady} skeleton={<ProductDetailsSkeleton />}>
+      {/* fallback visual se ainda estiver carregando (normalmente o gate cobre) */}
+      {loading && !dataReady ? (
+        <View
+          style={[S.page, { alignItems: "center", justifyContent: "center" }]}
+        >
+          <ActivityIndicator />
+          <Text
+            style={{
+              marginTop: 10,
+              color: "rgba(0,0,0,0.55)",
+              fontWeight: "600",
+            }}
+          >
+            Carregando produto…
           </Text>
         </View>
-      </View>
-
-      <View style={[S.headerFloat, { top: insets.top + 10 }]}>
-        <Pressable onPress={() => router.back()} style={styles.iconBtn42}>
-          <FontAwesome name="angle-left" size={20} color={UI.colors.white} />
-        </Pressable>
-      </View>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        style={S.scroll}
-        contentContainerStyle={{ paddingBottom: 140 }}
-      >
-        <View style={S.mainShell}>
-          <View style={S.mainInner}>
-            <Text style={S.category}>{product.category ?? "Produto"}</Text>
-            <Text style={S.title}>{product.name}</Text>
-
-            <View style={S.priceRow}>
-              <Text style={S.price}>{priceLabel}</Text>
-            </View>
+      ) : !product ? (
+        <View style={S.page}>
+          <View style={[S.headerFloat, { top: insets.top + 10 }]}>
+            <Pressable onPress={() => router.back()} style={styles.iconBtn42}>
+              <FontAwesome
+                name="angle-left"
+                size={20}
+                color={UI.colors.white}
+              />
+            </Pressable>
           </View>
-        </View>
 
-        <View style={S.whiteArea}>
-          <View style={S.whiteContent}>
-            <Text style={S.sectionTitle}>Sobre o produto</Text>
-            <Text style={S.description}>
-              {product.description || "Sem descrição."}
+          <View
+            style={{ padding: UI.spacing.screenX, paddingTop: insets.top + 90 }}
+          >
+            <Text
+              style={{
+                fontSize: 18,
+                fontWeight: "700",
+                color: UI.brand.primaryText,
+              }}
+            >
+              Produto não encontrado
             </Text>
 
-            <View style={S.infoGrid}>
-              {extra.map((item) => (
-                <View key={item.label} style={S.infoItem}>
-                  <Text style={S.infoLabel}>{item.label}</Text>
-                  <Text style={S.infoValue}>{item.value}</Text>
-                </View>
-              ))}
-            </View>
+            <Text
+              style={{ marginTop: 8, color: "rgba(0,0,0,0.65)", fontSize: 14 }}
+            >
+              Esse produto pode ter sido removido, desativado ou você está sem
+              conexão.
+            </Text>
+
+            <Pressable
+              onPress={fetchProduct}
+              style={[
+                styles.pillPrimary,
+                {
+                  marginTop: 14,
+                  height: 52,
+                  alignItems: "center",
+                  justifyContent: "center",
+                },
+              ]}
+            >
+              <Text style={styles.pillPrimaryText}>Tentar novamente</Text>
+            </Pressable>
+
+            <Pressable
+              onPress={() => router.back()}
+              style={[
+                {
+                  marginTop: 10,
+                  height: 52,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 999,
+                  backgroundColor: "rgba(0,0,0,0.04)",
+                  borderWidth: 1,
+                  borderColor: "rgba(0,0,0,0.06)",
+                },
+              ]}
+            >
+              <Text style={{ fontWeight: "800", color: UI.brand.primaryText }}>
+                Voltar
+              </Text>
+            </Pressable>
           </View>
         </View>
-      </ScrollView>
-
-      <View style={[S.ctaBar, { paddingBottom: insets.bottom + 12 }]}>
-        <Pressable
-          style={[
-            styles.pillPrimary,
-            S.ctaBtn,
-            product.isOutOfStock || reserving ? { opacity: 0.75 } : null,
-          ]}
-          onPress={onPressReserve}
-          disabled={product.isOutOfStock || reserving}
-        >
-          {reserving ? (
-            <ActivityIndicator />
-          ) : (
-            <FontAwesome
-              name="shopping-bag"
-              size={16}
-              color={UI.colors.white}
+      ) : (
+        <View style={S.page}>
+          {/* HERO IMAGE */}
+          <View style={{ height: HERO_H }}>
+            <Image
+              source={{
+                uri:
+                  product.imageUrl ||
+                  "https://picsum.photos/seed/product-placeholder/900/900",
+              }}
+              style={S.heroImage}
             />
-          )}
-          <Text style={styles.pillPrimaryText}>
-            {product.isOutOfStock
-              ? "Esgotado"
-              : reserving
-                ? "Reservando…"
-                : "Reservar"}
-          </Text>
-        </Pressable>
-      </View>
-    </View>
+            <View style={S.heroOverlay} />
+
+            <View style={S.stockPill}>
+              <FontAwesome
+                name={product.isOutOfStock ? "times" : "check"}
+                size={12}
+                color={UI.colors.white}
+                style={{ marginRight: 6 }}
+              />
+              <Text style={S.stockPillText}>
+                {product.isOutOfStock ? "Esgotado" : `Estoque: ${stockLabel}`}
+              </Text>
+            </View>
+          </View>
+
+          <View style={[S.headerFloat, { top: insets.top + 10 }]}>
+            <Pressable onPress={() => router.back()} style={styles.iconBtn42}>
+              <FontAwesome
+                name="angle-left"
+                size={20}
+                color={UI.colors.white}
+              />
+            </Pressable>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={S.scroll}
+            contentContainerStyle={{ paddingBottom: 140 }}
+          >
+            <View style={S.mainShell}>
+              <View style={S.mainInner}>
+                <Text style={S.category}>{product.category ?? "Produto"}</Text>
+                <Text style={S.title}>{product.name}</Text>
+
+                <View style={S.priceRow}>
+                  <Text style={S.price}>{priceLabel}</Text>
+                </View>
+              </View>
+            </View>
+
+            <View style={S.whiteArea}>
+              <View style={S.whiteContent}>
+                <Text style={S.sectionTitle}>Sobre o produto</Text>
+                <Text style={S.description}>
+                  {product.description || "Sem descrição."}
+                </Text>
+
+                <View style={S.infoGrid}>
+                  {extra.map((item) => (
+                    <View key={item.label} style={S.infoItem}>
+                      <Text style={S.infoLabel}>{item.label}</Text>
+                      <Text style={S.infoValue}>{item.value}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            </View>
+          </ScrollView>
+
+          <View style={[S.ctaBar, { paddingBottom: insets.bottom + 12 }]}>
+            <Pressable
+              style={[
+                styles.pillPrimary,
+                S.ctaBtn,
+                product.isOutOfStock || reserving ? { opacity: 0.75 } : null,
+              ]}
+              onPress={onPressReserve}
+              disabled={product.isOutOfStock || reserving}
+            >
+              {reserving ? (
+                <ActivityIndicator />
+              ) : (
+                <FontAwesome
+                  name="shopping-bag"
+                  size={16}
+                  color={UI.colors.white}
+                />
+              )}
+              <Text style={styles.pillPrimaryText}>
+                {product.isOutOfStock
+                  ? "Esgotado"
+                  : reserving
+                    ? "Reservando…"
+                    : "Reservar"}
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+    </ScreenGate>
   );
 }
 

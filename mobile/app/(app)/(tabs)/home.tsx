@@ -7,7 +7,6 @@ import {
   StyleSheet,
   FlatList,
   ListRenderItemInfo,
-  ActivityIndicator,
   Alert,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
@@ -17,6 +16,9 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { UI } from "../../../src/theme/client-theme";
 import { useAuth } from "../../../src/auth/auth-context";
 import { api } from "../../../src/services/api";
+
+import { ScreenGate } from "../../../src/components/layout/ScreenGate";
+import { HomeSkeleton } from "../../../src/components/loading/HomeSkeleton";
 
 const STICKY_ROW_H = 74;
 
@@ -54,8 +56,6 @@ type NextAppt = {
   cancellationFeeNotice?: string | null;
 };
 
-type HistoryWithTs = HistoryItem & { ts: number };
-
 function formatBRL(value: number) {
   try {
     return new Intl.NumberFormat("pt-BR", {
@@ -76,236 +76,6 @@ function sumQtyFromOrder(order: any): number {
   }, 0);
   return total > 0 ? total : 0;
 }
-
-// ---------- helpers: histórico unificado (agendados + realizados + cancelados + pedidos) ----------
-
-function safeDateFromAny(v: any): Date | null {
-  if (!v) return null;
-  if (v instanceof Date && !Number.isNaN(v.getTime())) return v;
-
-  // number timestamp
-  if (typeof v === "number") {
-    const d = new Date(v);
-    return Number.isNaN(d.getTime()) ? null : d;
-  }
-
-  // ISO-ish string
-  if (typeof v === "string") {
-    const d = new Date(v);
-    if (!Number.isNaN(d.getTime())) return d;
-  }
-
-  return null;
-}
-
-function getTsFromRaw(raw: any): number {
-  // tenta achar algum campo típico de datas
-  const candidates = [
-    raw?.performedAt,
-    raw?.finishedAt,
-    raw?.completedAt,
-    raw?.cancelledAt,
-    raw?.canceledAt,
-    raw?.createdAt,
-    raw?.updatedAt,
-    raw?.startsAt,
-    raw?.scheduleAt,
-    raw?.date,
-    raw?.at,
-  ];
-
-  for (const c of candidates) {
-    const d = safeDateFromAny(c);
-    if (d) return d.getTime();
-  }
-
-  // fallback: tenta usar um label que às vezes vem como ISO
-  const d2 = safeDateFromAny(raw?.startsAtLabel);
-  if (d2) return d2.getTime();
-
-  return 0;
-}
-
-function formatDatePtBR(ts: number) {
-  if (!ts) return "";
-  try {
-    const d = new Date(ts);
-    return d.toLocaleString("pt-BR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "";
-  }
-}
-
-function normalizeHistoryItem(raw: any): HistoryWithTs | null {
-  if (!raw) return null;
-
-  // Se já veio no formato do app (endpoint antigo)
-  if (raw?.id && raw?.title && raw?.description && raw?.date && raw?.icon) {
-    const ts = getTsFromRaw(raw) || getTsFromRaw({ date: raw?.date });
-    return { ...raw, ts };
-  }
-
-  const kind = String(
-    raw?.kind ?? raw?.type ?? raw?.eventType ?? "",
-  ).toUpperCase();
-  const status = String(
-    raw?.status ?? raw?.appointmentStatus ?? "",
-  ).toUpperCase();
-
-  // heurística pra classificar quando backend não manda "type"
-  const looksLikeOrder =
-    !!raw?.items ||
-    !!raw?.orderId ||
-    !!raw?.total ||
-    String(raw?.code ?? "")
-      .toUpperCase()
-      .includes("ORDER");
-
-  const looksLikeAppointment =
-    !!raw?.serviceName ||
-    !!raw?.barberName ||
-    !!raw?.unitName ||
-    !!raw?.startsAt;
-
-  const looksLikeServiceDone =
-    status === "DONE" ||
-    status === "COMPLETED" ||
-    status === "FINISHED" ||
-    status === "REALIZADO" ||
-    !!raw?.performedAt ||
-    !!raw?.finishedAt ||
-    !!raw?.completedAt;
-
-  const looksLikeCancelled =
-    status === "CANCELLED" ||
-    status === "CANCELED" ||
-    status === "CANCELADO" ||
-    !!raw?.cancelledAt ||
-    !!raw?.canceledAt;
-
-  const ts = getTsFromRaw(raw);
-
-  // Pedido de produto
-  if (kind === "ORDER" || kind === "PRODUCT_ORDER" || looksLikeOrder) {
-    const id = String(raw?.id ?? raw?.orderId ?? "");
-    if (!id) return null;
-
-    const qty = sumQtyFromOrder(raw);
-    const total = Number(raw?.total ?? raw?.amount ?? 0);
-    const totalLabel =
-      Number.isFinite(total) && total > 0 ? formatBRL(total) : "";
-
-    return {
-      id: `order:${id}`,
-      title: "Pedido de produtos",
-      description:
-        qty > 0 && totalLabel
-          ? `${qty} item(s) • ${totalLabel}`
-          : qty > 0
-            ? `${qty} item(s)`
-            : totalLabel
-              ? totalLabel
-              : "Pedido registrado",
-      date: raw?.dateLabel || raw?.createdAtLabel || formatDatePtBR(ts),
-      icon: "shopping-bag",
-      ts,
-    };
-  }
-
-  // Serviço realizado
-  if (kind === "SERVICE_DONE" || kind === "DONE" || looksLikeServiceDone) {
-    const id = String(raw?.id ?? raw?.appointmentId ?? raw?.serviceLogId ?? "");
-    if (!id) return null;
-
-    const serviceName = String(raw?.serviceName ?? raw?.service ?? "Serviço");
-    const barberName = String(raw?.barberName ?? raw?.barber ?? "");
-    const unitName = String(raw?.unitName ?? raw?.unit ?? "");
-
-    const who = barberName ? ` com ${barberName}` : "";
-    const where = unitName ? ` • ${unitName}` : "";
-
-    return {
-      id: `done:${id}`,
-      title: "Serviço realizado ✅",
-      description: `${serviceName}${who}${where}`.trim(),
-      date:
-        raw?.dateLabel ||
-        raw?.finishedAtLabel ||
-        raw?.completedAtLabel ||
-        formatDatePtBR(ts),
-      icon: "scissors",
-      ts,
-    };
-  }
-
-  // Cancelado
-  if (kind === "CANCELLED" || looksLikeCancelled) {
-    const id = String(raw?.id ?? raw?.appointmentId ?? "");
-    if (!id) return null;
-
-    const serviceName = String(
-      raw?.serviceName ?? raw?.service ?? "Agendamento",
-    );
-    const unitName = String(raw?.unitName ?? raw?.unit ?? "");
-
-    return {
-      id: `cancel:${id}`,
-      title: "Cancelado",
-      description: unitName ? `${serviceName} • ${unitName}` : serviceName,
-      date:
-        raw?.dateLabel ||
-        raw?.cancelledAtLabel ||
-        raw?.canceledAtLabel ||
-        raw?.startsAtLabel ||
-        formatDatePtBR(ts),
-      icon: "times-circle",
-      ts,
-    };
-  }
-
-  // Agendamento (fallback)
-  if (kind === "APPOINTMENT" || looksLikeAppointment) {
-    const id = String(raw?.id ?? raw?.appointmentId ?? "");
-    if (!id) return null;
-
-    const serviceName = String(
-      raw?.serviceName ?? raw?.service ?? "Agendamento",
-    );
-    const barberName = String(raw?.barberName ?? raw?.barber ?? "");
-    const unitName = String(raw?.unitName ?? raw?.unit ?? "");
-
-    const desc = `${serviceName}${barberName ? ` com ${barberName}` : ""}${
-      unitName ? ` • ${unitName}` : ""
-    }`.trim();
-
-    return {
-      id: `appt:${id}`,
-      title: "Agendamento",
-      description: desc,
-      date: raw?.dateLabel || raw?.startsAtLabel || formatDatePtBR(ts),
-      icon: "calendar-check-o",
-      ts,
-    };
-  }
-
-  return null;
-}
-
-function sortDescAndTake5(list: HistoryWithTs[]) {
-  return list
-    .filter((x) => !!x?.id)
-    .sort((a, b) => (b.ts || 0) - (a.ts || 0))
-    .slice(0, 5)
-    .map(({ ts, ...rest }) => rest);
-}
-
-// ------------------------------------------------------------------------------------------------
 
 const ProductCard = memo(function ProductCard({
   item,
@@ -420,10 +190,7 @@ export default function Home() {
   const [nextLoading, setNextLoading] = useState(true);
 
   const [historyPreview, setHistoryPreview] = useState<HistoryItem[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
-
   const [products, setProducts] = useState<Product[]>([]);
-  const [productsLoading, setProductsLoading] = useState(true);
 
   // ✅ sacolinha pendente + badge count
   const [pendingCartOrderId, setPendingCartOrderId] = useState<string | null>(
@@ -435,6 +202,23 @@ export default function Home() {
   const fetchingRef = useRef(false);
   const fetchingHistoryRef = useRef(false);
   const fetchingProductsRef = useRef(false);
+
+  // ✅ gate da tela (só libera quando TODOS terminarem ao menos 1 vez)
+  const didNextRef = useRef(false);
+  const didHistoryRef = useRef(false);
+  const didProductsRef = useRef(false);
+  const didCartRef = useRef(false);
+  const [dataReady, setDataReady] = useState(false);
+
+  const recomputeReady = useCallback(() => {
+    if (dataReady) return; // já liberou, não precisa recalcular
+    const ok =
+      didNextRef.current &&
+      didHistoryRef.current &&
+      didProductsRef.current &&
+      didCartRef.current;
+    if (ok) setDataReady(true);
+  }, [dataReady]);
 
   const fetchNext = useCallback(async () => {
     if (fetchingRef.current) return;
@@ -449,54 +233,43 @@ export default function Home() {
 
       setNext(res?.next ?? null);
     } catch (err: any) {
-      console.log("[home] next error:", err?.data ?? err?.message ?? err);
       setNext(null);
     } finally {
       setNextLoading(false);
       fetchingRef.current = false;
+
+      didNextRef.current = true;
+      recomputeReady();
     }
-  }, []);
+  }, [recomputeReady]);
 
   const fetchHistoryPreview = useCallback(async () => {
     if (fetchingHistoryRef.current) return;
     fetchingHistoryRef.current = true;
 
     try {
-      setHistoryLoading(true);
-
       const res = await api.get<{
         ok: boolean;
         items: HistoryItem[];
         _debug?: any;
       }>("/api/mobile/me/history/preview");
 
-      // ✅ agora você VAI ver no console do app
-      console.log("[home] history preview _debug:", res?._debug);
-      console.log(
-        "[home] history preview items:",
-        Array.isArray(res?.items) ? res.items : [],
-      );
-
       setHistoryPreview(res?.ok && Array.isArray(res?.items) ? res.items : []);
     } catch (err: any) {
-      console.log(
-        "[home] history preview error:",
-        err?.data ?? err?.message ?? err,
-      );
       setHistoryPreview([]);
     } finally {
-      setHistoryLoading(false);
       fetchingHistoryRef.current = false;
+
+      didHistoryRef.current = true;
+      recomputeReady();
     }
-  }, []);
+  }, [recomputeReady]);
 
   const fetchProductsPreview = useCallback(async () => {
     if (fetchingProductsRef.current) return;
     fetchingProductsRef.current = true;
 
     try {
-      setProductsLoading(true);
-
       const res = await api.get<{
         ok?: boolean;
         items?: any[];
@@ -523,16 +296,14 @@ export default function Home() {
 
       setProducts(mapped);
     } catch (err: any) {
-      console.log(
-        "[home] products preview error:",
-        err?.data ?? err?.message ?? err,
-      );
       setProducts([]);
     } finally {
-      setProductsLoading(false);
       fetchingProductsRef.current = false;
+
+      didProductsRef.current = true;
+      recomputeReady();
     }
-  }, []);
+  }, [recomputeReady]);
 
   // ✅ pega sacolinha + soma quantidades (badge)
   const fetchPendingCart = useCallback(async () => {
@@ -553,17 +324,16 @@ export default function Home() {
 
       return { id, count };
     } catch (err: any) {
-      console.log(
-        "[home] fetchPendingCart error:",
-        err?.data ?? err?.message ?? err,
-      );
       setPendingCartOrderId(null);
       setPendingCartCount(0);
       return { id: null as string | null, count: 0 };
     } finally {
       cartFetchingRef.current = false;
+
+      didCartRef.current = true;
+      recomputeReady();
     }
-  }, []);
+  }, [recomputeReady]);
 
   useFocusEffect(
     useCallback(() => {
@@ -748,59 +518,74 @@ export default function Home() {
             <View style={S.heroCard}>
               {hasNext ? (
                 <>
-                  <View style={S.heroTitleRow}>
-                    <Text style={S.heroTitle} numberOfLines={1}>
-                      Seu agendamento - {startsAtInline}
-                    </Text>
-                  </View>
+                  {/* ✅ HERO dividido em 3 partes, com mais espaço entre elas */}
+                  <View style={S.heroSections}>
+                    {/* 1) Textos: "Seu agendamento..." até o profissional */}
+                    <View style={S.heroSection}>
+                      <View style={S.heroTitleRow}>
+                        <Text style={S.heroTitle} numberOfLines={1}>
+                          Seu agendamento - {startsAtInline}
+                        </Text>
+                      </View>
 
-                  <Text style={S.apptService} numberOfLines={1}>
-                    {next!.serviceName} com {next!.barberName}
-                  </Text>
-
-                  <View style={S.metaRow}>
-                    <View style={{ flex: 1, paddingRight: 10 }}>
-                      <Text style={S.apptMeta} numberOfLines={1}>
-                        {next!.unitName}
+                      <Text style={S.apptService} numberOfLines={1}>
+                        {next!.serviceName} com {next!.barberName}
                       </Text>
                     </View>
 
-                    <View
-                      style={[
-                        S.statusPill,
-                        isInService ? S.statusPillInService : null,
-                      ]}
-                    >
-                      <FontAwesome
-                        name={isInService ? "play" : "check"}
-                        size={12}
-                        color={UI.colors.black}
-                        style={{ marginRight: 6 }}
-                      />
-                      <Text style={S.statusText}>
-                        {isInService ? "ATENDIMENTO" : next!.statusLabel}
-                      </Text>
-                    </View>
-                  </View>
+                    {/* 2) Unidade + badge */}
+                    <View style={S.heroSection}>
+                      <View style={S.metaRow}>
+                        <View style={{ flex: 1, paddingRight: 10 }}>
+                          <Text style={S.apptMeta} numberOfLines={1}>
+                            {next!.unitName}
+                          </Text>
+                        </View>
 
-                  {showActions ? (
-                    <View style={S.actionsRow}>
-                      {canReschedule ? (
-                        <Pressable
-                          style={S.actionBtn}
-                          onPress={onPressReschedule}
+                        <View
+                          style={[
+                            S.statusPill,
+                            isInService ? S.statusPillInService : null,
+                          ]}
                         >
-                          <Text style={S.actionText}>Alterar</Text>
-                        </Pressable>
-                      ) : null}
-
-                      {canCancel ? (
-                        <Pressable style={S.actionBtn} onPress={onPressCancel}>
-                          <Text style={S.actionText}>Cancelar</Text>
-                        </Pressable>
-                      ) : null}
+                          <FontAwesome
+                            name={isInService ? "play" : "check"}
+                            size={12}
+                            color={UI.colors.black}
+                            style={{ marginRight: 6 }}
+                          />
+                          <Text style={S.statusText}>
+                            {isInService ? "ATENDIMENTO" : next!.statusLabel}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
-                  ) : null}
+
+                    {/* 3) Botões */}
+                    {showActions ? (
+                      <View style={S.heroSection}>
+                        <View style={S.actionsRow}>
+                          {canReschedule ? (
+                            <Pressable
+                              style={S.actionBtn}
+                              onPress={onPressReschedule}
+                            >
+                              <Text style={S.actionText}>Alterar</Text>
+                            </Pressable>
+                          ) : null}
+
+                          {canCancel ? (
+                            <Pressable
+                              style={S.actionBtn}
+                              onPress={onPressCancel}
+                            >
+                              <Text style={S.actionText}>Cancelar</Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
+                      </View>
+                    ) : null}
+                  </View>
                 </>
               ) : (
                 <>
@@ -821,12 +606,6 @@ export default function Home() {
                       </Text>
                     </Pressable>
                   </View>
-
-                  {nextLoading ? (
-                    <View style={{ marginTop: 10, alignItems: "center" }}>
-                      <ActivityIndicator />
-                    </View>
-                  ) : null}
                 </>
               )}
             </View>
@@ -837,11 +616,7 @@ export default function Home() {
           <View style={S.whiteContent}>
             <Text style={S.sectionTitle}>Produtos</Text>
 
-            {productsLoading ? (
-              <View style={{ height: 235, justifyContent: "center" }}>
-                <ActivityIndicator />
-              </View>
-            ) : products.length === 0 ? (
+            {products.length === 0 ? (
               <View style={{ paddingVertical: 10 }}>
                 <Text style={S.emptyProductsText}>
                   Nenhum produto disponível no momento.
@@ -900,85 +675,77 @@ export default function Home() {
     onPressCancel,
     onPressReschedule,
     products.length,
-    productsLoading,
     renderProduct,
     topBounceHeight,
   ]);
 
   return (
-    <View style={S.page}>
-      <View style={S.fixedTop}>
-        <View
-          style={{ height: insets.top, backgroundColor: UI.brand.primary }}
-        />
+    <ScreenGate dataReady={dataReady} skeleton={<HomeSkeleton />}>
+      <View style={S.page}>
+        <View style={S.fixedTop}>
+          <View
+            style={{ height: insets.top, backgroundColor: UI.brand.primary }}
+          />
 
-        <View style={S.stickyRow}>
-          <View style={S.profileRow}>
-            <Image source={{ uri: avatarUrl }} style={S.avatar} />
-            <View>
-              <Text style={S.hello}>Olá,</Text>
-              <Text style={S.name} numberOfLines={1}>
-                {displayName}
-                {meLoading ? "…" : ""}
-              </Text>
+          <View style={S.stickyRow}>
+            <View style={S.profileRow}>
+              <Image source={{ uri: avatarUrl }} style={S.avatar} />
+              <View>
+                <Text style={S.hello}>Olá,</Text>
+                <Text style={S.name} numberOfLines={1}>
+                  {displayName}
+                  {meLoading ? "…" : ""}
+                </Text>
+              </View>
+            </View>
+
+            <View style={S.topRightRow}>
+              <Pressable style={S.iconBtn} onPress={goCart}>
+                <FontAwesome
+                  name="shopping-bag"
+                  size={18}
+                  color={UI.colors.white}
+                />
+
+                {pendingCartCount > 0 ? (
+                  <View style={S.badge}>
+                    <Text style={S.badgeText}>
+                      {pendingCartCount > 99 ? "99+" : String(pendingCartCount)}
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
+
+              <Pressable style={S.iconBtn}>
+                <FontAwesome name="bell-o" size={20} color={UI.colors.white} />
+              </Pressable>
             </View>
           </View>
-
-          <View style={S.topRightRow}>
-            <Pressable style={S.iconBtn} onPress={goCart}>
-              <FontAwesome
-                name="shopping-bag"
-                size={18}
-                color={UI.colors.white}
-              />
-
-              {pendingCartCount > 0 ? (
-                <View style={S.badge}>
-                  <Text style={S.badgeText}>
-                    {pendingCartCount > 99 ? "99+" : String(pendingCartCount)}
-                  </Text>
-                </View>
-              ) : null}
-            </Pressable>
-
-            <Pressable style={S.iconBtn}>
-              <FontAwesome name="bell-o" size={20} color={UI.colors.white} />
-            </Pressable>
-          </View>
         </View>
-      </View>
 
-      <FlatList
-        data={historyPreview}
-        keyExtractor={(item) => item.id}
-        renderItem={renderHistory}
-        showsVerticalScrollIndicator={false}
-        style={S.list}
-        contentContainerStyle={S.listContent}
-        ListHeaderComponent={Header}
-        ListEmptyComponent={
-          <View style={S.emptyHistoryBox}>
-            {historyLoading ? (
-              <>
-                <ActivityIndicator />
-                <Text style={S.emptyHistoryText}>
-                  Carregando seu histórico…
-                </Text>
-              </>
-            ) : (
+        <FlatList
+          data={historyPreview}
+          keyExtractor={(item) => item.id}
+          renderItem={renderHistory}
+          showsVerticalScrollIndicator={false}
+          style={S.list}
+          contentContainerStyle={S.listContent}
+          ListHeaderComponent={Header}
+          ListEmptyComponent={
+            <View style={S.emptyHistoryBox}>
               <Text style={S.emptyHistoryText}>
                 Você ainda não tem histórico por aqui.
               </Text>
-            )}
-          </View>
-        }
-        removeClippedSubviews
-        initialNumToRender={6}
-        maxToRenderPerBatch={8}
-        windowSize={7}
-        updateCellsBatchingPeriod={50}
-      />
-    </View>
+            </View>
+          }
+          removeClippedSubviews
+          initialNumToRender={6}
+          maxToRenderPerBatch={8}
+          windowSize={7}
+          updateCellsBatchingPeriod={50}
+        />
+      </View>
+    </ScreenGate>
   );
 }
 
@@ -1074,6 +841,12 @@ const S = StyleSheet.create({
     borderColor: "rgba(124,108,255,0.35)",
   },
 
+  // ✅ novo: espaçamento maior entre as 3 partes do card hero
+  heroSections: {
+    gap: 25, // ajuste aqui se quiser mais/menos espaço (ex: 20, 24)
+  },
+  heroSection: {},
+
   heroTitleRow: {
     flexDirection: "row",
     alignItems: "baseline",
@@ -1083,18 +856,20 @@ const S = StyleSheet.create({
 
   heroTitle: { color: UI.colors.text, fontSize: 16, fontWeight: "600" },
 
+  // ✅ removi o marginTop daqui pra não “somar” com o gap do heroSections
   apptService: {
     color: UI.colors.text,
     fontSize: 16,
     fontWeight: "700",
     marginTop: 6,
   },
+
   apptMeta: { color: UI.colors.textDim, fontSize: 16, marginTop: 2 },
 
+  // ✅ removi marginTop, o espaçamento agora vem do heroSections
   metaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 10,
     alignItems: "center",
     gap: 12,
   },
@@ -1111,7 +886,8 @@ const S = StyleSheet.create({
   statusPillInService: { backgroundColor: "rgba(255,193,7,0.95)" },
   statusText: { color: UI.colors.black, fontSize: 12, fontWeight: "700" },
 
-  actionsRow: { flexDirection: "row", gap: 10, marginTop: 14 },
+  // ✅ removi marginTop, o espaçamento agora vem do heroSections
+  actionsRow: { flexDirection: "row", gap: 10 },
   actionBtn: {
     flex: 1,
     backgroundColor: UI.brand.primary,
@@ -1305,7 +1081,7 @@ const S = StyleSheet.create({
   historyIcon: {
     width: 36,
     height: 36,
-    backgroundColor: "rgba(124,108,255,0.18)", // roxinho suave
+    backgroundColor: "rgba(124,108,255,0.18)",
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",

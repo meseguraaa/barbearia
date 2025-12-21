@@ -1,19 +1,15 @@
 // app/client/history.tsx
 import React, { memo, useCallback, useMemo, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  Pressable,
-  StyleSheet,
-  SectionList,
-  ActivityIndicator,
-} from "react-native";
+import { View, Text, Pressable, StyleSheet, SectionList } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect, useRouter } from "expo-router";
 
 import { UI } from "../../src/theme/client-theme";
 import { api } from "../../src/services/api";
+
+import { ScreenGate } from "../../src/components/layout/ScreenGate";
+import { HistorySkeleton } from "../../src/components/loading/HistorySkeleton";
 
 const STICKY_ROW_H = 74;
 
@@ -80,6 +76,14 @@ export default function ClientHistory() {
 
   const fetchingRef = useRef(false);
 
+  // ✅ gate da tela: libera quando o fetch terminou ao menos 1x
+  const didHistoryRef = useRef(false);
+  const [dataReady, setDataReady] = useState(false);
+
+  const recomputeReady = useCallback(() => {
+    if (didHistoryRef.current) setDataReady(true);
+  }, []);
+
   const fetchHistory = useCallback(async () => {
     if (fetchingRef.current) return;
     fetchingRef.current = true;
@@ -108,8 +112,11 @@ export default function ClientHistory() {
     } finally {
       setLoading(false);
       fetchingRef.current = false;
+
+      didHistoryRef.current = true;
+      recomputeReady();
     }
-  }, []);
+  }, [recomputeReady]);
 
   useFocusEffect(
     useCallback(() => {
@@ -188,67 +195,63 @@ export default function ClientHistory() {
 
   const keyExtractor = useCallback((item: HistoryItem) => item.id, []);
 
-  // ✅ padding top calculado: lista começa “abaixo” do header,
-  // mas ao rolar, passa por baixo do header fixo.
   const listPadTop = useMemo(
     () => insets.top + STICKY_ROW_H + 10,
     [insets.top],
   );
 
   return (
-    <View style={S.page}>
-      {/* Header fixo (seta + título central) */}
-      <View style={S.fixedTop}>
-        <View style={safeTopStyle} />
+    <ScreenGate dataReady={dataReady} skeleton={<HistorySkeleton />}>
+      <View style={S.page}>
+        {/* Header fixo (seta + título central) */}
+        <View style={S.fixedTop}>
+          <View style={safeTopStyle} />
 
-        <View style={S.stickyRow}>
-          <Pressable style={S.backBtn} onPress={goBack}>
-            <FontAwesome name="angle-left" size={22} color={UI.colors.white} />
-          </Pressable>
+          <View style={S.stickyRow}>
+            <Pressable style={S.backBtn} onPress={goBack}>
+              <FontAwesome
+                name="angle-left"
+                size={22}
+                color={UI.colors.white}
+              />
+            </Pressable>
 
-          <View style={S.centerTitleWrap} pointerEvents="none">
-            <Text style={S.centerTitle}>Histórico</Text>
+            <View style={S.centerTitleWrap} pointerEvents="none">
+              <Text style={S.centerTitle}>Histórico</Text>
+            </View>
+
+            <View style={{ width: 42, height: 42 }} />
           </View>
-
-          {/* spacer pra centralizar o título perfeitamente */}
-          <View style={{ width: 42, height: 42 }} />
         </View>
-      </View>
 
-      <SectionList
-        sections={sections}
-        keyExtractor={keyExtractor}
-        renderItem={renderItem}
-        renderSectionHeader={renderSectionHeader}
-        stickySectionHeadersEnabled={false}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[S.listContent, { paddingTop: listPadTop }]}
-        style={S.list}
-        ListEmptyComponent={
-          <View style={S.emptyBox}>
-            {loading ? (
-              <>
-                <ActivityIndicator />
-                <Text style={S.emptyText}>Carregando seu histórico…</Text>
-              </>
-            ) : !hasAny ? (
-              <>
+        <SectionList
+          sections={sections}
+          keyExtractor={keyExtractor}
+          renderItem={renderItem}
+          renderSectionHeader={renderSectionHeader}
+          stickySectionHeadersEnabled={false}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[S.listContent, { paddingTop: listPadTop }]}
+          style={S.list}
+          ListEmptyComponent={
+            !loading && !hasAny ? (
+              <View style={S.emptyBox}>
                 <FontAwesome
                   name="history"
                   size={18}
                   color={UI.brand.primary}
                 />
                 <Text style={S.emptyText}>Você ainda não tem histórico.</Text>
-              </>
-            ) : null}
-          </View>
-        }
-        removeClippedSubviews
-        initialNumToRender={10}
-        maxToRenderPerBatch={12}
-        windowSize={9}
-      />
-    </View>
+              </View>
+            ) : null
+          }
+          removeClippedSubviews
+          initialNumToRender={10}
+          maxToRenderPerBatch={12}
+          windowSize={9}
+        />
+      </View>
+    </ScreenGate>
   );
 }
 
@@ -297,11 +300,8 @@ const S = StyleSheet.create({
   },
 
   list: { flex: 1, backgroundColor: UI.colors.white },
-  listContent: {
-    paddingBottom: 28,
-  },
+  listContent: { paddingBottom: 28 },
 
-  // Seções
   sectionHeader: {
     paddingHorizontal: UI.spacing.screenX,
     paddingTop: 18,
@@ -339,7 +339,6 @@ const S = StyleSheet.create({
     color: UI.brand.primaryText,
   },
 
-  // Itens (igual Home)
   historyItem: {
     paddingVertical: 16,
     paddingHorizontal: UI.spacing.screenX,

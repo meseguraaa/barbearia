@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   View,
   Text,
@@ -17,6 +23,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { UI } from "../../src/theme/client-theme";
 import { api } from "../../src/services/api";
 import { useAuth } from "../../src/auth/auth-context";
+
+import { ScreenGate } from "../../src/components/layout/ScreenGate";
+import { BookingDetailsSkeleton } from "../../src/components/loading/BookingDetailsSkeleton";
 
 const STICKY_ROW_H = 74;
 
@@ -53,7 +62,7 @@ function fromMinutes(total: number) {
 
 /**
  * dateISO (meio-dia) + startTime ("HH:mm") -> scheduleAt ISO em São Paulo
- * Usa UTC parts do dateISO pra não “virar dia” dependendo do fuso do device.
+ * Usa UTC parts do dateISO pra não “virar dia”.
  */
 function buildScheduleAtSaoPauloISO(dateISO: string, startTime: string) {
   const d = new Date(dateISO);
@@ -74,19 +83,8 @@ type AppointmentGetResponse = {
   appointment: {
     id: string;
     status: string;
-
-    unitId: string | null;
-    unitName: string | null;
-
-    serviceId: string | null;
-    serviceName: string | null;
-
-    barberId: string | null;
-    barberName: string | null;
-
-    dateISO: string; // ISO noon -03
-    startTime: string; // "HH:mm"
-
+    dateISO: string;
+    startTime: string;
     canReschedule: boolean;
   };
 };
@@ -105,15 +103,12 @@ export default function BookingDetails() {
     barberId?: string;
     barberName?: string;
 
-    // ✅ selecionado no fluxo (novo)
     dateISO?: string;
     startTime?: string;
 
-    // ✅ edit mode
     mode?: string;
     appointmentId?: string;
 
-    // ✅ contexto do horário original
     currentDateISO?: string;
     currentStartTime?: string;
   }>();
@@ -146,7 +141,6 @@ export default function BookingDetails() {
     [params.appointmentId],
   );
 
-  // ✅ horário “novo” (se usuário escolheu no fluxo)
   const pickedDateISO = useMemo(
     () => String(params.dateISO ?? "").trim(),
     [params.dateISO],
@@ -156,7 +150,6 @@ export default function BookingDetails() {
     [params.startTime],
   );
 
-  // ✅ horário “atual” (fallback do params, mas vamos garantir via GET também)
   const [currentDateISO, setCurrentDateISO] = useState(
     String(params.currentDateISO ?? "").trim(),
   );
@@ -164,68 +157,9 @@ export default function BookingDetails() {
     String(params.currentStartTime ?? "").trim(),
   );
 
-  // ✅ no edit: garante que sempre teremos o horário original mesmo se params vierem vazios
-  const fetchCurrentIfNeeded = useCallback(async () => {
-    if (!isEdit) return;
-    if (!appointmentId) return;
-
-    // se já temos os dois, não precisa bater
-    if (currentDateISO && currentStartTime) return;
-
-    try {
-      const res = await api.get<AppointmentGetResponse>(
-        `/api/mobile/me/appointments/${encodeURIComponent(appointmentId)}`,
-      );
-
-      if (!res?.ok || !res?.appointment) return;
-
-      if (res.appointment.canReschedule === false) {
-        Alert.alert(
-          "Não é possível alterar",
-          "Este agendamento não pode ser alterado agora.",
-        );
-        router.back();
-        return;
-      }
-
-      setCurrentDateISO(String(res.appointment.dateISO ?? "").trim());
-      setCurrentStartTime(String(res.appointment.startTime ?? "").trim());
-    } catch (err: any) {
-      console.log(
-        "[booking/details][edit] get appointment error:",
-        err?.data ?? err?.message ?? err,
-      );
-      // não bloqueia já de cara; a validação abaixo vai pegar se faltar horário
-    }
-  }, [appointmentId, currentDateISO, currentStartTime, isEdit, router]);
-
-  useEffect(() => {
-    fetchCurrentIfNeeded();
-  }, [fetchCurrentIfNeeded]);
-
-  // ✅ fonte final do horário:
-  // - create: usa o picked (obrigatório)
-  // - edit: usa picked se vier; senão preserva current
-  const effectiveDateISO = useMemo(() => {
-    if (!isEdit) return pickedDateISO;
-    return pickedDateISO || currentDateISO;
-  }, [currentDateISO, isEdit, pickedDateISO]);
-
-  const effectiveStartTime = useMemo(() => {
-    if (!isEdit) return pickedStartTime;
-    return pickedStartTime || currentStartTime;
-  }, [currentStartTime, isEdit, pickedStartTime]);
-
-  const serviceDurationMin = useMemo(() => {
-    const raw = Number(params.serviceDurationMinutes ?? "");
-    return Number.isFinite(raw) && raw > 0 ? raw : 30;
-  }, [params.serviceDurationMinutes]);
-
-  const endTime = useMemo(() => {
-    const st = toMinutes(effectiveStartTime);
-    if (!Number.isFinite(st)) return "";
-    return fromMinutes(st + serviceDurationMin);
-  }, [effectiveStartTime, serviceDurationMin]);
+  // ✅ gate
+  const [dataReady, setDataReady] = useState(false);
+  const fetchingRef = useRef(false);
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
   const safeTopStyle = useMemo(
@@ -250,6 +184,83 @@ export default function BookingDetails() {
 
   const goBack = useCallback(() => router.back(), [router]);
 
+  // ✅ no edit: garante horário original caso params venha vazio
+  const fetchCurrentIfNeeded = useCallback(async () => {
+    // Sempre libera o gate no finally, mesmo se der erro.
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+
+    try {
+      if (!isEdit) return;
+
+      if (!appointmentId) {
+        Alert.alert("Ops", "appointmentId ausente no modo alterar.");
+        router.back();
+        return;
+      }
+
+      // se já temos os dois, não precisa bater
+      if (currentDateISO && currentStartTime) return;
+
+      const res = await api.get<AppointmentGetResponse>(
+        `/api/mobile/me/appointments/${encodeURIComponent(appointmentId)}`,
+      );
+
+      if (!res?.ok || !res?.appointment) return;
+
+      if (res.appointment.canReschedule === false) {
+        Alert.alert(
+          "Não é possível alterar",
+          "Este agendamento não pode ser alterado agora.",
+        );
+        router.back();
+        return;
+      }
+
+      setCurrentDateISO(String(res.appointment.dateISO ?? "").trim());
+      setCurrentStartTime(String(res.appointment.startTime ?? "").trim());
+    } catch (err: any) {
+      console.log(
+        "[booking/details][edit] get appointment error:",
+        err?.data ?? err?.message ?? err,
+      );
+      // não trava a tela, só deixa o fallback/validação cuidar
+    } finally {
+      setDataReady(true);
+      fetchingRef.current = false;
+    }
+  }, [appointmentId, currentDateISO, currentStartTime, isEdit, router]);
+
+  useEffect(() => {
+    if (!isEdit) {
+      // ✅ create: sem fetch, libera gate imediatamente
+      setDataReady(true);
+      return;
+    }
+    fetchCurrentIfNeeded();
+  }, [fetchCurrentIfNeeded, isEdit]);
+
+  const effectiveDateISO = useMemo(() => {
+    if (!isEdit) return pickedDateISO;
+    return pickedDateISO || currentDateISO;
+  }, [currentDateISO, isEdit, pickedDateISO]);
+
+  const effectiveStartTime = useMemo(() => {
+    if (!isEdit) return pickedStartTime;
+    return pickedStartTime || currentStartTime;
+  }, [currentStartTime, isEdit, pickedStartTime]);
+
+  const serviceDurationMin = useMemo(() => {
+    const raw = Number(params.serviceDurationMinutes ?? "");
+    return Number.isFinite(raw) && raw > 0 ? raw : 30;
+  }, [params.serviceDurationMinutes]);
+
+  const endTime = useMemo(() => {
+    const st = toMinutes(effectiveStartTime);
+    if (!Number.isFinite(st)) return "";
+    return fromMinutes(st + serviceDurationMin);
+  }, [effectiveStartTime, serviceDurationMin]);
+
   const dateLabel = useMemo(() => {
     const d = new Date(effectiveDateISO);
     if (Number.isNaN(d.getTime())) return "";
@@ -267,7 +278,6 @@ export default function BookingDetails() {
 
   const confirm = useCallback(async () => {
     try {
-      // ✅ valida parâmetros base
       if (!unitId || !serviceId || !barberId) {
         Alert.alert(
           "Ops",
@@ -276,7 +286,6 @@ export default function BookingDetails() {
         return;
       }
 
-      // ✅ valida horário efetivo (create precisa, edit pode preservar)
       if (!effectiveDateISO || !effectiveStartTime || !scheduleAt) {
         Alert.alert(
           "Ops",
@@ -308,13 +317,7 @@ export default function BookingDetails() {
       setSaving(true);
 
       if (isEdit) {
-        // ✅ ALTERAR: usa PATCH no endpoint do route.ts que você mandou
-        const payload = {
-          unitId,
-          serviceId,
-          barberId,
-          scheduleAt,
-        };
+        const payload = { unitId, serviceId, barberId, scheduleAt };
 
         if (__DEV__) {
           console.log(
@@ -336,7 +339,6 @@ export default function BookingDetails() {
         return;
       }
 
-      // ✅ CRIAR
       const payload = {
         clientName: name,
         phone: digits,
@@ -349,12 +351,11 @@ export default function BookingDetails() {
         startTime: effectiveStartTime,
       };
 
-      if (__DEV__) {
+      if (__DEV__)
         console.log(
           "[booking/details] POST /api/mobile/appointments payload:",
           payload,
         );
-      }
 
       await api.post("/api/mobile/appointments", payload);
 
@@ -408,115 +409,123 @@ export default function BookingDetails() {
   ]);
 
   return (
-    <View style={S.page}>
-      <View style={S.fixedTop}>
-        <View style={safeTopStyle} />
+    <ScreenGate dataReady={dataReady} skeleton={<BookingDetailsSkeleton />}>
+      <View style={S.page}>
+        <View style={S.fixedTop}>
+          <View style={safeTopStyle} />
 
-        <View style={S.stickyRow}>
-          <Pressable onPress={goBack} style={S.backBtn}>
-            <FontAwesome
-              name="chevron-left"
-              size={18}
-              color={UI.colors.white}
-            />
-          </Pressable>
+          <View style={S.stickyRow}>
+            <Pressable onPress={goBack} style={S.backBtn}>
+              <FontAwesome
+                name="chevron-left"
+                size={18}
+                color={UI.colors.white}
+              />
+            </Pressable>
 
-          <Text style={S.title}>
-            {isEdit ? "Alterar agendamento" : "Agendamento"}
-          </Text>
-          <View style={{ width: 42, height: 42 }} />
-        </View>
-      </View>
-
-      <View
-        pointerEvents="none"
-        style={[S.topBounceDark, { height: topBounceHeight }]}
-      />
-      <View style={{ height: TOP_OFFSET }} />
-
-      <View style={S.darkShell}>
-        <View style={S.darkInner}>
-          <View style={S.heroCard}>
-            <Text style={S.heroTitle}>Seus dados</Text>
-
-            <Text style={S.heroDesc}>
-              {unitName ? `Unidade: ${unitName}` : " "}
-              {serviceName ? `\nServiço: ${serviceName}` : ""}
-              {barberName ? `\nProfissional: ${barberName}` : ""}
-              {dateLabel && effectiveStartTime
-                ? `\nData: ${dateLabel} • ${effectiveStartTime}${
-                    endTime ? ` - ${endTime}` : ""
-                  }`
-                : ""}
+            <Text style={S.title}>
+              {isEdit ? "Alterar agendamento" : "Agendamento"}
             </Text>
-
-            <Text style={S.heroNote}>
-              {isEdit
-                ? "Ajuste e confirme. Troca feita com estilo 😎"
-                : "Preencha e confirme. Sem formulário infinito 😎"}
-            </Text>
+            <View style={{ width: 42, height: 42 }} />
           </View>
         </View>
-      </View>
 
-      <View style={S.whiteArea}>
-        <KeyboardAvoidingView
-          style={S.whiteContent}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-        >
-          <Text style={S.sectionTitle}>Nome</Text>
-          <View style={S.inputWrap}>
-            <TextInput
-              value={clientName}
-              onChangeText={setClientName}
-              placeholder="Seu nome"
-              placeholderTextColor="rgba(0,0,0,0.35)"
-              style={S.input}
-              autoCapitalize="words"
-              returnKeyType="next"
-            />
-          </View>
+        <View
+          pointerEvents="none"
+          style={[S.topBounceDark, { height: topBounceHeight }]}
+        />
+        <View style={{ height: TOP_OFFSET }} />
 
-          <Text style={[S.sectionTitle, { marginTop: 14 }]}>Telefone</Text>
-          <View style={S.inputWrap}>
-            <TextInput
-              value={formatPhoneBR(phone)}
-              onChangeText={(v) => setPhone(onlyDigits(v))}
-              placeholder="(11) 99999-9999"
-              placeholderTextColor="rgba(0,0,0,0.35)"
-              style={S.input}
-              keyboardType="phone-pad"
-              returnKeyType="done"
-            />
-          </View>
+        <View style={S.darkShell}>
+          <View style={S.darkInner}>
+            <View style={S.heroCard}>
+              <Text style={S.heroTitle}>Seus dados</Text>
 
-          <Pressable
-            style={[S.primaryBtn, saving ? { opacity: 0.8 } : null]}
-            onPress={confirm}
-            disabled={saving}
-          >
-            {saving ? (
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
-              >
-                <ActivityIndicator />
-                <Text style={S.primaryBtnText}>
-                  {isEdit ? "Alterando…" : "Confirmando…"}
-                </Text>
-              </View>
-            ) : (
-              <Text style={S.primaryBtnText}>
-                {isEdit ? "Confirmar alteração" : "Confirmar agendamento"}
+              <Text style={S.heroDesc}>
+                {unitName ? `Unidade: ${unitName}` : " "}
+                {serviceName ? `\nServiço: ${serviceName}` : ""}
+                {barberName ? `\nProfissional: ${barberName}` : ""}
+                {dateLabel && effectiveStartTime
+                  ? `\nData: ${dateLabel} • ${effectiveStartTime}${endTime ? ` - ${endTime}` : ""}`
+                  : ""}
               </Text>
-            )}
-          </Pressable>
 
-          <Pressable style={S.secondaryBtn} onPress={goBack} disabled={saving}>
-            <Text style={S.secondaryBtnText}>Voltar</Text>
-          </Pressable>
-        </KeyboardAvoidingView>
+              <Text style={S.heroNote}>
+                {isEdit
+                  ? "Ajuste e confirme. Troca feita com estilo 😎"
+                  : "Preencha e confirme. Sem formulário infinito 😎"}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={S.whiteArea}>
+          <KeyboardAvoidingView
+            style={S.whiteContent}
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+          >
+            <Text style={S.sectionTitle}>Nome</Text>
+            <View style={S.inputWrap}>
+              <TextInput
+                value={clientName}
+                onChangeText={setClientName}
+                placeholder="Seu nome"
+                placeholderTextColor="rgba(0,0,0,0.35)"
+                style={S.input}
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+            </View>
+
+            <Text style={[S.sectionTitle, { marginTop: 14 }]}>Telefone</Text>
+            <View style={S.inputWrap}>
+              <TextInput
+                value={formatPhoneBR(phone)}
+                onChangeText={(v) => setPhone(onlyDigits(v))}
+                placeholder="(11) 99999-9999"
+                placeholderTextColor="rgba(0,0,0,0.35)"
+                style={S.input}
+                keyboardType="phone-pad"
+                returnKeyType="done"
+              />
+            </View>
+
+            <Pressable
+              style={[S.primaryBtn, saving ? { opacity: 0.8 } : null]}
+              onPress={confirm}
+              disabled={saving}
+            >
+              {saving ? (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
+                  <ActivityIndicator />
+                  <Text style={S.primaryBtnText}>
+                    {isEdit ? "Alterando…" : "Confirmando…"}
+                  </Text>
+                </View>
+              ) : (
+                <Text style={S.primaryBtnText}>
+                  {isEdit ? "Confirmar alteração" : "Confirmar agendamento"}
+                </Text>
+              )}
+            </Pressable>
+
+            <Pressable
+              style={S.secondaryBtn}
+              onPress={goBack}
+              disabled={saving}
+            >
+              <Text style={S.secondaryBtnText}>Voltar</Text>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </View>
       </View>
-    </View>
+    </ScreenGate>
   );
 }
 

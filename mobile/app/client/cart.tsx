@@ -1,3 +1,4 @@
+// app/client/cart.tsx
 import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
@@ -15,6 +16,9 @@ import { FontAwesome } from "@expo/vector-icons";
 
 import { UI } from "../../src/theme/client-theme";
 import { api } from "../../src/services/api";
+
+import { ScreenGate } from "../../src/components/layout/ScreenGate";
+import { CartSkeleton } from "../../src/components/loading/CartSkeleton";
 
 const STICKY_ROW_H = 74;
 
@@ -134,12 +138,14 @@ export default function CartScreen() {
   const [order, setOrder] = useState<CartOrder | null>(null);
   const [failed, setFailed] = useState(false);
 
+  // ✅ gate: libera quando o load terminar 1x (mesmo vazio/erro)
+  const [dataReady, setDataReady] = useState(false);
+
   const goBack = useCallback(() => {
     router.back();
   }, [router]);
 
   const goHome = useCallback(() => {
-    // ✅ volta pra Home (e lá o focus effect atualiza o badge)
     router.replace("/");
   }, [router]);
 
@@ -152,11 +158,18 @@ export default function CartScreen() {
   }, [router]);
 
   const load = useCallback(async () => {
+    // Sempre que recarregar, segura o gate novamente
+    setDataReady(false);
+
+    // ✅ Sem orderId: tela precisa liberar e mostrar "Sacolinha vazia"
     if (!orderId) {
       if (__DEV__) console.log("[cart] missing orderId param");
+
       setLoading(false);
       setOrder(null);
       setFailed(false);
+
+      setDataReady(true);
       return;
     }
 
@@ -194,6 +207,9 @@ export default function CartScreen() {
       setFailed(true);
     } finally {
       setLoading(false);
+
+      // ✅ SEMPRE libera no final (sucesso/erro)
+      setDataReady(true);
     }
   }, [orderId]);
 
@@ -394,62 +410,69 @@ export default function CartScreen() {
   }, [goHome]);
 
   return (
-    <View style={S.page}>
-      <View style={S.fixedTop}>
-        <View style={safeTopStyle} />
+    <ScreenGate dataReady={dataReady} skeleton={<CartSkeleton />}>
+      <View style={S.page}>
+        <View style={S.fixedTop}>
+          <View style={safeTopStyle} />
 
-        <View style={S.stickyRow}>
-          <Pressable style={S.backBtn} onPress={goBack}>
-            <FontAwesome name="angle-left" size={22} color={UI.colors.white} />
-          </Pressable>
+          <View style={S.stickyRow}>
+            <Pressable style={S.backBtn} onPress={goBack}>
+              <FontAwesome
+                name="angle-left"
+                size={22}
+                color={UI.colors.white}
+              />
+            </Pressable>
 
-          <View style={S.centerTitleWrap} pointerEvents="none">
-            <Text style={S.centerTitle}>Sacolinha</Text>
+            <View style={S.centerTitleWrap} pointerEvents="none">
+              <Text style={S.centerTitle}>Sacolinha</Text>
+            </View>
+
+            <View style={{ width: 42, height: 42 }} />
           </View>
-
-          <View style={{ width: 42, height: 42 }} />
         </View>
-      </View>
 
-      <FlatList
-        data={order ? items : []}
-        keyExtractor={(it) => it.id}
-        renderItem={renderItem}
-        showsVerticalScrollIndicator={false}
-        style={S.list}
-        contentContainerStyle={[S.listContent, { paddingTop: listPadTop }]}
-        ListHeaderComponent={Header}
-        ListEmptyComponent={
-          order && !loading ? (
-            <View style={S.emptyHero}>
-              <Text style={S.emptyTitle}>Sem itens</Text>
-              <Text style={S.emptyText}>
-                Sua sacolinha está vazia. Volte para Produtos e reserve um item.
+        <FlatList
+          data={order ? items : []}
+          keyExtractor={(it) => it.id}
+          renderItem={renderItem}
+          showsVerticalScrollIndicator={false}
+          style={S.list}
+          contentContainerStyle={[S.listContent, { paddingTop: listPadTop }]}
+          ListHeaderComponent={Header}
+          ListEmptyComponent={
+            order && !loading ? (
+              <View style={S.emptyHero}>
+                <Text style={S.emptyTitle}>Sem itens</Text>
+                <Text style={S.emptyText}>
+                  Sua sacolinha está vazia. Volte para Produtos e reserve um
+                  item.
+                </Text>
+              </View>
+            ) : null
+          }
+          removeClippedSubviews
+          initialNumToRender={8}
+          maxToRenderPerBatch={10}
+          windowSize={9}
+        />
+
+        {order && !loading && isPendingPickup ? (
+          <View style={[S.footer, { paddingBottom: footerPadBottom }]}>
+            <View style={S.totalRow}>
+              <Text style={S.totalLabel}>Total</Text>
+              <Text style={S.totalValue}>
+                {formatMoneyBRL(order.totalAmount)}
               </Text>
             </View>
-          ) : null
-        }
-        removeClippedSubviews
-        initialNumToRender={8}
-        maxToRenderPerBatch={10}
-        windowSize={9}
-      />
 
-      {order && !loading && isPendingPickup ? (
-        <View style={[S.footer, { paddingBottom: footerPadBottom }]}>
-          <View style={S.totalRow}>
-            <Text style={S.totalLabel}>Total</Text>
-            <Text style={S.totalValue}>
-              {formatMoneyBRL(order.totalAmount)}
-            </Text>
+            <Pressable style={S.primaryBtn} onPress={onPressEntendi}>
+              <Text style={S.primaryBtnText}>Entendi</Text>
+            </Pressable>
           </View>
-
-          <Pressable style={S.primaryBtn} onPress={onPressEntendi}>
-            <Text style={S.primaryBtnText}>Entendi</Text>
-          </Pressable>
-        </View>
-      ) : null}
-    </View>
+        ) : null}
+      </View>
+    </ScreenGate>
   );
 }
 

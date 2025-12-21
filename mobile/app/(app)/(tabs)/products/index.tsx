@@ -19,6 +19,9 @@ import { UI, styles } from "../../../../src/theme/client-theme";
 import { useAuth } from "../../../../src/auth/auth-context";
 import { api } from "../../../../src/services/api";
 
+import { ScreenGate } from "../../../../src/components/layout/ScreenGate";
+import { ProductsSkeleton } from "../../../../src/components/loading/ProductsSkeleton";
+
 const STICKY_ROW_H = 74;
 
 type Category = { id: string; label: string };
@@ -344,6 +347,16 @@ export default function Products() {
   const fetchingRef = useRef(false);
   const cartFetchingRef = useRef(false);
 
+  // ✅ gate da tela
+  const didProductsRef = useRef(false);
+  const didCartRef = useRef(false);
+  const [dataReady, setDataReady] = useState(false);
+
+  const recomputeReady = useCallback(() => {
+    if (dataReady) return; // ✅ não fica “mexendo” no estado depois que liberou
+    if (didProductsRef.current && didCartRef.current) setDataReady(true);
+  }, [dataReady]);
+
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
 
   const safeTopStyle = useMemo(
@@ -387,8 +400,11 @@ export default function Products() {
       return { id: null as string | null, count: 0 };
     } finally {
       cartFetchingRef.current = false;
+
+      didCartRef.current = true;
+      recomputeReady();
     }
-  }, []);
+  }, [recomputeReady]);
 
   const goCart = useCallback(async () => {
     try {
@@ -524,8 +540,11 @@ export default function Products() {
     } finally {
       setLoading(false);
       fetchingRef.current = false;
+
+      didProductsRef.current = true;
+      recomputeReady();
     }
-  }, [activeCategory]);
+  }, [activeCategory, recomputeReady]);
 
   useFocusEffect(
     useCallback(() => {
@@ -586,6 +605,10 @@ export default function Products() {
     [openProduct, reserveProduct, reservingId],
   );
 
+  const onSelectCategory = useCallback((id: string) => {
+    setActiveCategory(id);
+  }, []);
+
   const ListHeader = useMemo(
     () => (
       <ProductsHeader
@@ -593,7 +616,7 @@ export default function Products() {
         topOffset={TOP_OFFSET}
         categories={categories}
         activeCategoryId={activeCategory}
-        onSelectCategory={setActiveCategory}
+        onSelectCategory={onSelectCategory}
         search={search}
         onChangeSearch={setSearch}
         loading={loading}
@@ -608,72 +631,52 @@ export default function Products() {
       search,
       topBounceHeight,
       activeCategory,
+      onSelectCategory,
     ],
   );
 
   return (
-    <View style={S.page}>
-      <View style={S.fixedTop}>
-        <View style={safeTopStyle} />
+    <ScreenGate dataReady={dataReady} skeleton={<ProductsSkeleton />}>
+      <View style={S.page}>
+        <View style={S.fixedTop}>
+          <View style={safeTopStyle} />
 
-        <View style={[styles.stickyRowBase, { height: STICKY_ROW_H }]}>
-          <View style={S.profileRow}>
-            <Image source={{ uri: avatarUrl }} style={styles.avatar42} />
-            <View>
-              <Text style={S.hello}>Olá,</Text>
-              <Text style={S.name} numberOfLines={1}>
-                {displayName}
-                {meLoading ? "…" : ""}
-              </Text>
+          <View style={[styles.stickyRowBase, { height: STICKY_ROW_H }]}>
+            <View style={S.profileRow}>
+              <Image source={{ uri: avatarUrl }} style={styles.avatar42} />
+              <View>
+                <Text style={S.hello}>Olá,</Text>
+                <Text style={S.name} numberOfLines={1}>
+                  {displayName}
+                  {meLoading ? "…" : ""}
+                </Text>
+              </View>
+            </View>
+
+            <View style={S.topRightRow}>
+              <Pressable style={styles.iconBtn42} onPress={goCart}>
+                <FontAwesome
+                  name="shopping-bag"
+                  size={18}
+                  color={UI.colors.white}
+                />
+
+                {pendingCartCount > 0 ? (
+                  <View style={S.badge}>
+                    <Text style={S.badgeText}>
+                      {pendingCartCount > 99 ? "99+" : String(pendingCartCount)}
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
+
+              <Pressable style={styles.iconBtn42}>
+                <FontAwesome name="bell-o" size={20} color={UI.colors.white} />
+              </Pressable>
             </View>
           </View>
-
-          <View style={S.topRightRow}>
-            <Pressable style={styles.iconBtn42} onPress={goCart}>
-              <FontAwesome
-                name="shopping-bag"
-                size={18}
-                color={UI.colors.white}
-              />
-
-              {pendingCartCount > 0 ? (
-                <View style={S.badge}>
-                  <Text style={S.badgeText}>
-                    {pendingCartCount > 99 ? "99+" : String(pendingCartCount)}
-                  </Text>
-                </View>
-              ) : null}
-            </Pressable>
-
-            <Pressable style={styles.iconBtn42}>
-              <FontAwesome name="bell-o" size={20} color={UI.colors.white} />
-            </Pressable>
-          </View>
         </View>
-      </View>
 
-      {loading && products.length === 0 ? (
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: UI.colors.white,
-            alignItems: "center",
-            justifyContent: "center",
-            paddingTop: TOP_OFFSET + 30,
-          }}
-        >
-          <ActivityIndicator />
-          <Text
-            style={{
-              marginTop: 10,
-              color: UI.colors.black45,
-              fontWeight: "600",
-            }}
-          >
-            Carregando catálogo…
-          </Text>
-        </View>
-      ) : (
         <FlatList
           data={filteredProducts}
           keyExtractor={keyProduct}
@@ -704,8 +707,8 @@ export default function Products() {
           windowSize={7}
           updateCellsBatchingPeriod={50}
         />
-      )}
-    </View>
+      </View>
+    </ScreenGate>
   );
 }
 

@@ -1,4 +1,12 @@
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+// app/booking/professional.tsx
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   View,
   Text,
@@ -15,6 +23,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { UI } from "../../src/theme/client-theme";
 import { api } from "../../src/services/api";
+
+import { ScreenGate } from "../../src/components/layout/ScreenGate";
+import { BookingProfessionalSkeleton } from "../../src/components/loading/BookingProfessionalSkeleton";
 
 const STICKY_ROW_H = 74;
 
@@ -83,11 +94,9 @@ export default function BookingProfessional() {
     serviceName?: string;
     serviceDurationMinutes?: string;
 
-    // ✅ edit mode
     mode?: string;
     appointmentId?: string;
 
-    // ✅ contexto do agendamento atual (vem do BookingService no edit)
     currentBarberId?: string;
     currentScheduleAt?: string;
     currentDateISO?: string;
@@ -99,6 +108,7 @@ export default function BookingProfessional() {
     () => String(params.unitName ?? ""),
     [params.unitName],
   );
+
   const serviceId = useMemo(
     () => String(params.serviceId ?? ""),
     [params.serviceId],
@@ -119,7 +129,6 @@ export default function BookingProfessional() {
     [params.appointmentId],
   );
 
-  // ✅ dados do agendamento atual (para badge e “manter horário” depois)
   const currentBarberId = useMemo(
     () => String(params.currentBarberId ?? "").trim(),
     [params.currentBarberId],
@@ -140,6 +149,10 @@ export default function BookingProfessional() {
   const [loading, setLoading] = useState(true);
   const [barbers, setBarbers] = useState<Barber[]>([]);
 
+  // ✅ gate: libera quando o fetch terminar (mesmo com erro/vazio)
+  const didBarbersRef = useRef(false);
+  const [dataReady, setDataReady] = useState(false);
+
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
   const safeTopStyle = useMemo(
     () => ({ height: insets.top, backgroundColor: UI.brand.primary }),
@@ -149,55 +162,9 @@ export default function BookingProfessional() {
 
   const goBack = useCallback(() => router.back(), [router]);
 
-  const fetchBarbers = useCallback(async () => {
-    try {
-      if (!unitId || !serviceId) {
-        Alert.alert("Ops", "Parâmetros do agendamento estão incompletos.");
-        router.back();
-        return;
-      }
-
-      setLoading(true);
-
-      const res = await api.get<BarbersResponse>(
-        `/api/mobile/barbers?unitId=${encodeURIComponent(
-          unitId,
-        )}&serviceId=${encodeURIComponent(serviceId)}`,
-      );
-
-      if ((res as any)?.error) throw new Error(String((res as any).error));
-
-      const list: Barber[] = res?.barbers ?? [];
-      setBarbers(list);
-    } catch (err: any) {
-      console.log(
-        "[booking/professional] error:",
-        err?.data ?? err?.message ?? err,
-      );
-
-      const msg = String(err?.message ?? "");
-      if (msg.toLowerCase().includes("não autorizado") || err?.status === 401) {
-        Alert.alert("Sessão expirada", "Faça login novamente.");
-        return;
-      }
-
-      Alert.alert(
-        "Erro",
-        "Não foi possível carregar os profissionais. Tente novamente.",
-      );
-      setBarbers([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [router, serviceId, unitId]);
-
-  useEffect(() => {
-    fetchBarbers();
-  }, [fetchBarbers]);
-
   const goTime = useCallback(
-    (b: Barber) => {
-      router.push({
+    (b: Barber, replace?: boolean) => {
+      const nav = {
         pathname: "/booking/time",
         params: {
           unitId,
@@ -209,11 +176,8 @@ export default function BookingProfessional() {
 
           ...(serviceDurationMinutes ? { serviceDurationMinutes } : {}),
 
-          // ✅ mantém contexto do editar
           ...(isEdit ? { mode: "edit", appointmentId } : {}),
 
-          // ✅ repassa dados do agendamento atual para o BookingTime oferecer:
-          // "Manter horário atual (HH:mm)" e também permitir escolher outro.
           ...(isEdit
             ? {
                 currentBarberId: currentBarberId || "",
@@ -223,7 +187,10 @@ export default function BookingProfessional() {
               }
             : {}),
         },
-      });
+      } as const;
+
+      if (replace) router.replace(nav);
+      else router.push(nav);
     },
     [
       appointmentId,
@@ -241,6 +208,60 @@ export default function BookingProfessional() {
     ],
   );
 
+  const fetchBarbers = useCallback(async () => {
+    try {
+      if (!unitId || !serviceId) {
+        Alert.alert("Ops", "Parâmetros do agendamento estão incompletos.");
+        router.back();
+        return;
+      }
+
+      setLoading(true);
+
+      const res = await api.get<BarbersResponse>(
+        `/api/mobile/barbers?unitId=${encodeURIComponent(unitId)}&serviceId=${encodeURIComponent(serviceId)}`,
+      );
+
+      if ((res as any)?.error) throw new Error(String((res as any).error));
+
+      const list: Barber[] = res?.barbers ?? [];
+      setBarbers(list);
+    } catch (err: any) {
+      console.log(
+        "[booking/professional] error:",
+        err?.data ?? err?.message ?? err,
+      );
+
+      const msg = String(err?.message ?? "");
+      if (msg.toLowerCase().includes("não autorizado") || err?.status === 401) {
+        Alert.alert("Sessão expirada", "Faça login novamente.");
+        setBarbers([]);
+        return;
+      }
+
+      Alert.alert(
+        "Erro",
+        "Não foi possível carregar os profissionais. Tente novamente.",
+      );
+      setBarbers([]);
+    } finally {
+      setLoading(false);
+      didBarbersRef.current = true;
+      setDataReady(true);
+    }
+  }, [router, serviceId, unitId]);
+
+  useEffect(() => {
+    fetchBarbers();
+  }, [fetchBarbers]);
+
+  // ✅ bypass: se só tem 1 profissional, pula direto pro time
+  useEffect(() => {
+    if (loading) return;
+    if (!barbers || barbers.length !== 1) return;
+    goTime(barbers[0], true);
+  }, [barbers, goTime, loading]);
+
   const key = useCallback((item: Barber) => item.id, []);
   const render = useCallback(
     ({ item, index }: ListRenderItemInfo<Barber>) => (
@@ -255,98 +276,102 @@ export default function BookingProfessional() {
   );
 
   return (
-    <View style={S.page}>
-      <View style={S.fixedTop}>
-        <View style={safeTopStyle} />
+    <ScreenGate
+      dataReady={dataReady || didBarbersRef.current}
+      skeleton={<BookingProfessionalSkeleton />}
+    >
+      <View style={S.page}>
+        <View style={S.fixedTop}>
+          <View style={safeTopStyle} />
 
-        <View style={S.stickyRow}>
-          <Pressable onPress={goBack} style={S.backBtn}>
-            <FontAwesome
-              name="chevron-left"
-              size={18}
-              color={UI.colors.white}
-            />
-          </Pressable>
+          <View style={S.stickyRow}>
+            <Pressable onPress={goBack} style={S.backBtn}>
+              <FontAwesome
+                name="chevron-left"
+                size={18}
+                color={UI.colors.white}
+              />
+            </Pressable>
 
-          <Text style={S.title}>
-            {isEdit ? "Alterar agendamento" : "Agendamento"}
-          </Text>
-
-          <View style={{ width: 42, height: 42 }} />
-        </View>
-      </View>
-
-      <View
-        pointerEvents="none"
-        style={[S.topBounceDark, { height: topBounceHeight }]}
-      />
-
-      <View style={{ height: TOP_OFFSET }} />
-
-      <View style={S.darkShell}>
-        <View style={S.darkInner}>
-          <View style={S.heroCard}>
-            <Text style={S.heroTitle}>Escolha o profissional</Text>
-
-            <Text style={S.heroDesc}>
-              {unitName ? `Unidade: ${unitName}` : " "}
-              {serviceName ? `\nServiço: ${serviceName}` : ""}
+            <Text style={S.title}>
+              {isEdit ? "Alterar agendamento" : "Agendamento"}
             </Text>
 
-            {isEdit ? (
-              <Text style={S.heroNote}>
-                Profissional atual marcado como{" "}
-                <Text style={{ fontWeight: "700" }}>Atual</Text>.{" "}
-                {currentStartTime ? (
-                  <>
-                    Horário atual:{" "}
-                    <Text style={{ fontWeight: "700" }}>
-                      {currentStartTime}
-                    </Text>
-                  </>
-                ) : null}
+            <View style={{ width: 42, height: 42 }} />
+          </View>
+        </View>
+
+        <View
+          pointerEvents="none"
+          style={[S.topBounceDark, { height: topBounceHeight }]}
+        />
+        <View style={{ height: TOP_OFFSET }} />
+
+        <View style={S.darkShell}>
+          <View style={S.darkInner}>
+            <View style={S.heroCard}>
+              <Text style={S.heroTitle}>Escolha o profissional</Text>
+
+              <Text style={S.heroDesc}>
+                {unitName ? `Unidade: ${unitName}` : " "}
+                {serviceName ? `\nServiço: ${serviceName}` : ""}
               </Text>
+
+              {isEdit ? (
+                <Text style={S.heroNote}>
+                  Profissional atual marcado como{" "}
+                  <Text style={{ fontWeight: "700" }}>Atual</Text>.{" "}
+                  {currentStartTime ? (
+                    <>
+                      Horário atual:{" "}
+                      <Text style={{ fontWeight: "700" }}>
+                        {currentStartTime}
+                      </Text>
+                    </>
+                  ) : null}
+                </Text>
+              ) : (
+                <Text style={S.heroNote}>
+                  Exibidos em ordem alfabética (sem privilégio).
+                </Text>
+              )}
+            </View>
+          </View>
+        </View>
+
+        <View style={S.whiteArea}>
+          <View style={S.whiteContent}>
+            <Text style={S.sectionTitle}>Profissionais</Text>
+
+            {loading ? (
+              <View style={S.centerBox}>
+                <ActivityIndicator />
+                <Text style={S.centerText}>Carregando…</Text>
+              </View>
+            ) : barbers.length === 0 ? (
+              <View style={S.centerBox}>
+                <Text style={S.emptyTitle}>Nenhum profissional disponível</Text>
+                <Text style={S.centerText}>
+                  Não encontramos profissionais ativos para esse serviço.
+                </Text>
+
+                <Pressable style={S.secondaryBtn} onPress={fetchBarbers}>
+                  <Text style={S.secondaryBtnText}>Tentar novamente</Text>
+                </Pressable>
+              </View>
             ) : (
-              <Text style={S.heroNote}>
-                Exibidos em ordem alfabética (sem privilégio).
-              </Text>
+              <FlatList
+                data={barbers}
+                keyExtractor={key}
+                renderItem={render}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 18 }}
+              />
             )}
           </View>
         </View>
       </View>
-
-      <View style={S.whiteArea}>
-        <View style={S.whiteContent}>
-          <Text style={S.sectionTitle}>Profissionais</Text>
-
-          {loading ? (
-            <View style={S.centerBox}>
-              <ActivityIndicator />
-              <Text style={S.centerText}>Carregando…</Text>
-            </View>
-          ) : barbers.length === 0 ? (
-            <View style={S.centerBox}>
-              <Text style={S.emptyTitle}>Nenhum profissional disponível</Text>
-              <Text style={S.centerText}>
-                Não encontramos profissionais ativos para esse serviço.
-              </Text>
-
-              <Pressable style={S.secondaryBtn} onPress={fetchBarbers}>
-                <Text style={S.secondaryBtnText}>Tentar novamente</Text>
-              </Pressable>
-            </View>
-          ) : (
-            <FlatList
-              data={barbers}
-              keyExtractor={key}
-              renderItem={render}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 18 }}
-            />
-          )}
-        </View>
-      </View>
-    </View>
+    </ScreenGate>
   );
 }
 
