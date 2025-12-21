@@ -1,4 +1,4 @@
-import React, { memo, useCallback, useMemo } from "react";
+import React, { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -8,42 +8,80 @@ import {
   FlatList,
   ListRenderItemInfo,
   TextInput,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useFocusEffect, useRouter } from "expo-router";
 
 import { UI, styles } from "../../../../src/theme/client-theme";
 import { useAuth } from "../../../../src/auth/auth-context";
+import { api } from "../../../../src/services/api";
 
 const STICKY_ROW_H = 74;
 
 type Category = { id: string; label: string };
 
+type ApiProduct = {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  description: string;
+  price: number;
+  category: string | null;
+  stockQuantity: number;
+  isOutOfStock: boolean;
+  pickupDeadlineDays: number;
+  unitId: string;
+  unitName: string;
+};
+
 type Product = {
   id: string;
   name: string;
   price: string;
-  oldPrice: string;
-  badge: string;
+  oldPrice: string; // por enquanto vazio (API não tem)
   image: string;
+  isOutOfStock: boolean;
+  category: string | null; // ✅ vem do cadastro (API)
 };
+
+function formatBRL(value: number) {
+  try {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(value);
+  } catch {
+    const v = Number.isFinite(value) ? value : 0;
+    return `R$ ${v.toFixed(2).replace(".", ",")}`;
+  }
+}
 
 type ProductsHeaderProps = {
   topBounceHeight: number;
   topOffset: number;
   categories: Category[];
+  activeCategoryId: string;
+  onSelectCategory: (id: string) => void;
+  search: string;
+  onChangeSearch: (v: string) => void;
+  loading: boolean;
+  totalCount: number;
 };
 
 const CategoryChip = memo(function CategoryChip({
   label,
   active,
+  onPress,
 }: {
   label: string;
   active: boolean;
+  onPress: () => void;
 }) {
   return (
-    <Pressable style={[S.chip, active ? S.chipActive : null]}>
+    <Pressable onPress={onPress} style={[S.chip, active ? S.chipActive : null]}>
       <Text style={[S.chipText, active ? S.chipTextActive : null]}>
         {label}
       </Text>
@@ -58,23 +96,19 @@ const ProductTile = memo(function ProductTile({
   item: Product;
   onOpen: (id: string) => void;
 }) {
-  const canOpen = item.id === "1"; // ✅ por enquanto só o primeiro produto
+  const hasOldPrice = !!item.oldPrice?.trim();
 
   return (
-    <Pressable
-      style={S.productCard}
-      onPress={canOpen ? () => onOpen(item.id) : undefined}
-      disabled={!canOpen}
-    >
+    <Pressable style={S.productCard} onPress={() => onOpen(item.id)}>
       <View style={S.productImgWrap}>
         <Image source={{ uri: item.image }} style={S.productImage} />
-        <View style={S.badge}>
-          <Text style={S.badgeText}>{item.badge}</Text>
-        </View>
 
-        <Pressable style={S.favBtn}>
-          <FontAwesome name="heart-o" size={16} color={UI.colors.white} />
-        </Pressable>
+        {/* ✅ único badge: ESGOTADO (roxinho) */}
+        {item.isOutOfStock ? (
+          <View style={S.outOfStockPill}>
+            <Text style={S.outOfStockText}>ESGOTADO</Text>
+          </View>
+        ) : null}
       </View>
 
       <Text numberOfLines={2} style={S.productName}>
@@ -83,13 +117,47 @@ const ProductTile = memo(function ProductTile({
 
       <View style={S.priceRow}>
         <Text style={S.productPrice}>{item.price}</Text>
-        <Text style={S.productOldPrice}>{item.oldPrice}</Text>
+        {hasOldPrice ? (
+          <Text style={S.productOldPrice}>{item.oldPrice}</Text>
+        ) : null}
       </View>
 
-      <Pressable style={[styles.pillPrimary, S.addBtn]}>
-        <FontAwesome name="plus" size={14} color={UI.colors.white} />
-        <Text style={styles.pillPrimaryText}>Adicionar</Text>
-      </Pressable>
+      <View style={S.tileFooter}>
+        {item.isOutOfStock ? (
+          <Pressable
+            onPress={() => onOpen(item.id)}
+            style={S.detailsBtn}
+            hitSlop={8}
+          >
+            <View style={S.btnCenterRow}>
+              <Text style={S.detailsBtnText}>Ver detalhes</Text>
+              <FontAwesome
+                name="angle-right"
+                size={18}
+                color={UI.brand.primary}
+                style={{ marginLeft: 8 }}
+              />
+            </View>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => {
+              Alert.alert(
+                "Reservar",
+                "Em seguida vamos ligar o fluxo de reserva ✅",
+              );
+            }}
+            style={[styles.pillPrimary, S.reserveBtn]}
+          >
+            <FontAwesome
+              name="shopping-bag"
+              size={14}
+              color={UI.colors.white}
+            />
+            <Text style={styles.pillPrimaryText}>Reservar</Text>
+          </Pressable>
+        )}
+      </View>
     </Pressable>
   );
 });
@@ -98,6 +166,12 @@ const ProductsHeader = memo(function ProductsHeader({
   topBounceHeight,
   topOffset,
   categories,
+  activeCategoryId,
+  onSelectCategory,
+  search,
+  onChangeSearch,
+  loading,
+  totalCount,
 }: ProductsHeaderProps) {
   return (
     <View>
@@ -110,17 +184,28 @@ const ProductsHeader = memo(function ProductsHeader({
 
       <View style={S.darkShell}>
         <View style={S.darkInner}>
-          <View style={styles.glassCard}>
+          <View style={[styles.glassCard, S.filtersCard]}>
             <View style={S.searchRow}>
               <View style={S.searchIcon}>
                 <FontAwesome name="search" size={16} color={UI.colors.white} />
               </View>
 
               <TextInput
-                placeholder="Buscar produtos..."
+                placeholder="Buscar por nome…"
                 placeholderTextColor="rgba(255,255,255,0.55)"
                 style={S.searchInput}
+                value={search}
+                onChangeText={onChangeSearch}
+                autoCorrect={false}
+                autoCapitalize="none"
+                returnKeyType="search"
               />
+
+              {loading ? (
+                <View style={{ width: 22, alignItems: "flex-end" }}>
+                  <ActivityIndicator />
+                </View>
+              ) : null}
             </View>
 
             <FlatList
@@ -129,8 +214,12 @@ const ProductsHeader = memo(function ProductsHeader({
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={S.chipsContent}
-              renderItem={({ item, index }: ListRenderItemInfo<Category>) => (
-                <CategoryChip label={item.label} active={index === 0} />
+              renderItem={({ item }: ListRenderItemInfo<Category>) => (
+                <CategoryChip
+                  label={item.label}
+                  active={item.id === activeCategoryId}
+                  onPress={() => onSelectCategory(item.id)}
+                />
               )}
               removeClippedSubviews
               initialNumToRender={6}
@@ -174,6 +263,10 @@ const ProductsHeader = memo(function ProductsHeader({
         <View style={S.whiteContent}>
           <View style={S.sectionRow}>
             <Text style={S.sectionTitle}>Catálogo</Text>
+
+            <Text style={S.sectionMeta}>
+              {loading ? "Carregando…" : `${totalCount} produto(s)`}
+            </Text>
           </View>
         </View>
       </View>
@@ -210,70 +303,12 @@ export default function Products() {
     [user?.image],
   );
 
-  const categories = useMemo<Category[]>(
-    () => [
-      { id: "all", label: "Todos" },
-      { id: "hair", label: "Cabelo" },
-      { id: "beard", label: "Barba" },
-      { id: "wash", label: "Higiene" },
-      { id: "acc", label: "Acessórios" },
-    ],
-    [],
-  );
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const products = useMemo<Product[]>(
-    () => [
-      {
-        id: "1",
-        name: "Pomada Matte Efeito Seco",
-        price: "R$ 49,90",
-        oldPrice: "R$ 59,90",
-        badge: "15% OFF",
-        image: "https://picsum.photos/seed/pomada/600/420",
-      },
-      {
-        id: "2",
-        name: "Óleo de Barba Premium",
-        price: "R$ 39,90",
-        oldPrice: "R$ 49,90",
-        badge: "Mais vendido",
-        image: "https://picsum.photos/seed/oleo/600/420",
-      },
-      {
-        id: "3",
-        name: "Shampoo Black",
-        price: "R$ 59,90",
-        oldPrice: "R$ 69,90",
-        badge: "Novo",
-        image: "https://picsum.photos/seed/shampoo/600/420",
-      },
-      {
-        id: "4",
-        name: "Pente Carbono Anti-estático",
-        price: "R$ 19,90",
-        oldPrice: "R$ 29,90",
-        badge: "Oferta",
-        image: "https://picsum.photos/seed/pente/600/420",
-      },
-      {
-        id: "5",
-        name: "Balm Pós Barba",
-        price: "R$ 34,90",
-        oldPrice: "R$ 44,90",
-        badge: "Top",
-        image: "https://picsum.photos/seed/balm/600/420",
-      },
-      {
-        id: "6",
-        name: "Spray Texturizador",
-        price: "R$ 54,90",
-        oldPrice: "R$ 64,90",
-        badge: "Novo",
-        image: "https://picsum.photos/seed/spray/600/420",
-      },
-    ],
-    [],
-  );
+  const fetchingRef = useRef(false);
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
 
@@ -286,12 +321,134 @@ export default function Products() {
 
   const openProduct = useCallback(
     (id: string) => {
-      router.push(`/products/${id}`);
+      router.push({ pathname: "/(app)/(tabs)/products/[id]", params: { id } });
     },
     [router],
   );
 
+  const fetchAllProducts = useCallback(async () => {
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+
+    try {
+      setLoading(true);
+
+      const all: ApiProduct[] = [];
+      let cursor: string | null = null;
+
+      const MAX = 300;
+
+      while (true) {
+        const url: string =
+          "/api/mobile/products" +
+          `?limit=50` +
+          (cursor ? `&cursor=${encodeURIComponent(cursor)}` : "");
+
+        const res = (await api.get(url)) as {
+          items?: ApiProduct[];
+          nextCursor?: string | null;
+        };
+
+        const page: ApiProduct[] = Array.isArray(res?.items) ? res.items : [];
+        all.push(...page);
+
+        cursor = res?.nextCursor ?? null;
+
+        if (!cursor) break;
+        if (all.length >= MAX) break;
+      }
+
+      const mapped: Product[] = all
+        .map((p) => {
+          const image: string =
+            p.imageUrl ||
+            "https://picsum.photos/seed/product-placeholder/600/420";
+
+          return {
+            id: String(p.id),
+            name: String(p.name ?? "Produto"),
+            price: formatBRL(Number(p.price ?? 0)),
+            oldPrice: "", // sem suporte na API por enquanto
+            image,
+            isOutOfStock: !!p.isOutOfStock,
+            category: p.category ? String(p.category) : null,
+          };
+        })
+        .filter((p) => !!p.id);
+
+      setProducts(mapped);
+
+      // ✅ se a categoria ativa não existir mais, volta pra "all"
+      const activeExists =
+        activeCategory === "all" ||
+        mapped.some(
+          (p) =>
+            (p.category || "").trim().toLowerCase() ===
+            activeCategory.toLowerCase(),
+        );
+      if (!activeExists) setActiveCategory("all");
+    } catch (err: any) {
+      console.log("[products] fetch error:", err?.data ?? err?.message ?? err);
+      const msg =
+        err?.data?.error ||
+        err?.message ||
+        "Não foi possível carregar os produtos.";
+      Alert.alert("Erro", String(msg));
+      setProducts([]);
+    } finally {
+      setLoading(false);
+      fetchingRef.current = false;
+    }
+  }, [activeCategory]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchAllProducts();
+    }, [fetchAllProducts]),
+  );
+
+  // ✅ Categorias vindas do cadastro (API)
+  const categories = useMemo<Category[]>(() => {
+    const normalize = (s: string) => s.trim().toLowerCase();
+
+    const uniq = Array.from(
+      new Set(
+        products
+          .map((p) => (p.category || "").trim())
+          .filter((c) => !!c)
+          .map(normalize),
+      ),
+    ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+    const prettify = (s: string) =>
+      s
+        .split(" ")
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+
+    return [{ id: "all", label: "Todos" }].concat(
+      uniq.map((c) => ({ id: c, label: prettify(c) })),
+    );
+  }, [products]);
+
+  // ✅ Busca sempre pelo título (name) + filtro por categoria
+  const filteredProducts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    return products.filter((p) => {
+      const nameOk = !q || p.name.toLowerCase().includes(q);
+
+      const cat = (p.category || "").trim().toLowerCase();
+      const categoryOk =
+        activeCategory === "all" || (cat && cat === activeCategory);
+
+      return nameOk && categoryOk;
+    });
+  }, [products, search, activeCategory]);
+
   const keyProduct = useCallback((item: Product) => item.id, []);
+
   const renderProduct = useCallback(
     ({ item }: ListRenderItemInfo<Product>) => (
       <ProductTile item={item} onOpen={openProduct} />
@@ -305,9 +462,23 @@ export default function Products() {
         topBounceHeight={topBounceHeight}
         topOffset={TOP_OFFSET}
         categories={categories}
+        activeCategoryId={activeCategory}
+        onSelectCategory={setActiveCategory}
+        search={search}
+        onChangeSearch={setSearch}
+        loading={loading}
+        totalCount={filteredProducts.length}
       />
     ),
-    [TOP_OFFSET, categories, topBounceHeight],
+    [
+      TOP_OFFSET,
+      categories,
+      filteredProducts.length,
+      loading,
+      search,
+      topBounceHeight,
+      activeCategory,
+    ],
   );
 
   return (
@@ -344,23 +515,59 @@ export default function Products() {
         </View>
       </View>
 
-      <FlatList
-        data={products}
-        keyExtractor={keyProduct}
-        renderItem={renderProduct}
-        numColumns={2}
-        columnWrapperStyle={S.gridRow}
-        showsVerticalScrollIndicator={false}
-        style={S.list}
-        contentContainerStyle={S.listContent}
-        ListHeaderComponent={ListHeader}
-        ListFooterComponent={<ProductsFooter />}
-        removeClippedSubviews
-        initialNumToRender={6}
-        maxToRenderPerBatch={8}
-        windowSize={7}
-        updateCellsBatchingPeriod={50}
-      />
+      {loading && products.length === 0 ? (
+        <View
+          style={{
+            flex: 1,
+            backgroundColor: UI.colors.white,
+            alignItems: "center",
+            justifyContent: "center",
+            paddingTop: TOP_OFFSET + 30,
+          }}
+        >
+          <ActivityIndicator />
+          <Text
+            style={{
+              marginTop: 10,
+              color: UI.colors.black45,
+              fontWeight: "600",
+            }}
+          >
+            Carregando catálogo…
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredProducts}
+          keyExtractor={keyProduct}
+          renderItem={renderProduct}
+          numColumns={2}
+          columnWrapperStyle={S.gridRow}
+          showsVerticalScrollIndicator={false}
+          style={S.list}
+          contentContainerStyle={S.listContent}
+          ListHeaderComponent={ListHeader}
+          ListFooterComponent={<ProductsFooter />}
+          ListEmptyComponent={
+            <View style={{ padding: 18 }}>
+              <Text
+                style={{
+                  color: UI.colors.black45,
+                  textAlign: "center",
+                  fontWeight: "600",
+                }}
+              >
+                Nenhum produto encontrado.
+              </Text>
+            </View>
+          }
+          removeClippedSubviews
+          initialNumToRender={6}
+          maxToRenderPerBatch={8}
+          windowSize={7}
+          updateCellsBatchingPeriod={50}
+        />
+      )}
     </View>
   );
 }
@@ -374,6 +581,11 @@ const S = StyleSheet.create({
     right: 0,
     top: 0,
     zIndex: 999,
+  },
+
+  filtersCard: {
+    padding: UI.spacing.cardPad, // ✅ mesmo “ar” do heroCard da home
+    marginTop: 14, // ✅ mesmo respiro
   },
 
   profileRow: { flexDirection: "row", gap: 12, alignItems: "center" },
@@ -408,7 +620,7 @@ const S = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginBottom: 12,
+    marginBottom: 14,
   },
 
   searchIcon: {
@@ -482,6 +694,38 @@ const S = StyleSheet.create({
     lineHeight: 18,
   },
 
+  tileFooter: {
+    marginTop: 12,
+    gap: 10,
+  },
+
+  btnCenterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  detailsBtn: {
+    height: 40,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    backgroundColor: UI.colors.white,
+    borderWidth: 1,
+    borderColor: UI.brand.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  detailsBtnText: {
+    color: UI.brand.primary,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+
+  reserveBtn: {
+    height: 40,
+  },
+
   heroBtn: {
     marginTop: 14,
     alignSelf: "flex-start",
@@ -511,11 +755,21 @@ const S = StyleSheet.create({
   whiteArea: { backgroundColor: UI.colors.white },
   whiteContent: { paddingHorizontal: UI.spacing.screenX, paddingTop: 18 },
 
-  sectionRow: { marginBottom: 12 },
+  sectionRow: {
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
     color: UI.brand.primaryText,
+  },
+  sectionMeta: {
+    color: UI.colors.black45,
+    fontSize: 12,
+    fontWeight: "600",
   },
 
   gridRow: {
@@ -541,27 +795,23 @@ const S = StyleSheet.create({
   },
   productImage: { height: 124, width: "100%" },
 
-  badge: {
-    position: "absolute",
-    left: 10,
-    top: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: UI.radius.pill,
-    backgroundColor: UI.brand.primary,
-  },
-  badgeText: { color: UI.colors.white, fontSize: 11, fontWeight: "800" },
-
-  favBtn: {
+  // ✅ ESGOTADO roxinho
+  outOfStockPill: {
     position: "absolute",
     right: 10,
     top: 10,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: UI.colors.black28,
-    alignItems: "center",
-    justifyContent: "center",
+    backgroundColor: UI.brand.primary,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  outOfStockText: {
+    color: UI.colors.white,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
   },
 
   productName: {
@@ -591,7 +841,7 @@ const S = StyleSheet.create({
     fontSize: 12,
   },
 
-  addBtn: { height: 42, marginTop: 12 },
+  addBtn: { height: 40, marginTop: 12 },
 
   footerWrap: {
     paddingHorizontal: UI.spacing.screenX,
@@ -601,6 +851,6 @@ const S = StyleSheet.create({
   },
 
   bottomCTA: { gap: 10 },
-  checkoutBtn: { height: 54 },
+  checkoutBtn: { height: 40 },
   checkoutText: { fontSize: 16 },
 });

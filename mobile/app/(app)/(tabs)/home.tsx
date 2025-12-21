@@ -23,9 +23,10 @@ const STICKY_ROW_H = 74;
 type Product = {
   id: string;
   name: string;
-  price: string;
-  oldPrice: string;
-  image: string;
+  price: number;
+  imageUrl: string | null;
+  unitName: string;
+  isOutOfStock: boolean;
 };
 
 type HistoryItem = {
@@ -41,39 +42,93 @@ type NextAppt = {
   serviceName: string;
   unitName: string;
   barberName: string;
-  startsAtLabel: string; // ex: "20/12/2025 • 14:30"
+  startsAtLabel: string;
   statusLabel: string;
-
-  // ✅ opcional (se backend mandar, usamos)
   status?: string | null;
-
   unitId?: string | null;
   serviceId?: string | null;
   barberId?: string | null;
-
-  // ✅ políticas (quando backend passar a mandar)
   canReschedule?: boolean;
   canCancel?: boolean;
   cancellationFeeEligible?: boolean;
   cancellationFeeNotice?: string | null;
 };
 
+function formatBRL(value: number) {
+  try {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(value);
+  } catch {
+    const v = Number.isFinite(value) ? value : 0;
+    return `R$ ${v.toFixed(2).replace(".", ",")}`;
+  }
+}
+
 const ProductCard = memo(function ProductCard({
   item,
   showDivider,
+  onPressDetails,
 }: {
   item: Product;
   showDivider: boolean;
+  onPressDetails: (id: string) => void;
 }) {
+  const priceLabel = useMemo(() => formatBRL(item.price), [item.price]);
+
+  const goDetails = useCallback(() => {
+    onPressDetails(item.id);
+  }, [item.id, onPressDetails]);
+
   return (
-    <View style={S.productCard}>
-      <Image source={{ uri: item.image }} style={S.productImage} />
-      <Text style={S.productName}>{item.name}</Text>
-      <Text style={S.productOldPrice}>{item.oldPrice}</Text>
-      <Text style={S.productPrice}>{item.price}</Text>
+    <Pressable onPress={goDetails} style={S.productCard} android_ripple={{}}>
+      <View style={{ position: "relative" }}>
+        <Image
+          source={{
+            uri:
+              item.imageUrl ||
+              "https://picsum.photos/seed/product-placeholder/400/300",
+          }}
+          style={S.productImage}
+        />
+
+        {item.isOutOfStock ? (
+          <View style={S.outOfStockPill}>
+            <Text style={S.outOfStockText}>ESGOTADO</Text>
+          </View>
+        ) : null}
+      </View>
+
+      <View style={S.productBody}>
+        <Text style={S.productName} numberOfLines={2}>
+          {item.name}
+        </Text>
+
+        <Text style={S.productUnit} numberOfLines={1}>
+          {item.unitName}
+        </Text>
+
+        <Text style={S.productPrice}>{priceLabel}</Text>
+
+        <View style={S.productFooter}>
+          {/* ✅ CTA visual (card inteiro já é clicável) */}
+          <Pressable onPress={goDetails} style={S.detailsBtn} hitSlop={8}>
+            <View style={S.btnCenterRow}>
+              <Text style={S.detailsBtnText}>Ver detalhes</Text>
+              <FontAwesome
+                name="angle-right"
+                size={18}
+                color={UI.brand.primary}
+                style={{ marginLeft: 8 }}
+              />
+            </View>
+          </Pressable>
+        </View>
+      </View>
 
       {showDivider ? <View style={S.productDivider} /> : null}
-    </View>
+    </Pressable>
   );
 });
 
@@ -124,13 +179,15 @@ export default function Home() {
   const [next, setNext] = useState<NextAppt | null>(null);
   const [nextLoading, setNextLoading] = useState(true);
 
-  // ✅ Histórico preview (até 5)
   const [historyPreview, setHistoryPreview] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
 
-  // ✅ trava real (não depende do state)
+  const [products, setProducts] = useState<Product[]>([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+
   const fetchingRef = useRef(false);
   const fetchingHistoryRef = useRef(false);
+  const fetchingProductsRef = useRef(false);
 
   const fetchNext = useCallback(async () => {
     if (fetchingRef.current) return;
@@ -177,54 +234,59 @@ export default function Home() {
     }
   }, []);
 
-  // ✅ recarrega quando entrar/voltar pra Home (inclui primeira vez)
+  const fetchProductsPreview = useCallback(async () => {
+    if (fetchingProductsRef.current) return;
+    fetchingProductsRef.current = true;
+
+    try {
+      setProductsLoading(true);
+
+      const res = await api.get<{
+        ok?: boolean;
+        items?: any[];
+        products?: any[];
+        nextCursor?: string | null;
+      }>("/api/mobile/products?limit=4");
+
+      const rawList =
+        (Array.isArray(res?.items) ? res.items : null) ??
+        (Array.isArray(res?.products) ? res.products : null) ??
+        [];
+
+      const mapped: Product[] = rawList
+        .slice(0, 4)
+        .map((p: any) => ({
+          id: String(p?.id ?? ""),
+          name: String(p?.name ?? "Produto"),
+          price: Number(p?.price ?? 0),
+          imageUrl: typeof p?.imageUrl === "string" ? p.imageUrl : null,
+          unitName: String(p?.unitName ?? "—"),
+          isOutOfStock: !!p?.isOutOfStock,
+        }))
+        .filter((p) => !!p.id);
+
+      setProducts(mapped);
+    } catch (err: any) {
+      console.log(
+        "[home] products preview error:",
+        err?.data ?? err?.message ?? err,
+      );
+      setProducts([]);
+    } finally {
+      setProductsLoading(false);
+      fetchingProductsRef.current = false;
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       fetchNext();
       fetchHistoryPreview();
-    }, [fetchNext, fetchHistoryPreview]),
-  );
-
-  const products = useMemo<Product[]>(
-    () => [
-      {
-        id: "1",
-        name: "Pomada Matte Efeito Seco",
-        price: "R$ 49,90",
-        oldPrice: "R$ 59,90",
-        image: "https://picsum.photos/seed/pomada/400/300",
-      },
-      {
-        id: "2",
-        name: "Óleo de Barba Premium",
-        price: "R$ 39,90",
-        oldPrice: "R$ 49,90",
-        image: "https://picsum.photos/seed/oleo/400/300",
-      },
-      {
-        id: "3",
-        name: "Shampoo Black",
-        price: "R$ 59,90",
-        oldPrice: "R$ 69,90",
-        image: "https://picsum.photos/seed/shampoo/400/300",
-      },
-      {
-        id: "4",
-        name: "Pente Carbono Anti-estático",
-        price: "R$ 19,90",
-        oldPrice: "R$ 29,90",
-        image: "https://picsum.photos/seed/pente/400/300",
-      },
-    ],
-    [],
+      fetchProductsPreview();
+    }, [fetchNext, fetchHistoryPreview, fetchProductsPreview]),
   );
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
-
-  const safeTopStyle = useMemo(
-    () => ({ height: insets.top, backgroundColor: UI.brand.primary }),
-    [insets.top],
-  );
 
   const headerSpacerStyle = useMemo(
     () => ({ height: TOP_OFFSET, backgroundColor: UI.colors.bg }),
@@ -232,22 +294,6 @@ export default function Home() {
   );
 
   const topBounceHeight = useMemo(() => TOP_OFFSET + 1400, [TOP_OFFSET]);
-
-  const keyProduct = useCallback((item: Product) => item.id, []);
-  const renderProduct = useCallback(
-    ({ item, index }: ListRenderItemInfo<Product>) => (
-      <ProductCard item={item} showDivider={index < products.length - 1} />
-    ),
-    [products.length],
-  );
-
-  const keyHistory = useCallback((item: HistoryItem) => item.id, []);
-  const renderHistory = useCallback(
-    ({ item, index }: ListRenderItemInfo<HistoryItem>) => (
-      <HistoryRow item={item} showDivider={index < historyPreview.length - 1} />
-    ),
-    [historyPreview.length],
-  );
 
   const goToBooking = useCallback(() => {
     router.push("/booking/unit");
@@ -257,16 +303,23 @@ export default function Home() {
     router.push("/client/history");
   }, [router]);
 
-  // ✅ ALTERAR: entra no mesmo fluxo do booking, mas em modo edição
+  const goToProducts = useCallback(() => {
+    router.push("/products");
+  }, [router]);
+
+  const goToProductDetails = useCallback(
+    (id: string) => {
+      router.push({ pathname: "/(app)/(tabs)/products/[id]", params: { id } });
+    },
+    [router],
+  );
+
   const onPressReschedule = useCallback(() => {
     if (!next) return;
 
     router.push({
       pathname: "/booking/unit",
-      params: {
-        mode: "edit",
-        appointmentId: next.id,
-      },
+      params: { mode: "edit", appointmentId: next.id },
     });
   }, [next, router]);
 
@@ -325,6 +378,25 @@ export default function Home() {
     ]);
   }, [cancelApiCall, next]);
 
+  const keyProduct = useCallback((item: Product) => item.id, []);
+  const renderProduct = useCallback(
+    ({ item, index }: ListRenderItemInfo<Product>) => (
+      <ProductCard
+        item={item}
+        showDivider={index < products.length - 1}
+        onPressDetails={goToProductDetails}
+      />
+    ),
+    [goToProductDetails, products.length],
+  );
+
+  const renderHistory = useCallback(
+    ({ item, index }: ListRenderItemInfo<HistoryItem>) => (
+      <HistoryRow item={item} showDivider={index < historyPreview.length - 1} />
+    ),
+    [historyPreview.length],
+  );
+
   const Header = useMemo(() => {
     const hasNext = !!next;
 
@@ -332,18 +404,15 @@ export default function Home() {
       ? String(next!.startsAtLabel || "").replace(" • ", " - ")
       : "";
 
-    // ✅ ATENDIMENTO: some botões
     const isInService =
       hasNext &&
       (String(next!.status || "").toUpperCase() === "IN_SERVICE" ||
         String(next!.status || "").toUpperCase() === "ATENDIMENTO" ||
         String(next!.statusLabel || "").toUpperCase() === "ATENDIMENTO");
 
-    // ✅ políticas (quando backend mandar). Por enquanto default true.
     const canReschedule = hasNext ? next!.canReschedule !== false : false;
     const canCancel = hasNext ? next!.canCancel !== false : false;
 
-    // ✅ SEM MOSTRA: enquanto NÃO for ATENDIMENTO, a linha aparece (mesmo sem flags)
     const showActions = hasNext && !isInService;
 
     return (
@@ -449,22 +518,40 @@ export default function Home() {
           <View style={S.whiteContent}>
             <Text style={S.sectionTitle}>Produtos</Text>
 
-            <FlatList
-              data={products}
-              keyExtractor={keyProduct}
-              renderItem={renderProduct}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              removeClippedSubviews
-              initialNumToRender={3}
-              maxToRenderPerBatch={4}
-              windowSize={5}
-            />
+            {productsLoading ? (
+              <View style={{ height: 235, justifyContent: "center" }}>
+                <ActivityIndicator />
+              </View>
+            ) : products.length === 0 ? (
+              <View style={{ paddingVertical: 10 }}>
+                <Text style={S.emptyProductsText}>
+                  Nenhum produto disponível no momento.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={products}
+                keyExtractor={keyProduct}
+                renderItem={renderProduct}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                removeClippedSubviews
+                initialNumToRender={3}
+                maxToRenderPerBatch={4}
+                windowSize={5}
+              />
+            )}
 
-            <Pressable style={S.moreBtn}>
-              <Text style={S.moreBtnText}>
-                Toque para acessar mais produtos
-              </Text>
+            <Pressable style={S.outlineBtn} onPress={goToProducts}>
+              <View style={S.btnCenterRow}>
+                <Text style={S.outlineBtnText}>Ver todos os produtos</Text>
+                <FontAwesome
+                  name="angle-right"
+                  size={18}
+                  color={UI.brand.primary}
+                  style={{ marginLeft: 8 }}
+                />
+              </View>
             </Pressable>
 
             <View style={[S.historyHeaderRow, S.sectionTitleSpacing]}>
@@ -486,6 +573,7 @@ export default function Home() {
   }, [
     goToBooking,
     goToHistory,
+    goToProducts,
     headerSpacerStyle,
     keyProduct,
     next,
@@ -493,6 +581,7 @@ export default function Home() {
     onPressCancel,
     onPressReschedule,
     products.length,
+    productsLoading,
     renderProduct,
     topBounceHeight,
   ]);
@@ -500,7 +589,9 @@ export default function Home() {
   return (
     <View style={S.page}>
       <View style={S.fixedTop}>
-        <View style={safeTopStyle} />
+        <View
+          style={{ height: insets.top, backgroundColor: UI.brand.primary }}
+        />
 
         <View style={S.stickyRow}>
           <View style={S.profileRow}>
@@ -523,7 +614,7 @@ export default function Home() {
 
       <FlatList
         data={historyPreview}
-        keyExtractor={keyHistory}
+        keyExtractor={(item) => item.id}
         renderItem={renderHistory}
         showsVerticalScrollIndicator={false}
         style={S.list}
@@ -557,14 +648,7 @@ export default function Home() {
 
 const S = StyleSheet.create({
   page: { flex: 1, backgroundColor: UI.colors.bg },
-
-  fixedTop: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    top: 0,
-    zIndex: 999,
-  },
+  fixedTop: { position: "absolute", left: 0, right: 0, top: 0, zIndex: 999 },
 
   stickyRow: {
     height: STICKY_ROW_H,
@@ -671,11 +755,7 @@ const S = StyleSheet.create({
     alignItems: "center",
   },
 
-  // ✅ corrigido: não depende de UI.colors.warning (que não existe)
-  statusPillInService: {
-    backgroundColor: "rgba(255,193,7,0.95)",
-  },
-
+  statusPillInService: { backgroundColor: "rgba(255,193,7,0.95)" },
   statusText: { color: UI.colors.black, fontSize: 12, fontWeight: "700" },
 
   actionsRow: { flexDirection: "row", gap: 10, marginTop: 14 },
@@ -700,10 +780,7 @@ const S = StyleSheet.create({
   },
 
   whiteArea: { backgroundColor: UI.colors.white },
-  whiteContent: {
-    paddingHorizontal: UI.spacing.screenX,
-    paddingTop: 18,
-  },
+  whiteContent: { paddingHorizontal: UI.spacing.screenX, paddingTop: 18 },
 
   sectionTitle: {
     fontSize: 18,
@@ -711,6 +788,7 @@ const S = StyleSheet.create({
     marginBottom: 12,
     color: UI.brand.primaryText,
   },
+
   sectionTitleSpacing: { marginTop: 28 },
 
   historyHeaderRow: {
@@ -744,28 +822,87 @@ const S = StyleSheet.create({
     paddingRight: 18,
     position: "relative",
   },
+
   productImage: {
     height: 140,
     borderRadius: UI.radius.input,
     marginBottom: 12,
     backgroundColor: "rgba(0,0,0,0.05)",
   },
+
+  outOfStockPill: {
+    position: "absolute",
+    right: 10,
+    top: 10,
+    backgroundColor: UI.brand.primary,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+
+  outOfStockText: {
+    color: UI.colors.white,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+
+  productBody: {
+    flex: 1,
+    minHeight: 128,
+  },
+
   productName: {
     fontSize: 16,
     fontWeight: "600",
     color: UI.brand.primaryText,
   },
-  productOldPrice: {
-    textDecorationLine: "line-through",
-    color: "rgba(0,0,0,0.45)",
+
+  productUnit: {
     marginTop: 6,
+    fontSize: 12,
+    fontWeight: "700",
+    color: "rgba(0,0,0,0.55)",
   },
+
   productPrice: {
     fontSize: 20,
     fontWeight: "700",
     color: UI.brand.primaryText,
     marginTop: 6,
   },
+
+  productFooter: {
+    marginTop: 10,
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+
+  btnCenterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  detailsBtn: {
+    height: 40,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    backgroundColor: UI.colors.white,
+    borderWidth: 1,
+    borderColor: UI.brand.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  detailsBtnText: {
+    color: UI.brand.primary,
+    fontSize: 13,
+    fontWeight: "500",
+  },
+
   productDivider: {
     position: "absolute",
     right: 0,
@@ -775,17 +912,31 @@ const S = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.10)",
   },
 
-  moreBtn: {
+  emptyProductsText: {
+    color: "rgba(0,0,0,0.55)",
+    fontSize: 13,
+    fontWeight: "600",
+    textAlign: "center",
+    paddingVertical: 10,
+  },
+
+  outlineBtn: {
     marginTop: 18,
-    height: 56,
-    backgroundColor: UI.brand.primary,
+    height: 40,
     borderRadius: 999,
+    paddingHorizontal: 14,
+    backgroundColor: UI.colors.white,
+    borderWidth: 1,
+    borderColor: UI.brand.primary,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
   },
-  moreBtnText: { color: UI.colors.text, fontSize: 15, fontWeight: "700" },
+
+  outlineBtnText: {
+    color: UI.brand.primary,
+    fontSize: 15,
+    fontWeight: "500",
+  },
 
   historyItem: {
     paddingVertical: 16,
@@ -795,7 +946,9 @@ const S = StyleSheet.create({
     alignItems: "center",
     backgroundColor: UI.colors.white,
   },
+
   historyLeft: { flexDirection: "row", gap: 14, flex: 1, alignItems: "center" },
+
   historyIcon: {
     width: 36,
     height: 36,
@@ -804,9 +957,11 @@ const S = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   historyTitle: { fontWeight: "700", color: UI.brand.primaryText },
   historyDesc: { fontSize: 13, color: "rgba(0,0,0,0.65)", marginTop: 2 },
   historyDate: { fontSize: 12, color: "rgba(0,0,0,0.40)", marginTop: 2 },
+
   historyDivider: {
     position: "absolute",
     left: UI.spacing.screenX,

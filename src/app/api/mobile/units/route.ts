@@ -1,10 +1,13 @@
+// src/app/api/mobile/units/route.ts
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
-import { prisma } from "../../../../lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 type MobileTokenPayload = {
   sub: string;
   role?: "CLIENT" | "BARBER" | "ADMIN";
+  // ⚠️ email/name NÃO estão no JWT do app (signAppJwt só coloca role + sub),
+  // mas mantemos aqui opcional pra não quebrar logs/compat.
   email?: string;
   name?: string | null;
 };
@@ -42,8 +45,18 @@ async function requireMobileAuth(
 
   if (!token) throw new Error("Token ausente");
 
-  const { payload } = await jwtVerify(token, getJwtSecretKey());
-  return payload as unknown as MobileTokenPayload;
+  const { payload } = await jwtVerify(token, getJwtSecretKey(), {
+    algorithms: ["HS256"],
+  });
+
+  // normaliza um pouco (sem mudar shape)
+  const sub = typeof payload.sub === "string" ? payload.sub : "";
+  const role = (payload as any).role as MobileTokenPayload["role"];
+
+  return {
+    sub,
+    role,
+  };
 }
 
 export async function OPTIONS() {
@@ -84,7 +97,7 @@ export async function GET(req: Request) {
     console.log(`[mobile/units:${reqId}] querying prisma.unit.findMany...`);
 
     const units = await prisma.unit.findMany({
-      // ✅ não deixa "null" virar "inativa"
+      // ✅ mantém compatibilidade: traz true e null (só exclui false)
       where: { isActive: { not: false } },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
@@ -125,7 +138,8 @@ export async function GET(req: Request) {
       lower.includes("jwt") ||
       lower.includes("signature") ||
       lower.includes("jws") ||
-      lower.includes("unauthorized")
+      lower.includes("unauthorized") ||
+      lower.includes("não autorizado")
     ) {
       return NextResponse.json(
         { ok: false, error: "Não autorizado" },

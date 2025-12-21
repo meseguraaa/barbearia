@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -6,86 +6,266 @@ import {
   Image,
   Pressable,
   ScrollView,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 
 import { UI, styles } from "../../../../src/theme/client-theme";
+import { api } from "../../../../src/services/api";
 
 const HERO_H = 320;
 
-type ProductDetail = {
+type ApiProduct = {
   id: string;
   name: string;
-  category: string;
-  price: string;
+  imageUrl: string | null;
   description: string;
-  image: string;
-  extra: { label: string; value: string }[];
+  price: number;
+  category: string | null;
+  stockQuantity: number;
+  isOutOfStock: boolean;
+  pickupDeadlineDays: number;
+  unitId: string;
+  unitName: string;
 };
+
+function formatBRL(value: number) {
+  try {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(value);
+  } catch {
+    const v = Number.isFinite(value) ? value : 0;
+    return `R$ ${v.toFixed(2).replace(".", ",")}`;
+  }
+}
 
 export default function ProductDetails() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
 
-  const catalog = useMemo<ProductDetail[]>(
-    () => [
-      {
-        id: "1",
-        name: "Pomada Matte Efeito Seco",
-        category: "Cabelo",
-        price: "R$ 49,90",
-        description:
-          "Pomada modeladora com efeito seco, ideal para penteados modernos e acabamento natural. Fixação média, não oleosa e fácil de remover.",
-        image: "https://picsum.photos/seed/pomada/900/900",
-        extra: [
-          { label: "Fixação", value: "Média" },
-          { label: "Acabamento", value: "Matte" },
-          { label: "Categoria", value: "Cabelo" },
-        ],
-      },
-      {
-        id: "2",
-        name: "Óleo de Barba Premium",
-        category: "Barba",
-        price: "R$ 39,90",
-        description:
-          "Óleo para hidratar, alinhar e perfumar. Ajuda a reduzir frizz e dá brilho na medida certa.",
-        image: "https://picsum.photos/seed/oleo/900/900",
-        extra: [
-          { label: "Uso", value: "Diário" },
-          { label: "Textura", value: "Leve" },
-          { label: "Categoria", value: "Barba" },
-        ],
-      },
-    ],
-    [],
+  const productId = useMemo(() => String(id ?? "").trim(), [id]);
+
+  const [loading, setLoading] = useState(true);
+  const [product, setProduct] = useState<ApiProduct | null>(null);
+
+  const fetchingRef = useRef(false);
+
+  const fetchProduct = useCallback(async () => {
+    if (!productId) return;
+    if (fetchingRef.current) return;
+    fetchingRef.current = true;
+
+    try {
+      setLoading(true);
+
+      const res = await api.get<{
+        ok?: boolean;
+        product?: ApiProduct;
+        item?: ApiProduct;
+      }>(`/api/mobile/products/${encodeURIComponent(productId)}`);
+
+      const p = (res?.product ?? res?.item ?? null) as any;
+
+      if (!p?.id) {
+        setProduct(null);
+        return;
+      }
+
+      setProduct({
+        id: String(p.id),
+        name: String(p.name ?? "Produto"),
+        imageUrl: typeof p.imageUrl === "string" ? p.imageUrl : null,
+        description: String(p.description ?? ""),
+        price: Number(p.price ?? 0),
+        category: p.category ? String(p.category) : null,
+        stockQuantity: Number(p.stockQuantity ?? 0),
+        isOutOfStock: !!p.isOutOfStock,
+        pickupDeadlineDays: Number(p.pickupDeadlineDays ?? 2),
+        unitId: String(p.unitId ?? ""),
+        unitName: String(p.unitName ?? "—"),
+      });
+    } catch (err: any) {
+      console.log("[product details] error:", err?.data ?? err?.message ?? err);
+
+      const msg =
+        err?.data?.error ||
+        err?.message ||
+        "Não foi possível carregar o produto.";
+
+      Alert.alert("Erro", String(msg));
+      setProduct(null);
+    } finally {
+      setLoading(false);
+      fetchingRef.current = false;
+    }
+  }, [productId]);
+
+  useEffect(() => {
+    fetchProduct();
+  }, [fetchProduct]);
+
+  const priceLabel = useMemo(
+    () => formatBRL(product?.price ?? 0),
+    [product?.price],
   );
 
-  const product = useMemo(() => {
-    const found = catalog.find((p) => p.id === String(id));
-    return (
-      found ?? {
-        id: String(id ?? ""),
-        name: "Produto",
-        category: "Categoria",
-        price: "R$ --,--",
-        description:
-          "Não encontramos esse produto no mock. Quando conectar na API, isso some.",
-        image: "https://picsum.photos/seed/notfound/900/900",
-        extra: [{ label: "ID", value: String(id ?? "—") }],
-      }
+  const stockLabel = useMemo(() => {
+    if (!product) return "—";
+    if (product.isOutOfStock) return "Esgotado";
+    return String(product.stockQuantity);
+  }, [product]);
+
+  const extra = useMemo(() => {
+    const p = product;
+    if (!p) return [{ label: "ID", value: productId || "—" }];
+
+    return [
+      { label: "Unidade", value: p.unitName || "—" },
+      {
+        label: "Estoque",
+        value: p.isOutOfStock ? "Esgotado" : String(p.stockQuantity),
+      },
+      { label: "Prazo p/ retirada", value: `${p.pickupDeadlineDays} dia(s)` },
+      ...(p.category ? [{ label: "Categoria", value: p.category }] : []),
+    ];
+  }, [product, productId]);
+
+  const onPressReserve = useCallback(async () => {
+    if (!product) return;
+
+    if (product.isOutOfStock) {
+      Alert.alert("Esgotado", "Este produto está sem estoque no momento.");
+      return;
+    }
+
+    // ✅ Aqui é onde vamos ligar com o fluxo real de reserva:
+    // POST /api/mobile/orders/product-sale { productId, quantity: 1 }
+    // Por enquanto, deixo um placeholder bem claro:
+    Alert.alert(
+      "Reserva",
+      "Agora é só ligar o endpoint de reserva/pedido. Próximo passo ✅",
     );
-  }, [catalog, id]);
+  }, [product]);
+
+  if (loading) {
+    return (
+      <View
+        style={[S.page, { alignItems: "center", justifyContent: "center" }]}
+      >
+        <ActivityIndicator />
+        <Text
+          style={{
+            marginTop: 10,
+            color: "rgba(0,0,0,0.55)",
+            fontWeight: "600",
+          }}
+        >
+          Carregando produto…
+        </Text>
+      </View>
+    );
+  }
+
+  if (!product) {
+    return (
+      <View style={S.page}>
+        <View style={[S.headerFloat, { top: insets.top + 10 }]}>
+          <Pressable onPress={() => router.back()} style={styles.iconBtn42}>
+            <FontAwesome name="angle-left" size={20} color={UI.colors.white} />
+          </Pressable>
+        </View>
+
+        <View
+          style={{ padding: UI.spacing.screenX, paddingTop: insets.top + 90 }}
+        >
+          <Text
+            style={{
+              fontSize: 18,
+              fontWeight: "700",
+              color: UI.brand.primaryText,
+            }}
+          >
+            Produto não encontrado
+          </Text>
+
+          <Text
+            style={{ marginTop: 8, color: "rgba(0,0,0,0.65)", fontSize: 14 }}
+          >
+            Esse produto pode ter sido removido, desativado ou você está sem
+            conexão.
+          </Text>
+
+          <Pressable
+            onPress={fetchProduct}
+            style={[
+              styles.pillPrimary,
+              {
+                marginTop: 14,
+                height: 52,
+                alignItems: "center",
+                justifyContent: "center",
+              },
+            ]}
+          >
+            <Text style={styles.pillPrimaryText}>Tentar novamente</Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => router.back()}
+            style={[
+              {
+                marginTop: 10,
+                height: 52,
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 999,
+                backgroundColor: "rgba(0,0,0,0.04)",
+                borderWidth: 1,
+                borderColor: "rgba(0,0,0,0.06)",
+              },
+            ]}
+          >
+            <Text style={{ fontWeight: "800", color: UI.brand.primaryText }}>
+              Voltar
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={S.page}>
       {/* HERO IMAGE */}
       <View style={{ height: HERO_H }}>
-        <Image source={{ uri: product.image }} style={S.heroImage} />
+        <Image
+          source={{
+            uri:
+              product.imageUrl ||
+              "https://picsum.photos/seed/product-placeholder/900/900",
+          }}
+          style={S.heroImage}
+        />
         <View style={S.heroOverlay} />
+
+        {/* ✅ Badge simples de estoque (sem mudar layout) */}
+        <View style={S.stockPill}>
+          <FontAwesome
+            name={product.isOutOfStock ? "times" : "check"}
+            size={12}
+            color={UI.colors.white}
+            style={{ marginRight: 6 }}
+          />
+          <Text style={S.stockPillText}>
+            {product.isOutOfStock ? "Esgotado" : `Estoque: ${stockLabel}`}
+          </Text>
+        </View>
       </View>
 
       {/* HEADER FLOAT */}
@@ -103,11 +283,11 @@ export default function ProductDetails() {
         {/* BLOCO PRINCIPAL (BRANCO) */}
         <View style={S.mainShell}>
           <View style={S.mainInner}>
-            <Text style={S.category}>{product.category}</Text>
+            <Text style={S.category}>{product.category ?? "Produto"}</Text>
             <Text style={S.title}>{product.name}</Text>
 
             <View style={S.priceRow}>
-              <Text style={S.price}>{product.price}</Text>
+              <Text style={S.price}>{priceLabel}</Text>
             </View>
           </View>
         </View>
@@ -116,10 +296,12 @@ export default function ProductDetails() {
         <View style={S.whiteArea}>
           <View style={S.whiteContent}>
             <Text style={S.sectionTitle}>Sobre o produto</Text>
-            <Text style={S.description}>{product.description}</Text>
+            <Text style={S.description}>
+              {product.description || "Sem descrição."}
+            </Text>
 
             <View style={S.infoGrid}>
-              {product.extra.map((item) => (
+              {extra.map((item) => (
                 <View key={item.label} style={S.infoItem}>
                   <Text style={S.infoLabel}>{item.label}</Text>
                   <Text style={S.infoValue}>{item.value}</Text>
@@ -132,9 +314,19 @@ export default function ProductDetails() {
 
       {/* CTA FIXO */}
       <View style={[S.ctaBar, { paddingBottom: insets.bottom + 12 }]}>
-        <Pressable style={[styles.pillPrimary, S.ctaBtn]}>
+        <Pressable
+          style={[
+            styles.pillPrimary,
+            S.ctaBtn,
+            product.isOutOfStock ? { opacity: 0.55 } : null,
+          ]}
+          onPress={onPressReserve}
+          disabled={product.isOutOfStock}
+        >
           <FontAwesome name="shopping-bag" size={16} color={UI.colors.white} />
-          <Text style={styles.pillPrimaryText}>Adicionar ao carrinho</Text>
+          <Text style={styles.pillPrimaryText}>
+            {product.isOutOfStock ? "Esgotado" : "Reservar"}
+          </Text>
         </Pressable>
       </View>
     </View>
@@ -142,19 +334,32 @@ export default function ProductDetails() {
 }
 
 const S = StyleSheet.create({
-  // ✅ fundo branco na tela toda
   page: { flex: 1, backgroundColor: UI.colors.white },
-
   scroll: { flex: 1, backgroundColor: UI.colors.white },
 
-  heroImage: {
-    width: "100%",
-    height: "100%",
-  },
+  heroImage: { width: "100%", height: "100%" },
 
   heroOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.18)",
+  },
+
+  stockPill: {
+    position: "absolute",
+    left: UI.spacing.screenX,
+    bottom: 14,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  stockPillText: {
+    color: UI.colors.white,
+    fontSize: 12,
+    fontWeight: "800",
   },
 
   headerFloat: {
@@ -166,7 +371,6 @@ const S = StyleSheet.create({
     zIndex: 20,
   },
 
-  // ✅ bloco branco com borda arredondada, trazendo o conteúdo pra baixo e com mais respiro da foto
   mainShell: {
     backgroundColor: UI.colors.white,
     borderTopLeftRadius: 28,
@@ -174,7 +378,6 @@ const S = StyleSheet.create({
     marginTop: -10,
   },
 
-  // ✅ padding maior pra não ficar colado na foto
   mainInner: {
     paddingHorizontal: UI.spacing.screenX,
     paddingTop: 30,
@@ -191,7 +394,7 @@ const S = StyleSheet.create({
   title: {
     color: UI.brand.primaryText,
     fontSize: 24,
-    fontWeight: "600", // ✅ no máximo 600
+    fontWeight: "600",
     lineHeight: 30,
   },
 
@@ -202,16 +405,10 @@ const S = StyleSheet.create({
     gap: 12,
   },
 
-  // ✅ preço roxinho
-  price: {
-    color: UI.brand.primary,
-    fontSize: 20,
-    fontWeight: "600", // ✅ no máximo 600
-  },
+  price: { color: UI.brand.primary, fontSize: 20, fontWeight: "600" },
 
   whiteArea: { backgroundColor: UI.colors.white },
 
-  // ✅ conteúdo com padding maior (mais “ar”)
   whiteContent: {
     paddingHorizontal: UI.spacing.screenX,
     paddingTop: 18,
@@ -220,7 +417,7 @@ const S = StyleSheet.create({
 
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "600", // ✅ no máximo 600
+    fontWeight: "600",
     color: UI.brand.primaryText,
     marginBottom: 10,
   },
@@ -232,10 +429,7 @@ const S = StyleSheet.create({
     fontWeight: "400",
   },
 
-  infoGrid: {
-    marginTop: 20,
-    gap: 12,
-  },
+  infoGrid: { marginTop: 20, gap: 12 },
 
   infoItem: {
     padding: 14,
@@ -246,12 +440,12 @@ const S = StyleSheet.create({
   infoLabel: {
     fontSize: 12,
     color: "rgba(0,0,0,0.55)",
-    fontWeight: "600", // ✅ no máximo 600
+    fontWeight: "600",
   },
 
   infoValue: {
     fontSize: 15,
-    fontWeight: "600", // ✅ no máximo 600
+    fontWeight: "600",
     color: UI.brand.primaryText,
     marginTop: 4,
   },
@@ -268,7 +462,5 @@ const S = StyleSheet.create({
     borderColor: "rgba(0,0,0,0.08)",
   },
 
-  ctaBtn: {
-    height: 56,
-  },
+  ctaBtn: { height: 56 },
 });
