@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 
@@ -41,11 +41,12 @@ export async function OPTIONS() {
 }
 
 export async function POST(
-  req: Request,
-  { params }: { params: { id: string } },
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const payload = await requireMobileAuth(req);
+
     if (payload.role && payload.role !== "CLIENT") {
       return NextResponse.json(
         { error: "Sem permissão" },
@@ -53,8 +54,9 @@ export async function POST(
       );
     }
 
-    const id = String(params.id || "");
-    if (!id) {
+    const { id } = await params;
+    const apptId = String(id || "");
+    if (!apptId) {
       return NextResponse.json(
         { error: "Id ausente" },
         { status: 400, headers: corsHeaders() },
@@ -76,7 +78,7 @@ export async function POST(
     }
 
     const current = await prisma.appointment.findFirst({
-      where: { id, clientId: payload.sub, status: { not: "CANCELED" } },
+      where: { id: apptId, clientId: payload.sub, status: { not: "CANCELED" } },
       select: { id: true, scheduleAt: true },
     });
 
@@ -104,7 +106,7 @@ export async function POST(
 
     const conflict = await prisma.appointment.findFirst({
       where: {
-        id: { not: id },
+        id: { not: apptId },
         barberId,
         status: { not: "CANCELED" },
         scheduleAt,
@@ -120,7 +122,7 @@ export async function POST(
     }
 
     await prisma.appointment.update({
-      where: { id },
+      where: { id: apptId },
       data: { unitId, serviceId, barberId, scheduleAt },
     });
 

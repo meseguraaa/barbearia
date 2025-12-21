@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 
@@ -48,7 +48,6 @@ function formatPtBrDateTime(date: Date) {
 }
 
 function toISOAtNoonSPFromScheduleAt(scheduleAt: Date) {
-  // pega o "dia" do scheduleAt em SP e monta meio-dia -03:00
   const inSP = new Date(
     scheduleAt.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }),
   );
@@ -66,7 +65,6 @@ function startTimeFromScheduleAt(scheduleAt: Date) {
   });
 }
 
-// regra simples 24h (pode plugar política real depois)
 function computeCanReschedule(scheduleAt: Date) {
   const now = new Date();
   const diffMs = scheduleAt.getTime() - now.getTime();
@@ -74,19 +72,14 @@ function computeCanReschedule(scheduleAt: Date) {
   return diffHours >= 24;
 }
 
-/** ✅ PATCH: params pode ser Promise no Next */
-type Ctx = { params: { id?: string } | Promise<{ id?: string }> };
-
-async function getIdFromCtx(ctx: Ctx) {
-  const p = await Promise.resolve(ctx.params);
-  return String(p?.id ?? "").trim();
-}
-
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
 
-export async function GET(req: Request, ctx: Ctx) {
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const payload = await requireMobileAuth(req);
     if (payload.role && payload.role !== "CLIENT") {
@@ -96,8 +89,9 @@ export async function GET(req: Request, ctx: Ctx) {
       );
     }
 
-    const id = await getIdFromCtx(ctx);
-    if (!id) {
+    const { id } = await params;
+    const apptId = String(id || "").trim();
+    if (!apptId) {
       return NextResponse.json(
         { error: "Id ausente" },
         { status: 400, headers: corsHeaders() },
@@ -105,7 +99,7 @@ export async function GET(req: Request, ctx: Ctx) {
     }
 
     const appt = await prisma.appointment.findFirst({
-      where: { id, clientId: payload.sub, status: { not: "CANCELED" } },
+      where: { id: apptId, clientId: payload.sub, status: { not: "CANCELED" } },
       select: {
         id: true,
         status: true,
@@ -146,7 +140,6 @@ export async function GET(req: Request, ctx: Ctx) {
 
           serviceDurationMinutes: appt.service?.durationMinutes ?? 30,
 
-          // pro BookingTime preservar o slot:
           dateISO: toISOAtNoonSPFromScheduleAt(appt.scheduleAt),
           startTime: startTimeFromScheduleAt(appt.scheduleAt),
 
@@ -177,7 +170,10 @@ export async function GET(req: Request, ctx: Ctx) {
   }
 }
 
-export async function PATCH(req: Request, ctx: Ctx) {
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const payload = await requireMobileAuth(req);
     if (payload.role && payload.role !== "CLIENT") {
@@ -187,8 +183,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
       );
     }
 
-    const id = await getIdFromCtx(ctx);
-    if (!id) {
+    const { id } = await params;
+    const apptId = String(id || "").trim();
+    if (!apptId) {
       return NextResponse.json(
         { error: "Id ausente" },
         { status: 400, headers: corsHeaders() },
@@ -211,7 +208,11 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
 
     const current = await prisma.appointment.findFirst({
-      where: { id, clientId: payload.sub, status: { not: "CANCELED" } },
+      where: {
+        id: apptId,
+        clientId: payload.sub,
+        status: { not: "CANCELED" },
+      },
       select: { id: true, scheduleAt: true },
     });
 
@@ -242,7 +243,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
 
     const conflict = await prisma.appointment.findFirst({
       where: {
-        id: { not: id },
+        id: { not: apptId },
         barberId,
         status: { not: "CANCELED" },
         scheduleAt,
@@ -258,7 +259,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
     }
 
     await prisma.appointment.update({
-      where: { id },
+      where: { id: apptId },
       data: { unitId, serviceId, barberId, scheduleAt },
     });
 

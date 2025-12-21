@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 
@@ -40,19 +40,14 @@ function computeCanReschedule(scheduleAt: Date) {
   };
 }
 
-/** ✅ PATCH: params pode ser Promise no Next */
-type Ctx = { params: { id?: string } | Promise<{ id?: string }> };
-
-async function getIdFromCtx(ctx: Ctx) {
-  const p = await Promise.resolve(ctx.params);
-  return String(p?.id ?? "").trim();
-}
-
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
 
-export async function GET(req: Request, ctx: Ctx) {
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
   try {
     const payload = await requireMobileAuth(req);
     if (payload.role && payload.role !== "CLIENT") {
@@ -62,8 +57,10 @@ export async function GET(req: Request, ctx: Ctx) {
       );
     }
 
-    const id = await getIdFromCtx(ctx);
-    if (!id) {
+    const { id } = await params;
+    const apptId = String(id || "").trim();
+
+    if (!apptId) {
       return NextResponse.json(
         { error: "Id ausente" },
         { status: 400, headers: corsHeaders() },
@@ -71,7 +68,7 @@ export async function GET(req: Request, ctx: Ctx) {
     }
 
     const appt = await prisma.appointment.findFirst({
-      where: { id, clientId: payload.sub, status: { not: "CANCELED" } },
+      where: { id: apptId, clientId: payload.sub, status: { not: "CANCELED" } },
       select: {
         id: true,
         status: true,
@@ -94,7 +91,7 @@ export async function GET(req: Request, ctx: Ctx) {
 
     const rules = computeCanReschedule(appt.scheduleAt);
 
-    // ✅ lista de unidades (corrigido: isActive)
+    // ✅ lista de unidades (isActive)
     const units = await prisma.unit.findMany({
       where: { isActive: true },
       select: { id: true, name: true },
