@@ -26,7 +26,6 @@ function BookingUnitSkeletonBase() {
 
   return (
     <View style={S.page}>
-      {/* Header fixo */}
       <View style={S.fixedTop}>
         <View style={safeTopStyle} />
 
@@ -37,16 +36,13 @@ function BookingUnitSkeletonBase() {
         </View>
       </View>
 
-      {/* bounce dark */}
       <View
         pointerEvents="none"
         style={[S.topBounceDark, { height: topBounceHeight }]}
       />
 
-      {/* spacer */}
       <View style={headerSpacerStyle} />
 
-      {/* bloco dark com hero */}
       <View style={S.darkShell}>
         <View style={S.darkInner}>
           <View style={S.heroCard}>
@@ -67,7 +63,6 @@ function BookingUnitSkeletonBase() {
         </View>
       </View>
 
-      {/* área branca */}
       <View style={S.whiteArea}>
         <View style={S.whiteContent}>
           <ShimmerBlock
@@ -77,7 +72,6 @@ function BookingUnitSkeletonBase() {
             style={{ marginBottom: 12 }}
           />
 
-          {/* lista fake */}
           <View style={S.row}>
             <View style={S.rowLeft}>
               <ShimmerBlock width={38} height={38} radius={12} />
@@ -134,7 +128,8 @@ function BookingUnitSkeletonBase() {
 }
 
 const S = StyleSheet.create({
-  page: { flex: 1, backgroundColor: UI.colors.bg },
+  // ✅ CHAVE: fundo branco atrás do darkShell (pra recorte aparecer)
+  page: { flex: 1, backgroundColor: UI.colors.white },
 
   fixedTop: { position: "absolute", left: 0, right: 0, top: 0, zIndex: 999 },
 

@@ -21,7 +21,6 @@ function BookingDetailsSkeletonBase() {
 
   return (
     <View style={S.page}>
-      {/* Topo fixo */}
       <View style={S.fixedTop}>
         <View style={safeTopStyle} />
         <View style={S.stickyRow}>
@@ -35,83 +34,79 @@ function BookingDetailsSkeletonBase() {
         </View>
       </View>
 
-      <View style={S.scroll}>
-        <View
-          pointerEvents="none"
-          style={[S.topBounceDark, { height: topBounceHeight }]}
-        />
-        <View style={{ height: TOP_OFFSET, backgroundColor: UI.colors.bg }} />
+      <View
+        pointerEvents="none"
+        style={[S.topBounceDark, { height: topBounceHeight }]}
+      />
+      <View style={{ height: TOP_OFFSET, backgroundColor: UI.colors.bg }} />
 
-        {/* Hero */}
-        <View style={S.darkShell}>
-          <View style={S.darkInner}>
-            <View style={S.heroCard}>
-              <ShimmerBlock width={120} height={16} radius={10} />
-              <ShimmerBlock
-                width={"86%"}
-                height={12}
-                radius={8}
-                style={{ marginTop: 12 }}
-              />
-              <ShimmerBlock
-                width={"78%"}
-                height={12}
-                radius={8}
-                style={{ marginTop: 8 }}
-              />
-              <ShimmerBlock
-                width={"70%"}
-                height={12}
-                radius={8}
-                style={{ marginTop: 8 }}
-              />
-              <ShimmerBlock
-                width={"55%"}
-                height={10}
-                radius={8}
-                style={{ marginTop: 14 }}
-              />
-            </View>
+      <View style={S.darkShell}>
+        <View style={S.darkInner}>
+          <View style={S.heroCard}>
+            <ShimmerBlock width={120} height={16} radius={10} />
+            <ShimmerBlock
+              width={"86%"}
+              height={12}
+              radius={8}
+              style={{ marginTop: 12 }}
+            />
+            <ShimmerBlock
+              width={"78%"}
+              height={12}
+              radius={8}
+              style={{ marginTop: 8 }}
+            />
+            <ShimmerBlock
+              width={"70%"}
+              height={12}
+              radius={8}
+              style={{ marginTop: 8 }}
+            />
+            <ShimmerBlock
+              width={"55%"}
+              height={10}
+              radius={8}
+              style={{ marginTop: 14 }}
+            />
           </View>
         </View>
+      </View>
 
-        {/* Form */}
-        <View style={S.whiteArea}>
-          <View style={S.whiteContent}>
-            <ShimmerBlock width={70} height={14} radius={8} />
-            <ShimmerBlock
-              width={"100%"}
-              height={52}
-              radius={14}
-              style={{ marginTop: 10 }}
-            />
+      <View style={S.whiteArea}>
+        <View style={S.whiteContent}>
+          <ShimmerBlock width={70} height={14} radius={8} />
+          <ShimmerBlock
+            width={"100%"}
+            height={52}
+            radius={14}
+            style={{ marginTop: 10 }}
+          />
 
-            <ShimmerBlock
-              width={86}
-              height={14}
-              radius={8}
-              style={{ marginTop: 18 }}
-            />
-            <ShimmerBlock
-              width={"100%"}
-              height={52}
-              radius={14}
-              style={{ marginTop: 10 }}
-            />
+          <ShimmerBlock
+            width={86}
+            height={14}
+            radius={8}
+            style={{ marginTop: 18 }}
+          />
+          <ShimmerBlock
+            width={"100%"}
+            height={52}
+            radius={14}
+            style={{ marginTop: 10 }}
+          />
 
-            <ShimmerBlock
-              width={"100%"}
-              height={56}
-              radius={999}
-              style={{ marginTop: 18 }}
-            />
-            <ShimmerBlock
-              width={"100%"}
-              height={52}
-              radius={999}
-              style={{ marginTop: 10 }}
-            />
-          </View>
+          <ShimmerBlock
+            width={"100%"}
+            height={56}
+            radius={999}
+            style={{ marginTop: 18 }}
+          />
+          <ShimmerBlock
+            width={"100%"}
+            height={52}
+            radius={999}
+            style={{ marginTop: 10 }}
+          />
         </View>
       </View>
     </View>
@@ -119,7 +114,8 @@ function BookingDetailsSkeletonBase() {
 }
 
 const S = StyleSheet.create({
-  page: { flex: 1, backgroundColor: UI.colors.bg },
+  // ✅ CHAVE: branco pra aparecer o "preto por cima"
+  page: { flex: 1, backgroundColor: UI.colors.white },
 
   fixedTop: {
     position: "absolute",
@@ -138,18 +134,17 @@ const S = StyleSheet.create({
     justifyContent: "space-between",
   },
 
+  // ✅ back fake roxinho sólido
   backBtnFake: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: UI.brand.primary,
     borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
+    borderColor: "rgba(255,255,255,0.22)",
     alignItems: "center",
     justifyContent: "center",
   },
-
-  scroll: { flex: 1, backgroundColor: UI.colors.white },
 
   topBounceDark: {
     position: "absolute",

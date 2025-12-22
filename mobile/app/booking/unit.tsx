@@ -93,6 +93,7 @@ export default function BookingUnit() {
   }>();
 
   const isEdit = useMemo(() => String(params.mode ?? "") === "edit", [params]);
+
   const appointmentId = useMemo(
     () => String(params.appointmentId ?? "").trim(),
     [params.appointmentId],
@@ -132,7 +133,7 @@ export default function BookingUnit() {
         console.log("[booking/unit] goService:", {
           unitId: u.id,
           unitName: u.name,
-          isEdit,
+          goEdit: isEdit,
           appointmentId: isEdit ? appointmentId : undefined,
           replace: !!replace,
         });
@@ -240,13 +241,11 @@ export default function BookingUnit() {
 
     (async () => {
       try {
-        // ✅ no edit, primeiro pega unitId do agendamento
         await fetchCurrentAppointmentIfNeeded();
         if (!alive) return;
 
         await fetchUnits();
       } finally {
-        // ✅ anti-loading eterno: libera a tela depois do primeiro boot
         didBootRef.current = true;
         if (alive) setDataReady(true);
       }
@@ -274,8 +273,9 @@ export default function BookingUnit() {
       <View style={S.page}>
         <View style={S.fixedTop}>
           <View style={safeTopStyle} />
+
           <View style={S.stickyRow}>
-            <Pressable onPress={goBack} style={S.backBtn}>
+            <Pressable onPress={goBack} style={S.backBtn} hitSlop={8}>
               <FontAwesome
                 name="chevron-left"
                 size={18}
@@ -286,6 +286,7 @@ export default function BookingUnit() {
             <Text style={S.title}>
               {isEdit ? "Alterar agendamento" : "Agendamento"}
             </Text>
+
             <View style={{ width: 42, height: 42 }} />
           </View>
         </View>
@@ -294,9 +295,9 @@ export default function BookingUnit() {
           pointerEvents="none"
           style={[S.topBounceDark, { height: topBounceHeight }]}
         />
-
         <View style={{ height: TOP_OFFSET }} />
 
+        {/* ⬛ darkShell com raio (agora aparece pq o fundo atrás é branco) */}
         <View style={S.darkShell}>
           <View style={S.darkInner}>
             <View style={S.heroCard}>
@@ -351,7 +352,8 @@ export default function BookingUnit() {
 }
 
 const S = StyleSheet.create({
-  page: { flex: 1, backgroundColor: UI.colors.bg },
+  // ✅ CHAVE: fundo branco atrás do darkShell (pra recorte aparecer)
+  page: { flex: 1, backgroundColor: UI.colors.white },
 
   fixedTop: { position: "absolute", left: 0, right: 0, top: 0, zIndex: 999 },
 
@@ -370,9 +372,9 @@ const S = StyleSheet.create({
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: UI.brand.primary,
     borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
+    borderColor: "rgba(255,255,255,0.22)",
   },
 
   title: { color: UI.colors.text, fontSize: 16, fontWeight: "700" },
@@ -396,6 +398,7 @@ const S = StyleSheet.create({
     paddingBottom: UI.spacing.screenX,
   },
 
+  // ⚠️ card NÃO mexe (mantive o que você tinha antes do pedido do “tema”)
   heroCard: {
     marginTop: 14,
     backgroundColor: "rgba(124,108,255,0.22)",

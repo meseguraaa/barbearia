@@ -139,6 +139,7 @@ const ProductTile = memo(function ProductTile({
 
       <View style={S.tileFooter}>
         {item.isOutOfStock ? (
+          // ✅ Ver detalhes: bg branco, borda #141414, texto/ícone preto
           <Pressable
             onPress={() => onOpen(item.id)}
             style={S.detailsBtn}
@@ -149,31 +150,24 @@ const ProductTile = memo(function ProductTile({
               <FontAwesome
                 name="angle-right"
                 size={18}
-                color={UI.brand.primary}
+                color="#141414"
                 style={{ marginLeft: 8 }}
               />
             </View>
           </Pressable>
         ) : (
+          // ✅ Reservar: bg #141414, sem borda, texto/ícone branco
           <Pressable
             onPress={() => onReserve(item.id)}
             disabled={reserving}
-            style={[
-              styles.pillPrimary,
-              S.reserveBtn,
-              reserving ? S.reserveBtnDisabled : null,
-            ]}
+            style={[S.reserveBtn, reserving ? S.reserveBtnDisabled : null]}
           >
             {reserving ? (
-              <ActivityIndicator />
+              <ActivityIndicator color="#FFFFFF" />
             ) : (
-              <FontAwesome
-                name="shopping-bag"
-                size={14}
-                color={UI.colors.white}
-              />
+              <FontAwesome name="shopping-bag" size={14} color="#FFFFFF" />
             )}
-            <Text style={styles.pillPrimaryText}>
+            <Text style={S.reserveBtnText}>
               {reserving ? "Reservando…" : "Reservar"}
             </Text>
           </Pressable>
@@ -302,13 +296,17 @@ const ProductsFooter = memo(function ProductsFooter({
   return (
     <View style={S.footerWrap}>
       <View style={S.bottomCTA}>
-        <Pressable
-          style={[styles.pillPrimary, S.checkoutBtn]}
-          onPress={onGoCart}
-        >
-          <Text style={[styles.pillPrimaryText, S.checkoutText]}>
-            Ir para o carrinho
-          </Text>
+        {/* ✅ Ir para o carrinho: mesma config do "Ver todos os produtos" da Home */}
+        <Pressable style={S.goCartBtn} onPress={onGoCart}>
+          <View style={S.btnCenterRow}>
+            <Text style={S.goCartBtnText}>Ir para o carrinho</Text>
+            <FontAwesome
+              name="angle-right"
+              size={18}
+              color="#FFFFFF"
+              style={{ marginLeft: 8 }}
+            />
+          </View>
         </Pressable>
       </View>
     </View>
@@ -869,25 +867,39 @@ const S = StyleSheet.create({
     justifyContent: "center",
   },
 
+  // ✅ Ver detalhes: bg branco, borda #141414, texto preto
   detailsBtn: {
     height: 40,
     borderRadius: 999,
     paddingHorizontal: 12,
     backgroundColor: UI.colors.white,
     borderWidth: 1,
-    borderColor: UI.brand.primary,
+    borderColor: "#141414",
     alignItems: "center",
     justifyContent: "center",
   },
 
   detailsBtnText: {
-    color: UI.brand.primary,
+    color: "#141414",
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "600",
   },
 
+  // ✅ Reservar: bg #141414, sem borda, texto/ícone branco
   reserveBtn: {
     height: 40,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    backgroundColor: "#141414",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 10,
+  },
+  reserveBtnText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "700",
   },
   reserveBtnDisabled: {
     opacity: 0.75,
@@ -1015,6 +1027,19 @@ const S = StyleSheet.create({
   },
 
   bottomCTA: { gap: 10 },
-  checkoutBtn: { height: 40 },
-  checkoutText: { fontSize: 14 },
+
+  // ✅ Ir para o carrinho: igual ao botão "Ver todos os produtos" (Home)
+  goCartBtn: {
+    height: 44,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    backgroundColor: "#141414",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  goCartBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
 });

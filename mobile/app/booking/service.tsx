@@ -189,7 +189,6 @@ export default function BookingService() {
   const [currentDateISO, setCurrentDateISO] = useState<string>("");
   const [currentStartTime, setCurrentStartTime] = useState<string>("");
 
-  // ✅ gate: libera depois que pelo menos 1 fetch (edit + services) terminar
   const didEditRef = useRef(false);
   const didServicesRef = useRef(false);
   const [dataReady, setDataReady] = useState(false);
@@ -200,10 +199,12 @@ export default function BookingService() {
   }, [isEdit]);
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
+
   const safeTopStyle = useMemo(
     () => ({ height: insets.top, backgroundColor: UI.brand.primary }),
     [insets.top],
   );
+
   const topBounceHeight = useMemo(() => TOP_OFFSET + 1400, [TOP_OFFSET]);
 
   const goBack = useCallback(() => router.back(), [router]);
@@ -358,7 +359,6 @@ export default function BookingService() {
     ],
   );
 
-  // ✅ bypass: 1 serviço só -> pula direto
   useEffect(() => {
     if (loading) return;
     if (!services || services.length !== 1) return;
@@ -412,6 +412,7 @@ export default function BookingService() {
         />
         <View style={{ height: TOP_OFFSET }} />
 
+        {/* ⬛ Parte preta com raio (agora aparece, pq o fundo atrás é branco) */}
         <View style={S.darkShell}>
           <View style={S.darkInner}>
             <View style={S.heroCard}>
@@ -420,19 +421,6 @@ export default function BookingService() {
               <Text style={S.heroDesc}>
                 {unitName ? `Unidade: ${unitName}` : " "}
               </Text>
-
-              {isEdit ? (
-                <Text style={S.heroNote}>
-                  Serviço atual marcado como{" "}
-                  <Text style={{ fontWeight: "700" }}>Atual</Text>. Horário
-                  atual:{" "}
-                  <Text style={{ fontWeight: "700" }}>
-                    {currentStartTime || "--:--"}
-                  </Text>
-                </Text>
-              ) : (
-                <Text style={S.heroNote}>Exibidos em ordem alfabética.</Text>
-              )}
             </View>
           </View>
         </View>
@@ -474,7 +462,8 @@ export default function BookingService() {
 }
 
 const S = StyleSheet.create({
-  page: { flex: 1, backgroundColor: UI.colors.bg },
+  // ✅ CHAVE: fundo geral branco, igual o FlatList da Home
+  page: { flex: 1, backgroundColor: UI.colors.white },
 
   fixedTop: {
     position: "absolute",
@@ -493,15 +482,14 @@ const S = StyleSheet.create({
     justifyContent: "space-between",
   },
 
+  // mantém roxinho com ícone branco
   backBtn: {
     width: 42,
     height: 42,
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
+    backgroundColor: UI.brand.primary,
   },
 
   title: { color: UI.colors.text, fontSize: 16, fontWeight: "700" },
@@ -514,6 +502,7 @@ const S = StyleSheet.create({
     backgroundColor: UI.colors.bg,
   },
 
+  // ✅ aqui o raio já existia, agora ele APARECE pq o fundo atrás é branco
   darkShell: {
     backgroundColor: UI.colors.bg,
     borderBottomLeftRadius: 28,
@@ -525,6 +514,7 @@ const S = StyleSheet.create({
     paddingBottom: UI.spacing.screenX,
   },
 
+  // ⚠️ card NÃO mexe
   heroCard: {
     marginTop: 14,
     backgroundColor: "rgba(124,108,255,0.22)",

@@ -184,9 +184,7 @@ export default function BookingDetails() {
 
   const goBack = useCallback(() => router.back(), [router]);
 
-  // ✅ no edit: garante horário original caso params venha vazio
   const fetchCurrentIfNeeded = useCallback(async () => {
-    // Sempre libera o gate no finally, mesmo se der erro.
     if (fetchingRef.current) return;
     fetchingRef.current = true;
 
@@ -199,7 +197,6 @@ export default function BookingDetails() {
         return;
       }
 
-      // se já temos os dois, não precisa bater
       if (currentDateISO && currentStartTime) return;
 
       const res = await api.get<AppointmentGetResponse>(
@@ -224,7 +221,6 @@ export default function BookingDetails() {
         "[booking/details][edit] get appointment error:",
         err?.data ?? err?.message ?? err,
       );
-      // não trava a tela, só deixa o fallback/validação cuidar
     } finally {
       setDataReady(true);
       fetchingRef.current = false;
@@ -233,7 +229,6 @@ export default function BookingDetails() {
 
   useEffect(() => {
     if (!isEdit) {
-      // ✅ create: sem fetch, libera gate imediatamente
       setDataReady(true);
       return;
     }
@@ -316,18 +311,23 @@ export default function BookingDetails() {
 
       setSaving(true);
 
+      // ==========================
+      // EDITAR (RESCHEDULE)
+      // ==========================
       if (isEdit) {
         const payload = { unitId, serviceId, barberId, scheduleAt };
 
         if (__DEV__) {
           console.log(
-            `[booking/details] PATCH /api/mobile/me/appointments/${appointmentId} payload:`,
+            `[booking/details] POST /api/mobile/me/appointments/${appointmentId}/reschedule payload:`,
             payload,
           );
         }
 
-        await api.patch(
-          `/api/mobile/me/appointments/${encodeURIComponent(appointmentId)}`,
+        await api.post(
+          `/api/mobile/me/appointments/${encodeURIComponent(
+            appointmentId,
+          )}/reschedule`,
           payload,
         );
 
@@ -339,6 +339,9 @@ export default function BookingDetails() {
         return;
       }
 
+      // ==========================
+      // CRIAR NOVO AGENDAMENTO
+      // ==========================
       const payload = {
         clientName: name,
         phone: digits,
@@ -351,13 +354,14 @@ export default function BookingDetails() {
         startTime: effectiveStartTime,
       };
 
-      if (__DEV__)
+      if (__DEV__) {
         console.log(
           "[booking/details] POST /api/mobile/appointments payload:",
           payload,
         );
+      }
 
-      await api.post("/api/mobile/appointments", payload);
+      await api.post(`/api/mobile/appointments`, payload);
 
       Alert.alert("Agendado! ✅", "Seu horário foi reservado com sucesso.", [
         { text: "Ok", onPress: () => router.replace("/(app)/(tabs)/home") },
@@ -415,7 +419,7 @@ export default function BookingDetails() {
           <View style={safeTopStyle} />
 
           <View style={S.stickyRow}>
-            <Pressable onPress={goBack} style={S.backBtn}>
+            <Pressable onPress={goBack} style={S.backBtn} hitSlop={8}>
               <FontAwesome
                 name="chevron-left"
                 size={18}
@@ -426,6 +430,7 @@ export default function BookingDetails() {
             <Text style={S.title}>
               {isEdit ? "Alterar agendamento" : "Agendamento"}
             </Text>
+
             <View style={{ width: 42, height: 42 }} />
           </View>
         </View>
@@ -446,14 +451,10 @@ export default function BookingDetails() {
                 {serviceName ? `\nServiço: ${serviceName}` : ""}
                 {barberName ? `\nProfissional: ${barberName}` : ""}
                 {dateLabel && effectiveStartTime
-                  ? `\nData: ${dateLabel} • ${effectiveStartTime}${endTime ? ` - ${endTime}` : ""}`
+                  ? `\nData: ${dateLabel} • ${effectiveStartTime}${
+                      endTime ? ` - ${endTime}` : ""
+                    }`
                   : ""}
-              </Text>
-
-              <Text style={S.heroNote}>
-                {isEdit
-                  ? "Ajuste e confirme. Troca feita com estilo 😎"
-                  : "Preencha e confirme. Sem formulário infinito 😎"}
               </Text>
             </View>
           </View>
@@ -530,7 +531,7 @@ export default function BookingDetails() {
 }
 
 const S = StyleSheet.create({
-  page: { flex: 1, backgroundColor: UI.colors.bg },
+  page: { flex: 1, backgroundColor: UI.colors.white },
 
   fixedTop: { position: "absolute", left: 0, right: 0, top: 0, zIndex: 999 },
 
@@ -549,9 +550,9 @@ const S = StyleSheet.create({
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: UI.brand.primary,
     borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
+    borderColor: "rgba(255,255,255,0.22)",
   },
 
   title: { color: UI.colors.text, fontSize: 16, fontWeight: "700" },

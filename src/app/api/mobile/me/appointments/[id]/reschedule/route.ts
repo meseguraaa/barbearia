@@ -7,6 +7,8 @@ type MobileTokenPayload = {
   role?: "CLIENT" | "BARBER" | "ADMIN";
 };
 
+const DEFAULT_RESCHEDULE_WINDOW_HOURS = 24;
+
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -29,11 +31,21 @@ async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
   return payload as unknown as MobileTokenPayload;
 }
 
-function computeCanReschedule(scheduleAt: Date) {
+function normalizeWindowHours(raw: unknown): number | null {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n)) return null;
+  if (n <= 0) return null;
+
+  // proteção: limite superior razoável (30 dias)
+  if (n > 24 * 30) return 24 * 30;
+  return n;
+}
+
+function computeCanReschedule(scheduleAt: Date, windowHours: number) {
   const now = new Date();
   const diffMs = scheduleAt.getTime() - now.getTime();
   const diffHours = diffMs / (1000 * 60 * 60);
-  return diffHours >= 24;
+  return diffHours >= windowHours;
 }
 
 export async function OPTIONS() {
@@ -55,7 +67,7 @@ export async function POST(
     }
 
     const { id } = await params;
-    const apptId = String(id || "");
+    const apptId = String(id || "").trim();
     if (!apptId) {
       return NextResponse.json(
         { error: "Id ausente" },
@@ -64,22 +76,39 @@ export async function POST(
     }
 
     const body = await req.json().catch(() => ({}));
-    const unitId = String(body?.unitId ?? "");
-    const serviceId = body?.serviceId ? String(body.serviceId) : "";
-    const barberId = body?.barberId ? String(body.barberId) : "";
-    const scheduleAtRaw = String(body?.scheduleAt ?? "");
+    const unitId = String(body?.unitId ?? "").trim();
+    const serviceId = body?.serviceId ? String(body.serviceId).trim() : "";
+    const barberId = body?.barberId ? String(body.barberId).trim() : "";
+    const scheduleAtRaw = String(body?.scheduleAt ?? "").trim();
     const scheduleAt = scheduleAtRaw ? new Date(scheduleAtRaw) : null;
 
-    if (!unitId || !serviceId || !barberId || !scheduleAt) {
+    if (
+      !unitId ||
+      !serviceId ||
+      !barberId ||
+      !scheduleAt ||
+      Number.isNaN(scheduleAt.getTime())
+    ) {
       return NextResponse.json(
         { error: "Parâmetros incompletos" },
         { status: 400, headers: corsHeaders() },
       );
     }
 
+    // 1) carrega o agendamento atual (pra validar janela)
     const current = await prisma.appointment.findFirst({
       where: { id: apptId, clientId: payload.sub, status: { not: "CANCELED" } },
-      select: { id: true, scheduleAt: true },
+      select: {
+        id: true,
+        scheduleAt: true,
+        serviceId: true,
+        service: {
+          select: {
+            id: true,
+            cancelLimitHours: true,
+          },
+        },
+      },
     });
 
     if (!current) {
@@ -97,13 +126,34 @@ export async function POST(
       );
     }
 
-    if (!computeCanReschedule(current.scheduleAt)) {
+    // 2) janela configurável por serviço (baseada no serviço ATUAL do agendamento)
+    const windowHours =
+      normalizeWindowHours(current.service?.cancelLimitHours) ??
+      DEFAULT_RESCHEDULE_WINDOW_HOURS;
+
+    if (!computeCanReschedule(current.scheduleAt, windowHours)) {
       return NextResponse.json(
-        { error: "Não é possível alterar com menos de 24h de antecedência." },
+        {
+          error: `Não é possível alterar com menos de ${windowHours}h de antecedência.`,
+        },
         { status: 400, headers: corsHeaders() },
       );
     }
 
+    // 3) pega o serviço novo pra atualizar descrição (admin geralmente usa appointment.description)
+    const nextService = await prisma.service.findUnique({
+      where: { id: serviceId },
+      select: { id: true, name: true },
+    });
+
+    if (!nextService) {
+      return NextResponse.json(
+        { error: "Serviço inválido" },
+        { status: 400, headers: corsHeaders() },
+      );
+    }
+
+    // 4) conflito de horário (mantém tua regra atual: mesmo scheduleAt)
     const conflict = await prisma.appointment.findFirst({
       where: {
         id: { not: apptId },
@@ -121,9 +171,18 @@ export async function POST(
       );
     }
 
+    // 5) update completo: troca ids + scheduleAt + description (✅ o que estava faltando)
     await prisma.appointment.update({
       where: { id: apptId },
-      data: { unitId, serviceId, barberId, scheduleAt },
+      data: {
+        unitId,
+        serviceId,
+        barberId,
+        scheduleAt,
+
+        // ✅ MUITO IMPORTANTE: reflete no admin/web (descrição do serviço)
+        description: nextService.name,
+      },
     });
 
     return NextResponse.json(

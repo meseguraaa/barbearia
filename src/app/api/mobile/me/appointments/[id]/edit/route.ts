@@ -7,6 +7,8 @@ type MobileTokenPayload = {
   role?: "CLIENT" | "BARBER" | "ADMIN";
 };
 
+const DEFAULT_RESCHEDULE_WINDOW_HOURS = 24;
+
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -29,15 +31,49 @@ async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
   return payload as unknown as MobileTokenPayload;
 }
 
-function computeCanReschedule(scheduleAt: Date) {
+function normalizeWindowHours(raw: unknown): number | null {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n)) return null;
+  if (n <= 0) return null;
+  if (n > 24 * 30) return 24 * 30;
+  return n;
+}
+
+function computeCanReschedule(scheduleAt: Date, windowHours: number) {
   const now = new Date();
   const diffMs = scheduleAt.getTime() - now.getTime();
   const diffHours = diffMs / (1000 * 60 * 60);
-  const ok = diffHours >= 24;
+
+  const ok = diffHours >= windowHours;
+
   return {
     canReschedule: ok,
-    reason: ok ? null : "Menos de 24h de antecedência.",
+    reason: ok ? null : `Menos de ${windowHours}h de antecedência.`,
+    diffHours,
+    windowHours,
   };
+}
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function toMobileDateISOAndStartTime(scheduleAt: Date) {
+  const dateISO = new Date(
+    scheduleAt.getFullYear(),
+    scheduleAt.getMonth(),
+    scheduleAt.getDate(),
+    12,
+    0,
+    0,
+    0,
+  ).toISOString();
+
+  const startTime = `${pad2(scheduleAt.getHours())}:${pad2(
+    scheduleAt.getMinutes(),
+  )}`;
+
+  return { dateISO, startTime };
 }
 
 export async function OPTIONS() {
@@ -78,7 +114,14 @@ export async function GET(
         serviceId: true,
         unit: { select: { id: true, name: true } },
         barber: { select: { id: true, name: true } },
-        service: { select: { id: true, name: true, durationMinutes: true } },
+        service: {
+          select: {
+            id: true,
+            name: true,
+            durationMinutes: true,
+            cancelLimitHours: true,
+          },
+        },
       },
     });
 
@@ -89,9 +132,13 @@ export async function GET(
       );
     }
 
-    const rules = computeCanReschedule(appt.scheduleAt);
+    const windowHours =
+      normalizeWindowHours(appt.service?.cancelLimitHours) ??
+      DEFAULT_RESCHEDULE_WINDOW_HOURS;
 
-    // ✅ lista de unidades (isActive)
+    const rules = computeCanReschedule(appt.scheduleAt, windowHours);
+    const mobileParts = toMobileDateISOAndStartTime(appt.scheduleAt);
+
     const units = await prisma.unit.findMany({
       where: { isActive: true },
       select: { id: true, name: true },
@@ -111,9 +158,18 @@ export async function GET(
           barberName: appt.barber?.name ?? null,
           scheduleAt: appt.scheduleAt.toISOString(),
           status: appt.status,
+
+          // ✅ extras pro app
+          dateISO: mobileParts.dateISO,
+          startTime: mobileParts.startTime,
         },
         units,
-        rules,
+        rules: {
+          canReschedule: rules.canReschedule,
+          reason: rules.reason,
+          diffHours: rules.diffHours,
+          windowHours: rules.windowHours,
+        },
       },
       { status: 200, headers: corsHeaders() },
     );

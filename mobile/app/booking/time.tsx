@@ -74,14 +74,19 @@ function normTime(t: string) {
   return `${pad2(Number(m[1]))}:${m[2]}`;
 }
 
+function timeToMinutes(hhmm: string) {
+  const m = String(hhmm ?? "").match(/^(\d{2}):(\d{2})$/);
+  if (!m) return Number.POSITIVE_INFINITY;
+  return Number(m[1]) * 60 + Number(m[2]);
+}
+
 type AppointmentGetResponse = {
   ok: boolean;
   appointment: {
     id: string;
     status: string;
 
-    // ✅ para preservar o slot no edit
-    dateISO: string; // ISO noon -03
+    dateISO: string; // ISO noon
     startTime: string; // "HH:mm"
 
     canReschedule: boolean;
@@ -115,10 +120,12 @@ const SlotRow = memo(function SlotRow({
   time,
   onPress,
   showDivider,
+  isCurrent,
 }: {
   time: string;
   onPress: () => void;
   showDivider: boolean;
+  isCurrent?: boolean;
 }) {
   return (
     <Pressable onPress={onPress} style={S.row}>
@@ -128,8 +135,21 @@ const SlotRow = memo(function SlotRow({
         </View>
 
         <View style={{ flex: 1 }}>
-          <Text style={S.rowTitle}>{time}</Text>
-          <Text style={S.rowMeta}>Toque para selecionar</Text>
+          <View style={S.rowTitleLine}>
+            <Text style={S.rowTitle}>{time}</Text>
+
+            {isCurrent ? (
+              <View style={S.badgeAtual}>
+                <Text style={S.badgeAtualText}>Atual</Text>
+              </View>
+            ) : null}
+          </View>
+
+          <Text style={S.rowMeta}>
+            {isCurrent
+              ? "Horário atual do agendamento"
+              : "Toque para selecionar"}
+          </Text>
         </View>
       </View>
 
@@ -193,7 +213,6 @@ export default function BookingTime() {
     [params.appointmentId],
   );
 
-  // ✅ “horário original do agendamento”
   const [currentDateISO, setCurrentDateISO] = useState(
     String(params.currentDateISO ?? "").trim(),
   );
@@ -201,7 +220,6 @@ export default function BookingTime() {
     normTime(String(params.currentStartTime ?? "")),
   );
 
-  // ✅ Gate flags (pra não ficar preso)
   const [dataReady, setDataReady] = useState(false);
   const didEditFetchRef = useRef(false);
   const didSlotsFetchRef = useRef(false);
@@ -226,7 +244,9 @@ export default function BookingTime() {
           ? `Hoje (${weekdayShortPt(d)})`
           : i === 1
             ? `Amanhã (${weekdayShortPt(d)})`
-            : `${weekdayShortPt(d)} • ${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
+            : `${weekdayShortPt(d)} • ${pad2(d.getDate())}/${pad2(
+                d.getMonth() + 1,
+              )}`;
 
       list.push({ key, label, dateISO: toISOAtNoon(d) });
     }
@@ -234,7 +254,6 @@ export default function BookingTime() {
   }, []);
 
   const fetchCurrentAppointmentIfNeeded = useCallback(async () => {
-    // ✅ sempre marca como concluído no finally
     try {
       if (!isEdit) return;
       if (!appointmentId) return;
@@ -261,10 +280,8 @@ export default function BookingTime() {
         "[booking/time][edit] get appointment error:",
         err?.data ?? err?.message ?? err,
       );
-      // não bloqueia a tela: segue com fallback do params
     } finally {
       didEditFetchRef.current = true;
-      // se não é edit, a gente nem precisa desse fetch pra liberar o gate
       if (!isEdit) didEditFetchRef.current = true;
     }
   }, [appointmentId, isEdit, router]);
@@ -298,14 +315,10 @@ export default function BookingTime() {
   const [slots, setSlots] = useState<string[]>([]);
 
   const syncGateReady = useCallback(() => {
-    // ✅ regra do gate:
-    // - modo normal: libera quando o primeiro fetch de slots terminar
-    // - modo edit: libera quando (edit fetch terminou) E (slots fetch terminou)
     if (!isEdit) {
       if (didSlotsFetchRef.current) setDataReady(true);
       return;
     }
-
     if (didEditFetchRef.current && didSlotsFetchRef.current) {
       setDataReady(true);
     }
@@ -321,17 +334,30 @@ export default function BookingTime() {
 
       setLoading(true);
 
-      const res = await api.get<{ ok: boolean; slots: string[] }>(
-        `/api/mobile/availability?barberId=${encodeURIComponent(barberId)}&unitId=${encodeURIComponent(
-          unitId,
-        )}&serviceId=${encodeURIComponent(serviceId)}&dateISO=${encodeURIComponent(selectedDateISO)}${
-          serviceDurationMinutes
-            ? `&serviceDurationInMinutes=${encodeURIComponent(serviceDurationMinutes)}`
-            : ""
-        }`,
+      const url =
+        `/api/mobile/availability?barberId=${encodeURIComponent(barberId)}` +
+        `&unitId=${encodeURIComponent(unitId)}` +
+        `&serviceId=${encodeURIComponent(serviceId)}` +
+        `&dateISO=${encodeURIComponent(selectedDateISO)}` +
+        (serviceDurationMinutes
+          ? `&serviceDurationInMinutes=${encodeURIComponent(
+              serviceDurationMinutes,
+            )}`
+          : "") +
+        (isEdit && appointmentId
+          ? `&appointmentId=${encodeURIComponent(appointmentId)}`
+          : "");
+
+      const res = await api.get<{ ok: boolean; slots: string[] }>(url);
+
+      const normalized = (res?.slots ?? []).map(normTime).filter(Boolean);
+
+      // garante consistência mesmo se o backend mandar duplicado
+      const uniq = Array.from(new Set(normalized)).sort(
+        (a, b) => timeToMinutes(a) - timeToMinutes(b),
       );
 
-      setSlots((res?.slots ?? []).map(normTime).filter(Boolean));
+      setSlots(uniq);
     } catch (err: any) {
       console.log("[booking/time] error:", err?.data ?? err?.message ?? err);
       setSlots([]);
@@ -345,7 +371,9 @@ export default function BookingTime() {
       syncGateReady();
     }
   }, [
+    appointmentId,
     barberId,
+    isEdit,
     router,
     selectedDateISO,
     serviceId,
@@ -358,7 +386,6 @@ export default function BookingTime() {
     fetchSlots();
   }, [fetchSlots]);
 
-  // ✅ re-avalia o gate quando o fetch do edit terminar (pra não depender da ordem)
   useEffect(() => {
     syncGateReady();
   }, [currentDateISO, currentStartTime, syncGateReady]);
@@ -368,14 +395,23 @@ export default function BookingTime() {
     return isoDayKeyUTC(currentDateISO) === isoDayKeyUTC(selectedDateISO);
   }, [currentDateISO, isEdit, selectedDateISO]);
 
-  const canKeepCurrentTime = useMemo(() => {
-    if (!isEdit) return false;
-    if (!sameDayAsCurrent) return false;
+  // Segurança extra: se por algum motivo o backend não injetar, a gente garante no UI também.
+  // ✅ Não remove os outros horários: só garante que o atual esteja presente + ordenação + sem duplicar.
+  const displaySlots = useMemo(() => {
+    const base = slots.slice();
+    if (!isEdit) return base;
 
     const t = normTime(currentStartTime);
-    if (!t) return false;
+    if (!t) return base;
+    if (!sameDayAsCurrent) return base;
 
-    return slots.includes(t);
+    const merged = base.includes(t) ? base : [t, ...base];
+
+    const uniq = Array.from(new Set(merged)).sort(
+      (a, b) => timeToMinutes(a) - timeToMinutes(b),
+    );
+
+    return uniq;
   }, [currentStartTime, isEdit, sameDayAsCurrent, slots]);
 
   const onPickTime = useCallback(
@@ -392,9 +428,7 @@ export default function BookingTime() {
           dateISO: selectedDateISO,
           startTime: normTime(startTime),
           serviceDurationMinutes: serviceDurationMinutes || "30",
-
           ...(isEdit ? { mode: "edit", appointmentId } : {}),
-
           ...(isEdit
             ? {
                 currentDateISO: currentDateISO || "",
@@ -421,12 +455,6 @@ export default function BookingTime() {
     ],
   );
 
-  const onKeepCurrentTime = useCallback(() => {
-    const t = normTime(currentStartTime);
-    if (!canKeepCurrentTime || !t) return;
-    onPickTime(t);
-  }, [canKeepCurrentTime, currentStartTime, onPickTime]);
-
   const keyDay = useCallback((item: DayItem) => item.key, []);
   const renderDay = useCallback(
     ({ item }: ListRenderItemInfo<DayItem>) => (
@@ -441,14 +469,28 @@ export default function BookingTime() {
 
   const keySlot = useCallback((t: string, idx: number) => `${t}-${idx}`, []);
   const renderSlot = useCallback(
-    ({ item, index }: ListRenderItemInfo<string>) => (
-      <SlotRow
-        time={item}
-        onPress={() => onPickTime(item)}
-        showDivider={index < slots.length - 1}
-      />
-    ),
-    [onPickTime, slots.length],
+    ({ item, index }: ListRenderItemInfo<string>) => {
+      const t = normTime(item);
+      const cur = normTime(currentStartTime);
+
+      const isCurrent = !!isEdit && !!sameDayAsCurrent && !!cur && t === cur;
+
+      return (
+        <SlotRow
+          time={t}
+          onPress={() => onPickTime(t)}
+          showDivider={index < displaySlots.length - 1}
+          isCurrent={isCurrent}
+        />
+      );
+    },
+    [
+      currentStartTime,
+      displaySlots.length,
+      isEdit,
+      onPickTime,
+      sameDayAsCurrent,
+    ],
   );
 
   return (
@@ -458,7 +500,7 @@ export default function BookingTime() {
           <View style={safeTopStyle} />
 
           <View style={S.stickyRow}>
-            <Pressable onPress={goBack} style={S.backBtn}>
+            <Pressable onPress={goBack} style={S.backBtn} hitSlop={8}>
               <FontAwesome
                 name="chevron-left"
                 size={18}
@@ -469,6 +511,7 @@ export default function BookingTime() {
             <Text style={S.title}>
               {isEdit ? "Alterar agendamento" : "Agendamento"}
             </Text>
+
             <View style={{ width: 42, height: 42 }} />
           </View>
         </View>
@@ -489,10 +532,6 @@ export default function BookingTime() {
                 {serviceName ? `\nServiço: ${serviceName}` : ""}
                 {barberName ? `\nProfissional: ${barberName}` : ""}
               </Text>
-
-              <Text style={S.heroNote}>
-                Primeiro selecione o dia. Depois, o horário.
-              </Text>
             </View>
           </View>
         </View>
@@ -508,37 +547,8 @@ export default function BookingTime() {
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 12 }}
+              style={{ flexGrow: 0 }}
             />
-
-            {isEdit && currentStartTime ? (
-              <View style={{ marginTop: 6 }}>
-                <Pressable
-                  onPress={onKeepCurrentTime}
-                  disabled={!canKeepCurrentTime || loading}
-                  style={[
-                    S.keepBtn,
-                    !canKeepCurrentTime || loading ? { opacity: 0.5 } : null,
-                  ]}
-                >
-                  <Text style={S.keepBtnText}>
-                    Manter horário atual: {normTime(currentStartTime)}
-                  </Text>
-                </Pressable>
-
-                {!loading && sameDayAsCurrent && !canKeepCurrentTime ? (
-                  <Text style={S.keepHint}>
-                    Este horário não está disponível para a seleção atual.
-                  </Text>
-                ) : null}
-
-                {!loading && !sameDayAsCurrent ? (
-                  <Text style={S.keepHint}>
-                    Para manter o mesmo horário, selecione o mesmo dia do
-                    agendamento atual.
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
 
             <Text style={[S.sectionTitle, { marginTop: 14 }]}>Horários</Text>
 
@@ -547,24 +557,21 @@ export default function BookingTime() {
                 <ActivityIndicator />
                 <Text style={S.centerText}>Carregando…</Text>
               </View>
-            ) : slots.length === 0 ? (
-              <View style={S.centerBox}>
+            ) : displaySlots.length === 0 ? (
+              <View style={S.emptyInline}>
                 <Text style={S.emptyTitle}>Sem horários para este dia</Text>
                 <Text style={S.centerText}>
                   Tente outro dia ou volte e troque o profissional.
                 </Text>
-
-                <Pressable style={S.secondaryBtn} onPress={fetchSlots}>
-                  <Text style={S.secondaryBtnText}>Tentar novamente</Text>
-                </Pressable>
               </View>
             ) : (
               <FlatList
-                data={slots}
+                data={displaySlots}
                 keyExtractor={keySlot}
                 renderItem={renderSlot}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={{ paddingBottom: 18 }}
+                contentContainerStyle={S.slotsContainer}
+                style={{ flexGrow: 0 }}
               />
             )}
           </View>
@@ -575,7 +582,7 @@ export default function BookingTime() {
 }
 
 const S = StyleSheet.create({
-  page: { flex: 1, backgroundColor: UI.colors.bg },
+  page: { flex: 1, backgroundColor: UI.colors.white },
 
   fixedTop: { position: "absolute", left: 0, right: 0, top: 0, zIndex: 999 },
 
@@ -594,9 +601,9 @@ const S = StyleSheet.create({
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: UI.brand.primary,
     borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
+    borderColor: "rgba(255,255,255,0.22)",
   },
 
   title: { color: UI.colors.text, fontSize: 16, fontWeight: "700" },
@@ -615,6 +622,7 @@ const S = StyleSheet.create({
     borderBottomRightRadius: 28,
     overflow: "hidden",
   },
+
   darkInner: {
     paddingHorizontal: UI.spacing.screenX,
     paddingBottom: UI.spacing.screenX,
@@ -628,6 +636,7 @@ const S = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(124,108,255,0.35)",
   },
+
   heroTitle: { color: UI.colors.text, fontSize: 18, fontWeight: "600" },
   heroDesc: {
     marginTop: 8,
@@ -635,13 +644,6 @@ const S = StyleSheet.create({
     fontSize: 13,
     fontWeight: "500",
     lineHeight: 18,
-  },
-  heroNote: {
-    marginTop: 10,
-    color: UI.colors.text,
-    fontSize: 12,
-    fontWeight: "600",
-    opacity: 0.9,
   },
 
   whiteArea: { flex: 1, backgroundColor: UI.colors.white },
@@ -657,30 +659,6 @@ const S = StyleSheet.create({
     marginBottom: 12,
     color: UI.brand.primaryText,
   },
-
-  centerBox: { paddingVertical: 18, alignItems: "center", gap: 10 },
-  centerText: {
-    color: "rgba(0,0,0,0.55)",
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  emptyTitle: {
-    color: UI.brand.primaryText,
-    fontWeight: "700",
-    fontSize: 16,
-    textAlign: "center",
-  },
-
-  secondaryBtn: {
-    marginTop: 8,
-    height: 52,
-    borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.06)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 18,
-  },
-  secondaryBtnText: { color: UI.brand.primaryText, fontWeight: "700" },
 
   dayChip: {
     height: 44,
@@ -699,22 +677,23 @@ const S = StyleSheet.create({
   dayChipText: { color: UI.brand.primaryText, fontWeight: "700", fontSize: 12 },
   dayChipTextActive: { color: UI.brand.primaryText },
 
-  keepBtn: {
-    height: 46,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(124,108,255,0.14)",
-    borderWidth: 1,
-    borderColor: "rgba(124,108,255,0.28)",
-    paddingHorizontal: 14,
-  },
-  keepBtnText: { color: UI.brand.primaryText, fontWeight: "800", fontSize: 13 },
-  keepHint: {
-    marginTop: 8,
+  centerBox: { paddingVertical: 18, alignItems: "center", gap: 10 },
+  centerText: {
     color: "rgba(0,0,0,0.55)",
     fontWeight: "600",
     textAlign: "center",
+  },
+  emptyTitle: {
+    color: UI.brand.primaryText,
+    fontWeight: "700",
+    fontSize: 16,
+    textAlign: "center",
+  },
+
+  emptyInline: {
+    paddingTop: 16,
+    alignItems: "center",
+    gap: 10,
   },
 
   row: {
@@ -724,6 +703,7 @@ const S = StyleSheet.create({
     justifyContent: "space-between",
     position: "relative",
   },
+
   rowLeft: { flexDirection: "row", gap: 12, flex: 1, alignItems: "center" },
 
   avatar: {
@@ -735,8 +715,30 @@ const S = StyleSheet.create({
     justifyContent: "center",
   },
 
+  rowTitleLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+
   rowTitle: { fontWeight: "700", color: UI.brand.primaryText, fontSize: 14 },
   rowMeta: { marginTop: 3, fontSize: 12, color: "rgba(0,0,0,0.55)" },
+
+  badgeAtual: {
+    paddingHorizontal: 10,
+    height: 22,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(124,108,255,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(124,108,255,0.35)",
+  },
+  badgeAtualText: {
+    fontSize: 11,
+    fontWeight: "900",
+    color: UI.brand.primaryText,
+  },
 
   divider: {
     position: "absolute",
@@ -745,5 +747,9 @@ const S = StyleSheet.create({
     bottom: 0,
     height: 1,
     backgroundColor: "rgba(0,0,0,0.08)",
+  },
+
+  slotsContainer: {
+    paddingBottom: 18,
   },
 });

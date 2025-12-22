@@ -5,9 +5,9 @@ import { prisma } from "@/lib/prisma";
 type MobileTokenPayload = {
   sub: string;
   role?: "CLIENT" | "BARBER" | "ADMIN";
-  email?: string;
-  name?: string | null;
 };
+
+const DEFAULT_RESCHEDULE_WINDOW_HOURS = 24;
 
 function corsHeaders() {
   return {
@@ -31,51 +31,58 @@ async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
   return payload as unknown as MobileTokenPayload;
 }
 
-function formatPtBrDateTime(date: Date) {
-  const d = new Date(date);
-  const dateLabel = d.toLocaleDateString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-  const timeLabel = d.toLocaleTimeString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-  return `${dateLabel} • ${timeLabel}`;
+function normalizeWindowHours(raw: unknown): number | null {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n)) return null;
+  if (n <= 0) return null;
+  if (n > 24 * 30) return 24 * 30;
+  return n;
 }
 
-function toISOAtNoonSPFromScheduleAt(scheduleAt: Date) {
-  const inSP = new Date(
-    scheduleAt.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }),
-  );
-  const yyyy = inSP.getFullYear();
-  const mm = String(inSP.getMonth() + 1).padStart(2, "0");
-  const dd = String(inSP.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}T12:00:00-03:00`;
-}
-
-function startTimeFromScheduleAt(scheduleAt: Date) {
-  return scheduleAt.toLocaleTimeString("pt-BR", {
-    timeZone: "America/Sao_Paulo",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function computeCanReschedule(scheduleAt: Date) {
+function computeCanReschedule(scheduleAt: Date, windowHours: number) {
   const now = new Date();
   const diffMs = scheduleAt.getTime() - now.getTime();
   const diffHours = diffMs / (1000 * 60 * 60);
-  return diffHours >= 24;
+
+  const ok = diffHours >= windowHours;
+
+  return {
+    canReschedule: ok,
+    reason: ok ? null : `Menos de ${windowHours}h de antecedência.`,
+    diffHours,
+    windowHours,
+  };
+}
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function toMobileDateISOAndStartTime(scheduleAt: Date) {
+  const dateISO = new Date(
+    scheduleAt.getFullYear(),
+    scheduleAt.getMonth(),
+    scheduleAt.getDate(),
+    12,
+    0,
+    0,
+    0,
+  ).toISOString();
+
+  const startTime = `${pad2(scheduleAt.getHours())}:${pad2(
+    scheduleAt.getMinutes(),
+  )}`;
+
+  return { dateISO, startTime };
 }
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
 
+/* =========================
+   GET
+========================= */
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -91,6 +98,7 @@ export async function GET(
 
     const { id } = await params;
     const apptId = String(id || "").trim();
+
     if (!apptId) {
       return NextResponse.json(
         { error: "Id ausente" },
@@ -109,7 +117,14 @@ export async function GET(
         serviceId: true,
         unit: { select: { id: true, name: true } },
         barber: { select: { id: true, name: true } },
-        service: { select: { id: true, name: true, durationMinutes: true } },
+        service: {
+          select: {
+            id: true,
+            name: true,
+            durationMinutes: true,
+            cancelLimitHours: true,
+          },
+        },
       },
     });
 
@@ -120,56 +135,53 @@ export async function GET(
       );
     }
 
-    const canReschedule = computeCanReschedule(appt.scheduleAt);
+    const windowHours =
+      normalizeWindowHours(appt.service?.cancelLimitHours) ??
+      DEFAULT_RESCHEDULE_WINDOW_HOURS;
+
+    const rules = computeCanReschedule(appt.scheduleAt, windowHours);
+    const mobileParts = toMobileDateISOAndStartTime(appt.scheduleAt);
+
+    const units = await prisma.unit.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
 
     return NextResponse.json(
       {
         ok: true,
         appointment: {
           id: appt.id,
-          status: appt.status,
-          scheduleAtISO: appt.scheduleAt.toISOString(),
-          startsAtLabel: formatPtBrDateTime(appt.scheduleAt),
-
           unitId: appt.unitId,
-          unitName: appt.unit?.name ?? "",
+          unitName: appt.unit?.name ?? null,
           serviceId: appt.serviceId ?? null,
-          serviceName: appt.service?.name ?? "",
+          serviceName: appt.service?.name ?? null,
           barberId: appt.barberId ?? null,
-          barberName: appt.barber?.name ?? "",
-
-          serviceDurationMinutes: appt.service?.durationMinutes ?? 30,
-
-          dateISO: toISOAtNoonSPFromScheduleAt(appt.scheduleAt),
-          startTime: startTimeFromScheduleAt(appt.scheduleAt),
-
-          canReschedule,
+          barberName: appt.barber?.name ?? null,
+          scheduleAt: appt.scheduleAt.toISOString(),
+          status: appt.status,
+          dateISO: mobileParts.dateISO,
+          startTime: mobileParts.startTime,
+          canReschedule: rules.canReschedule,
         },
+        units,
+        rules,
       },
       { status: 200, headers: corsHeaders() },
     );
   } catch (err: any) {
-    const msg = String(err?.message ?? "Erro");
-
-    if (
-      msg.toLowerCase().includes("token") ||
-      msg.toLowerCase().includes("jwt") ||
-      msg.toLowerCase().includes("signature")
-    ) {
-      return NextResponse.json(
-        { error: "Não autorizado" },
-        { status: 401, headers: corsHeaders() },
-      );
-    }
-
     console.error("[mobile/me/appointments/[id] GET] error:", err);
     return NextResponse.json(
-      { error: "Erro ao buscar agendamento" },
+      { error: "Erro ao carregar agendamento" },
       { status: 500, headers: corsHeaders() },
     );
   }
 }
 
+/* =========================
+   PATCH  ✅ NOVO
+========================= */
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -185,6 +197,7 @@ export async function PATCH(
 
     const { id } = await params;
     const apptId = String(id || "").trim();
+
     if (!apptId) {
       return NextResponse.json(
         { error: "Id ausente" },
@@ -192,95 +205,66 @@ export async function PATCH(
       );
     }
 
-    const body = await req.json().catch(() => ({}));
-
-    const unitId = String(body?.unitId ?? "");
-    const serviceId = body?.serviceId ? String(body.serviceId) : null;
-    const barberId = body?.barberId ? String(body.barberId) : null;
-    const scheduleAtRaw = String(body?.scheduleAt ?? "");
-    const scheduleAt = scheduleAtRaw ? new Date(scheduleAtRaw) : null;
+    const body = await req.json();
+    const { unitId, serviceId, barberId, scheduleAt } = body;
 
     if (!unitId || !serviceId || !barberId || !scheduleAt) {
       return NextResponse.json(
-        { error: "Parâmetros incompletos para alterar o agendamento" },
+        { error: "Parâmetros incompletos" },
         { status: 400, headers: corsHeaders() },
       );
     }
 
-    const current = await prisma.appointment.findFirst({
+    const appt = await prisma.appointment.findFirst({
       where: {
         id: apptId,
         clientId: payload.sub,
         status: { not: "CANCELED" },
       },
-      select: { id: true, scheduleAt: true },
+      include: { service: true },
     });
 
-    if (!current) {
+    if (!appt) {
       return NextResponse.json(
         { error: "Agendamento não encontrado" },
         { status: 404, headers: corsHeaders() },
       );
     }
 
-    const now = new Date();
-    if (current.scheduleAt.getTime() <= now.getTime()) {
-      return NextResponse.json(
-        {
-          error: "Agendamento já começou ou já passou. Não é possível alterar.",
-        },
-        { status: 400, headers: corsHeaders() },
-      );
-    }
+    const windowHours =
+      normalizeWindowHours(appt.service?.cancelLimitHours) ??
+      DEFAULT_RESCHEDULE_WINDOW_HOURS;
 
-    const canReschedule = computeCanReschedule(current.scheduleAt);
-    if (!canReschedule) {
-      return NextResponse.json(
-        { error: "Não é possível alterar com menos de 24h de antecedência." },
-        { status: 400, headers: corsHeaders() },
-      );
-    }
+    const rules = computeCanReschedule(new Date(appt.scheduleAt), windowHours);
 
-    const conflict = await prisma.appointment.findFirst({
-      where: {
-        id: { not: apptId },
-        barberId,
-        status: { not: "CANCELED" },
-        scheduleAt,
-      },
-      select: { id: true },
-    });
-
-    if (conflict) {
+    if (!rules.canReschedule) {
       return NextResponse.json(
-        { error: "Esse horário não está mais disponível." },
+        { error: rules.reason },
         { status: 409, headers: corsHeaders() },
       );
     }
 
-    await prisma.appointment.update({
+    const service = await prisma.service.findUnique({
+      where: { id: serviceId },
+      select: { name: true },
+    });
+
+    const updated = await prisma.appointment.update({
       where: { id: apptId },
-      data: { unitId, serviceId, barberId, scheduleAt },
+      data: {
+        unitId,
+        serviceId,
+        barberId,
+        scheduleAt: new Date(scheduleAt),
+        description: service?.name ?? appt.description,
+      },
     });
 
     return NextResponse.json(
-      { ok: true },
+      { ok: true, appointment: updated },
       { status: 200, headers: corsHeaders() },
     );
   } catch (err: any) {
-    const msg = String(err?.message ?? "Erro");
-
-    if (
-      msg.toLowerCase().includes("token") ||
-      msg.toLowerCase().includes("jwt") ||
-      msg.toLowerCase().includes("signature")
-    ) {
-      return NextResponse.json(
-        { error: "Não autorizado" },
-        { status: 401, headers: corsHeaders() },
-      );
-    }
-
     console.error("[mobile/me/appointments/[id] PATCH] error:", err);
     return NextResponse.json(
       { error: "Erro ao alterar agendamento" },

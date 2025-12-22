@@ -30,71 +30,67 @@ function BookingServiceSkeletonBase() {
           </View>
 
           <ShimmerBlock width={160} height={14} radius={8} />
-
           <View style={{ width: 42, height: 42 }} />
         </View>
       </View>
 
-      {/* "Scroll" */}
-      <View style={S.scroll}>
-        <View
-          pointerEvents="none"
-          style={[S.topBounceDark, { height: topBounceHeight }]}
-        />
+      <View
+        pointerEvents="none"
+        style={[S.topBounceDark, { height: topBounceHeight }]}
+      />
 
-        <View style={{ height: TOP_OFFSET, backgroundColor: UI.colors.bg }} />
+      <View style={{ height: TOP_OFFSET, backgroundColor: UI.colors.bg }} />
 
-        {/* Dark hero */}
-        <View style={S.darkShell}>
-          <View style={S.darkInner}>
-            <View style={S.heroCard}>
-              <ShimmerBlock width={160} height={16} radius={10} />
-              <ShimmerBlock
-                width={"70%"}
-                height={12}
-                radius={8}
-                style={{ marginTop: 10 }}
-              />
-              <ShimmerBlock
-                width={"92%"}
-                height={10}
-                radius={8}
-                style={{ marginTop: 10 }}
-              />
-            </View>
+      {/* ⬛ darkShell com raio (agora aparece pq page é branco) */}
+      <View style={S.darkShell}>
+        <View style={S.darkInner}>
+          <View style={S.heroCard}>
+            <ShimmerBlock width={160} height={16} radius={10} />
+            <ShimmerBlock
+              width={"70%"}
+              height={12}
+              radius={8}
+              style={{ marginTop: 10 }}
+            />
+            <ShimmerBlock
+              width={"92%"}
+              height={10}
+              radius={8}
+              style={{ marginTop: 10 }}
+            />
           </View>
         </View>
+      </View>
 
-        {/* White area */}
-        <View style={S.whiteArea}>
-          <View style={S.whiteContent}>
-            <ShimmerBlock width={120} height={18} radius={10} />
+      {/* White area */}
+      <View style={S.whiteArea}>
+        <View style={S.whiteContent}>
+          <ShimmerBlock width={120} height={18} radius={10} />
 
-            <View style={{ marginTop: 12 }}>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <View key={i} style={S.row}>
-                  <View style={S.rowLeft}>
-                    <ShimmerBlock width={38} height={38} radius={12} />
-                    <View style={{ flex: 1 }}>
-                      <ShimmerBlock width={"68%"} height={12} radius={8} />
-                      <ShimmerBlock
-                        width={"42%"}
-                        height={10}
-                        radius={8}
-                        style={{ marginTop: 8 }}
-                      />
-                    </View>
+          <View style={{ marginTop: 12 }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <View key={i} style={S.row}>
+                <View style={S.rowLeft}>
+                  <ShimmerBlock width={38} height={38} radius={12} />
+                  <View style={{ flex: 1 }}>
+                    <ShimmerBlock width={"68%"} height={12} radius={8} />
+                    <ShimmerBlock
+                      width={"42%"}
+                      height={10}
+                      radius={8}
+                      style={{ marginTop: 8 }}
+                    />
                   </View>
-
-                  <View style={S.rowRight}>
-                    <ShimmerBlock width={56} height={10} radius={8} />
-                    <ShimmerBlock width={14} height={14} radius={7} />
-                  </View>
-
-                  {i < 5 ? <View style={S.divider} /> : null}
                 </View>
-              ))}
-            </View>
+
+                <View style={S.rowRight}>
+                  <ShimmerBlock width={56} height={10} radius={8} />
+                  <ShimmerBlock width={14} height={14} radius={7} />
+                </View>
+
+                {i < 5 ? <View style={S.divider} /> : null}
+              </View>
+            ))}
           </View>
         </View>
       </View>
@@ -103,7 +99,8 @@ function BookingServiceSkeletonBase() {
 }
 
 const S = StyleSheet.create({
-  page: { flex: 1, backgroundColor: UI.colors.bg },
+  // ✅ CHAVE: fundo branco atrás do darkShell (pra recorte aparecer)
+  page: { flex: 1, backgroundColor: UI.colors.white },
 
   fixedTop: {
     position: "absolute",
@@ -133,8 +130,6 @@ const S = StyleSheet.create({
     justifyContent: "center",
   },
 
-  scroll: { flex: 1, backgroundColor: UI.colors.white },
-
   topBounceDark: {
     position: "absolute",
     left: 0,
@@ -155,6 +150,7 @@ const S = StyleSheet.create({
     paddingBottom: UI.spacing.screenX,
   },
 
+  // ⚠️ card NÃO mexe
   heroCard: {
     marginTop: 14,
     backgroundColor: "rgba(124,108,255,0.22)",

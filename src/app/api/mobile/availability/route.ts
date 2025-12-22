@@ -43,9 +43,29 @@ function asInt(v: string | null) {
   return Math.round(n);
 }
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function hhmm(d: Date) {
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/**
+ * Compara dia local (ano/mes/dia) entre duas datas.
+ * dateISO no app vem como ISO ao meio-dia, então essa comparação é segura.
+ */
+function isSameLocalDay(a: Date, b: Date) {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
+
 export async function GET(req: Request) {
   try {
-    await requireMobileAuth(req);
+    const payload = await requireMobileAuth(req);
 
     const { searchParams } = new URL(req.url);
 
@@ -53,7 +73,12 @@ export async function GET(req: Request) {
     const unitId = String(searchParams.get("unitId") ?? "");
     const dateISO = String(searchParams.get("dateISO") ?? "");
 
-    // ✅ Novo: duração pode vir pelo serviceId (preferível) ou pelo número
+    // ✅ Quando for edição, o app manda appointmentId
+    const appointmentId = String(
+      searchParams.get("appointmentId") ?? "",
+    ).trim();
+
+    // ✅ duração pode vir pelo serviceId (preferível) ou pelo número
     const serviceId = String(searchParams.get("serviceId") ?? "");
     const serviceDurationInMinutesParam = asInt(
       searchParams.get("serviceDurationInMinutes"),
@@ -100,16 +125,53 @@ export async function GET(req: Request) {
       );
     }
 
-    // ✅ Aqui é o que você queria: slots de 30 em 30 respeitando:
+    // ✅ slots de 30 em 30 respeitando:
     // - soberania da unidade
     // - disponibilidade do barbeiro (na unidade)
     // - conflitos com agendamentos existentes
     // - duração do serviço
-    const slots = await getAvailableTimeSlotsForBarberOnDate(barberId, date, {
+    //
+    // ✅ NOVO (crucial): em edição, exclui o próprio appointment dos conflitos
+    let slots = await getAvailableTimeSlotsForBarberOnDate(barberId, date, {
       unitId,
       serviceDurationInMinutes,
       slotIntervalInMinutes: 30,
-    });
+      ...(appointmentId
+        ? ({ excludeAppointmentId: appointmentId } as any)
+        : {}),
+    } as any);
+
+    // ✅ Fallback de segurança:
+    // Em edição, o horário atual "já é do cliente".
+    // Se por qualquer motivo ele não vier, injeta de volta
+    // (somente se for o mesmo dia + mesma unidade + mesmo barbeiro).
+    if (appointmentId) {
+      const appt = await prisma.appointment.findFirst({
+        where: {
+          id: appointmentId,
+          clientId: payload.sub,
+          status: { not: "CANCELED" },
+        },
+        select: {
+          id: true,
+          scheduleAt: true,
+          unitId: true,
+          barberId: true,
+        },
+      });
+
+      if (
+        appt &&
+        appt.unitId === unitId &&
+        String(appt.barberId ?? "") === barberId &&
+        isSameLocalDay(appt.scheduleAt, date)
+      ) {
+        const t = hhmm(appt.scheduleAt);
+        if (t && !slots.includes(t)) {
+          slots = [t, ...slots];
+        }
+      }
+    }
 
     return Response.json(
       {
@@ -121,6 +183,7 @@ export async function GET(req: Request) {
           serviceId: serviceId || null,
           serviceDurationInMinutes,
           slotIntervalInMinutes: 30,
+          appointmentId: appointmentId || null,
         },
       },
       { status: 200, headers: corsHeaders() },

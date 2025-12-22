@@ -65,7 +65,6 @@ export default function ProductDetails() {
   const [dataReady, setDataReady] = useState(false);
 
   const fetchProduct = useCallback(async () => {
-    // sempre “segura” o gate quando for refazer o fetch (ex: tentar novamente)
     setDataReady(false);
 
     if (!productId) {
@@ -120,8 +119,6 @@ export default function ProductDetails() {
     } finally {
       setLoading(false);
       fetchingRef.current = false;
-
-      // ✅ SEMPRE libera o gate
       setDataReady(true);
     }
   }, [productId]);
@@ -134,12 +131,6 @@ export default function ProductDetails() {
     () => formatBRL(product?.price ?? 0),
     [product?.price],
   );
-
-  const stockLabel = useMemo(() => {
-    if (!product) return "—";
-    if (product.isOutOfStock) return "Esgotado";
-    return String(product.stockQuantity);
-  }, [product]);
 
   const extra = useMemo(() => {
     const p = product;
@@ -192,7 +183,6 @@ export default function ProductDetails() {
 
   return (
     <ScreenGate dataReady={dataReady} skeleton={<ProductDetailsSkeleton />}>
-      {/* fallback visual se ainda estiver carregando (normalmente o gate cobre) */}
       {loading && !dataReady ? (
         <View
           style={[S.page, { alignItems: "center", justifyContent: "center" }]}
@@ -211,12 +201,9 @@ export default function ProductDetails() {
       ) : !product ? (
         <View style={S.page}>
           <View style={[S.headerFloat, { top: insets.top + 10 }]}>
-            <Pressable onPress={() => router.back()} style={styles.iconBtn42}>
-              <FontAwesome
-                name="angle-left"
-                size={20}
-                color={UI.colors.white}
-              />
+            {/* ✅ Voltar roxinho com seta branca */}
+            <Pressable onPress={() => router.back()} style={S.backBtn}>
+              <FontAwesome name="angle-left" size={20} color="#FFFFFF" />
             </Pressable>
           </View>
 
@@ -289,27 +276,13 @@ export default function ProductDetails() {
               style={S.heroImage}
             />
             <View style={S.heroOverlay} />
-
-            <View style={S.stockPill}>
-              <FontAwesome
-                name={product.isOutOfStock ? "times" : "check"}
-                size={12}
-                color={UI.colors.white}
-                style={{ marginRight: 6 }}
-              />
-              <Text style={S.stockPillText}>
-                {product.isOutOfStock ? "Esgotado" : `Estoque: ${stockLabel}`}
-              </Text>
-            </View>
+            {/* ✅ badge de estoque removido */}
           </View>
 
           <View style={[S.headerFloat, { top: insets.top + 10 }]}>
-            <Pressable onPress={() => router.back()} style={styles.iconBtn42}>
-              <FontAwesome
-                name="angle-left"
-                size={20}
-                color={UI.colors.white}
-              />
+            {/* ✅ Voltar roxinho com seta branca */}
+            <Pressable onPress={() => router.back()} style={S.backBtn}>
+              <FontAwesome name="angle-left" size={20} color="#FFFFFF" />
             </Pressable>
           </View>
 
@@ -320,12 +293,13 @@ export default function ProductDetails() {
           >
             <View style={S.mainShell}>
               <View style={S.mainInner}>
-                <Text style={S.category}>{product.category ?? "Produto"}</Text>
+                {/* ✅ categoria abaixo da foto removida */}
                 <Text style={S.title}>{product.name}</Text>
 
                 <View style={S.priceRow}>
                   <Text style={S.price}>{priceLabel}</Text>
                 </View>
+                {/* ✅ não realocar estoque aqui */}
               </View>
             </View>
 
@@ -349,31 +323,41 @@ export default function ProductDetails() {
           </ScrollView>
 
           <View style={[S.ctaBar, { paddingBottom: insets.bottom + 12 }]}>
+            {/* ✅ Reservar com o mesmo padrão do "Ver todos os produtos" (home): bg #141414, sem borda, texto/ícone brancos */}
             <Pressable
               style={[
-                styles.pillPrimary,
-                S.ctaBtn,
+                S.reserveBtn,
                 product.isOutOfStock || reserving ? { opacity: 0.75 } : null,
               ]}
               onPress={onPressReserve}
               disabled={product.isOutOfStock || reserving}
             >
               {reserving ? (
-                <ActivityIndicator />
+                <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <FontAwesome
                   name="shopping-bag"
                   size={16}
-                  color={UI.colors.white}
+                  color="#FFFFFF"
+                  style={{ marginRight: 10 }}
                 />
               )}
-              <Text style={styles.pillPrimaryText}>
+
+              <Text style={S.reserveBtnText}>
                 {product.isOutOfStock
                   ? "Esgotado"
                   : reserving
                     ? "Reservando…"
                     : "Reservar"}
               </Text>
+
+              {/* setinha opcional, mas mantém o “feeling” do botão da home */}
+              <FontAwesome
+                name="angle-right"
+                size={18}
+                color="#FFFFFF"
+                style={{ marginLeft: 10 }}
+              />
             </Pressable>
           </View>
         </View>
@@ -393,24 +377,6 @@ const S = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.18)",
   },
 
-  stockPill: {
-    position: "absolute",
-    left: UI.spacing.screenX,
-    bottom: 14,
-    backgroundColor: "rgba(0,0,0,0.65)",
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  stockPillText: {
-    color: UI.colors.white,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-
   headerFloat: {
     position: "absolute",
     left: UI.spacing.screenX,
@@ -418,6 +384,18 @@ const S = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     zIndex: 20,
+  },
+
+  // ✅ botão voltar roxinho (seta branca)
+  backBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: UI.brand.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
   },
 
   mainShell: {
@@ -431,13 +409,6 @@ const S = StyleSheet.create({
     paddingHorizontal: UI.spacing.screenX,
     paddingTop: 30,
     paddingBottom: 18,
-  },
-
-  category: {
-    color: "rgba(0,0,0,0.55)",
-    fontSize: 13,
-    fontWeight: "600",
-    marginBottom: 8,
   },
 
   title: {
@@ -460,8 +431,6 @@ const S = StyleSheet.create({
 
   whiteContent: {
     paddingHorizontal: UI.spacing.screenX,
-    paddingTop: 18,
-    paddingBottom: 18,
   },
 
   sectionTitle: {
@@ -511,5 +480,20 @@ const S = StyleSheet.create({
     borderColor: "rgba(0,0,0,0.08)",
   },
 
-  ctaBtn: { height: 56 },
+  // ✅ botão Reservar no padrão "Ver todos os produtos"
+  reserveBtn: {
+    height: 44,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    backgroundColor: "#141414",
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+
+  reserveBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
 });

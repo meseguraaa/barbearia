@@ -21,9 +21,9 @@ function BookingTimeSkeletonBase() {
 
   return (
     <View style={S.page}>
-      {/* Topo fixo */}
       <View style={S.fixedTop}>
         <View style={safeTopStyle} />
+
         <View style={S.stickyRow}>
           <View style={S.backBtnFake}>
             <ShimmerBlock width={18} height={18} radius={6} />
@@ -35,87 +35,81 @@ function BookingTimeSkeletonBase() {
         </View>
       </View>
 
-      <View style={S.scroll}>
-        <View
-          pointerEvents="none"
-          style={[S.topBounceDark, { height: topBounceHeight }]}
-        />
-        <View style={{ height: TOP_OFFSET, backgroundColor: UI.colors.bg }} />
+      <View
+        pointerEvents="none"
+        style={[S.topBounceDark, { height: topBounceHeight }]}
+      />
+      <View style={{ height: TOP_OFFSET, backgroundColor: UI.colors.bg }} />
 
-        {/* Hero */}
-        <View style={S.darkShell}>
-          <View style={S.darkInner}>
-            <View style={S.heroCard}>
-              <ShimmerBlock width={200} height={16} radius={10} />
-              <ShimmerBlock
-                width={"85%"}
-                height={12}
-                radius={8}
-                style={{ marginTop: 10 }}
-              />
-              <ShimmerBlock
-                width={"75%"}
-                height={12}
-                radius={8}
-                style={{ marginTop: 8 }}
-              />
-              <ShimmerBlock
-                width={"55%"}
-                height={10}
-                radius={8}
-                style={{ marginTop: 12 }}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Conteúdo */}
-        <View style={S.whiteArea}>
-          <View style={S.whiteContent}>
-            <ShimmerBlock width={90} height={18} radius={10} />
-            {/* Chips */}
-            <View style={S.chipsRow}>
-              {Array.from({ length: 5 }).map((_, i) => (
-                <ShimmerBlock
-                  key={i}
-                  width={110}
-                  height={44}
-                  radius={999}
-                  style={{ marginRight: 10 }}
-                />
-              ))}
-            </View>
-
+      <View style={S.darkShell}>
+        <View style={S.darkInner}>
+          <View style={S.heroCard}>
+            <ShimmerBlock width={200} height={16} radius={10} />
             <ShimmerBlock
-              width={130}
-              height={18}
-              radius={10}
+              width={"85%"}
+              height={12}
+              radius={8}
+              style={{ marginTop: 10 }}
+            />
+            <ShimmerBlock
+              width={"75%"}
+              height={12}
+              radius={8}
+              style={{ marginTop: 8 }}
+            />
+            <ShimmerBlock
+              width={"55%"}
+              height={10}
+              radius={8}
               style={{ marginTop: 12 }}
             />
+          </View>
+        </View>
+      </View>
 
-            {/* Slots */}
-            <View style={{ marginTop: 10 }}>
-              {Array.from({ length: 8 }).map((_, i) => (
-                <View key={i} style={S.row}>
-                  <View style={S.rowLeft}>
-                    <ShimmerBlock width={38} height={38} radius={12} />
-                    <View style={{ flex: 1 }}>
-                      <ShimmerBlock width={90} height={12} radius={8} />
-                      <ShimmerBlock
-                        width={140}
-                        height={10}
-                        radius={8}
-                        style={{ marginTop: 8 }}
-                      />
-                    </View>
+      <View style={S.whiteArea}>
+        <View style={S.whiteContent}>
+          <ShimmerBlock width={90} height={18} radius={10} />
+
+          <View style={S.chipsRow}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <ShimmerBlock
+                key={i}
+                width={110}
+                height={44}
+                radius={999}
+                style={{ marginRight: 10 }}
+              />
+            ))}
+          </View>
+
+          <ShimmerBlock
+            width={130}
+            height={18}
+            radius={10}
+            style={{ marginTop: 12 }}
+          />
+
+          <View style={{ marginTop: 10 }}>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <View key={i} style={S.row}>
+                <View style={S.rowLeft}>
+                  <ShimmerBlock width={38} height={38} radius={12} />
+                  <View style={{ flex: 1 }}>
+                    <ShimmerBlock width={90} height={12} radius={8} />
+                    <ShimmerBlock
+                      width={140}
+                      height={10}
+                      radius={8}
+                      style={{ marginTop: 8 }}
+                    />
                   </View>
-
-                  <ShimmerBlock width={14} height={14} radius={7} />
-
-                  {i < 7 ? <View style={S.divider} /> : null}
                 </View>
-              ))}
-            </View>
+
+                <ShimmerBlock width={14} height={14} radius={7} />
+                {i < 7 ? <View style={S.divider} /> : null}
+              </View>
+            ))}
           </View>
         </View>
       </View>
@@ -124,7 +118,8 @@ function BookingTimeSkeletonBase() {
 }
 
 const S = StyleSheet.create({
-  page: { flex: 1, backgroundColor: UI.colors.bg },
+  // ✅ CHAVE: fundo branco pra recorte aparecer
+  page: { flex: 1, backgroundColor: UI.colors.white },
 
   fixedTop: {
     position: "absolute",
@@ -143,18 +138,17 @@ const S = StyleSheet.create({
     justifyContent: "space-between",
   },
 
+  // ✅ back fake roxinho
   backBtnFake: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: UI.brand.primary,
     borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
+    borderColor: "rgba(255,255,255,0.22)",
     alignItems: "center",
     justifyContent: "center",
   },
-
-  scroll: { flex: 1, backgroundColor: UI.colors.white },
 
   topBounceDark: {
     position: "absolute",

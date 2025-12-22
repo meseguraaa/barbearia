@@ -158,10 +158,8 @@ export default function CartScreen() {
   }, [router]);
 
   const load = useCallback(async () => {
-    // Sempre que recarregar, segura o gate novamente
     setDataReady(false);
 
-    // ✅ Sem orderId: tela precisa liberar e mostrar "Sacolinha vazia"
     if (!orderId) {
       if (__DEV__) console.log("[cart] missing orderId param");
 
@@ -207,8 +205,6 @@ export default function CartScreen() {
       setFailed(true);
     } finally {
       setLoading(false);
-
-      // ✅ SEMPRE libera no final (sucesso/erro)
       setDataReady(true);
     }
   }, [orderId]);
@@ -416,12 +412,9 @@ export default function CartScreen() {
           <View style={safeTopStyle} />
 
           <View style={S.stickyRow}>
+            {/* ✅ padronizado: roxinho + seta branca */}
             <Pressable style={S.backBtn} onPress={goBack}>
-              <FontAwesome
-                name="angle-left"
-                size={22}
-                color={UI.colors.white}
-              />
+              <FontAwesome name="angle-left" size={22} color="#FFFFFF" />
             </Pressable>
 
             <View style={S.centerTitleWrap} pointerEvents="none">
@@ -466,8 +459,17 @@ export default function CartScreen() {
               </Text>
             </View>
 
-            <Pressable style={S.primaryBtn} onPress={onPressEntendi}>
-              <Text style={S.primaryBtnText}>Entendi</Text>
+            {/* ✅ Entendi no padrão "Ver todos os produtos" (home) */}
+            <Pressable style={S.allProductsBtn} onPress={onPressEntendi}>
+              <View style={S.btnCenterRow}>
+                <Text style={S.allProductsBtnText}>Entendi</Text>
+                <FontAwesome
+                  name="angle-right"
+                  size={18}
+                  color="#FFFFFF"
+                  style={{ marginLeft: 8 }}
+                />
+              </View>
             </Pressable>
           </View>
         ) : null}
@@ -496,15 +498,16 @@ const S = StyleSheet.create({
     gap: 12,
   },
 
+  // ✅ botão voltar roxinho + seta branca (padrão do app)
   backBtn: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: UI.brand.primary,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
+    borderColor: "rgba(255,255,255,0.25)",
   },
 
   centerTitleWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
@@ -700,6 +703,7 @@ const S = StyleSheet.create({
 
   totalValue: { fontSize: 16, color: UI.brand.primaryText, fontWeight: "800" },
 
+  // ❌ mantido (usado em "Tentar novamente" e nos cards concluído/cancelado)
   primaryBtn: {
     height: 48,
     borderRadius: 16,
@@ -726,5 +730,27 @@ const S = StyleSheet.create({
     color: UI.brand.primaryText,
     fontWeight: "800",
     fontSize: 14,
+  },
+
+  // ✅ padrão do botão "Ver todos os produtos" (home)
+  allProductsBtn: {
+    height: 44,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    backgroundColor: "#141414",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  allProductsBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+
+  btnCenterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });

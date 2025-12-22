@@ -208,12 +208,9 @@ export default function ClientHistory() {
           <View style={safeTopStyle} />
 
           <View style={S.stickyRow}>
+            {/* ✅ padronizado: roxinho + seta branca */}
             <Pressable style={S.backBtn} onPress={goBack}>
-              <FontAwesome
-                name="angle-left"
-                size={22}
-                color={UI.colors.white}
-              />
+              <FontAwesome name="angle-left" size={22} color="#FFFFFF" />
             </Pressable>
 
             <View style={S.centerTitleWrap} pointerEvents="none">
@@ -275,15 +272,16 @@ const S = StyleSheet.create({
     gap: 12,
   },
 
+  // ✅ botão voltar roxinho + seta branca (padrão do app)
   backBtn: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: UI.brand.primary,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
+    borderColor: "rgba(255,255,255,0.25)",
   },
 
   centerTitleWrap: {

@@ -116,7 +116,7 @@ const Field = memo(function Field({
 
       <View style={S.inputRow}>
         <View style={S.inputIcon}>
-          <FontAwesome name={icon} size={16} color={UI.brand.primaryText} />
+          <FontAwesome name={icon} size={16} color={UI.brand.primary} />
         </View>
 
         <TextInput
@@ -153,7 +153,6 @@ export default function Profile() {
   const [phone, setPhone] = useState("");
   const [birth, setBirth] = useState("");
 
-  // ✅ gate: só precisa garantir que /me terminou 1 vez
   const didMeRef = useRef(false);
   const [dataReady, setDataReady] = useState(false);
 
@@ -178,7 +177,6 @@ export default function Profile() {
     }
   }
 
-  // Carrega /me (1x por mount). Se você quiser recarregar ao focar depois, eu adapto.
   useEffect(() => {
     let alive = true;
 
@@ -193,8 +191,6 @@ export default function Profile() {
 
         setName(u.name ?? "");
         setEmail(u.email ?? "");
-
-        // ✅ avatar vem do provider (ou placeholder)
         setAvatar(u.image?.trim() ? u.image : AVATAR_PLACEHOLDER);
 
         setPhone(u.phone ? maskPhone(u.phone) : "");
@@ -206,7 +202,6 @@ export default function Profile() {
         if (!alive) return;
         setLoadingMe(false);
 
-        // ✅ libera uma vez e não mexe mais (evita skeleton piscando)
         if (!didMeRef.current) {
           didMeRef.current = true;
           setDataReady(true);
@@ -298,7 +293,8 @@ export default function Profile() {
             {/* BLOCO ESCURO */}
             <View style={S.darkShell}>
               <View style={S.darkInner}>
-                <View style={styles.glassCard}>
+                {/* ✅ Card igual ao heroCard da Home */}
+                <View style={S.heroCard}>
                   <View style={S.profileHeroRow}>
                     <View style={S.avatarWrap}>
                       <Image source={{ uri: avatar }} style={S.avatarBig} />
@@ -324,17 +320,6 @@ export default function Profile() {
                     </View>
                   </View>
                 </View>
-
-                <View style={S.hintRow}>
-                  <FontAwesome
-                    name="lock"
-                    size={14}
-                    color="rgba(255,255,255,0.75)"
-                  />
-                  <Text style={S.hintText}>
-                    A foto vem do login social. Upload fica pra depois.
-                  </Text>
-                </View>
               </View>
             </View>
 
@@ -351,7 +336,6 @@ export default function Profile() {
                     icon="user"
                     editable={false}
                   />
-                  <View style={S.divider} />
 
                   <Field
                     label="E-mail"
@@ -360,7 +344,6 @@ export default function Profile() {
                     icon="envelope"
                     editable={false}
                   />
-                  <View style={S.divider} />
 
                   <Field
                     label="Telefone"
@@ -371,7 +354,6 @@ export default function Profile() {
                     onChangeText={(t) => setPhone(maskPhone(t))}
                     keyboardType="number-pad"
                   />
-                  <View style={S.divider} />
 
                   <Field
                     label="Data de nascimento"
@@ -386,16 +368,16 @@ export default function Profile() {
 
                 <Pressable
                   style={[
-                    S.primaryBtn,
+                    S.saveBtn,
                     saving || loadingMe ? { opacity: 0.85 } : null,
                   ]}
                   onPress={handleSave}
                   disabled={saving || loadingMe}
                 >
                   {saving ? (
-                    <ActivityIndicator color={UI.colors.white} />
+                    <ActivityIndicator color="#FFFFFF" />
                   ) : (
-                    <Text style={S.primaryBtnText}>Salvar alterações</Text>
+                    <Text style={S.saveBtnText}>Salvar alterações</Text>
                   )}
                 </Pressable>
 
@@ -459,6 +441,16 @@ const S = StyleSheet.create({
   darkInner: {
     paddingHorizontal: UI.spacing.screenX,
     paddingBottom: UI.spacing.screenX,
+  },
+
+  /* ✅ HERO (igual Home) */
+  heroCard: {
+    marginTop: 14,
+    backgroundColor: "rgba(124,108,255,0.22)",
+    borderRadius: UI.radius.card,
+    padding: UI.spacing.cardPad,
+    borderWidth: 1,
+    borderColor: "rgba(124,108,255,0.35)",
   },
 
   profileHeroRow: {
@@ -542,8 +534,9 @@ const S = StyleSheet.create({
   },
 
   fieldWrap: { paddingVertical: 8 },
+
   fieldLabel: {
-    color: UI.colors.black45,
+    color: "#141414",
     fontSize: 12,
     fontWeight: "600",
     marginBottom: 8,
@@ -565,7 +558,7 @@ const S = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 10,
-    backgroundColor: "rgba(124,108,255,0.10)",
+    backgroundColor: "rgba(124,108,255,0.18)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -578,26 +571,20 @@ const S = StyleSheet.create({
     paddingVertical: 0,
   },
 
-  divider: {
-    height: 1,
-    backgroundColor: "rgba(0,0,0,0.06)",
-    marginVertical: 6,
-  },
-
-  primaryBtn: {
+  // mesmo padrão do "Ver todos os produtos"
+  saveBtn: {
     marginTop: 16,
-    height: 56,
-    backgroundColor: UI.brand.primary,
+    height: 44,
     borderRadius: 999,
+    paddingHorizontal: 14,
+    backgroundColor: "#141414",
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
   },
-  primaryBtnText: {
-    color: UI.colors.text,
-    fontSize: 15,
-    fontWeight: "600",
+  saveBtnText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
 
   dangerLink: {

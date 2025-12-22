@@ -123,13 +123,14 @@ const ProductCard = memo(function ProductCard({
         <Text style={S.productPrice}>{priceLabel}</Text>
 
         <View style={S.productFooter}>
+          {/* ✅ Ver detalhes: texto preto, ícone preto e borda preta, fundo branco */}
           <Pressable onPress={goDetails} style={S.detailsBtn} hitSlop={8}>
             <View style={S.btnCenterRow}>
               <Text style={S.detailsBtnText}>Ver detalhes</Text>
               <FontAwesome
                 name="angle-right"
                 size={18}
-                color={UI.brand.primary}
+                color="#141414"
                 style={{ marginLeft: 8 }}
               />
             </View>
@@ -588,7 +589,8 @@ export default function Home() {
                   </View>
                 </>
               ) : (
-                <>
+                // ✅ AJUSTE APLICADO: container com padding igual nos 4 lados + espaço entre texto e botão
+                <View style={S.emptyApptBox}>
                   <Text style={S.emptyApptText}>
                     {nextLoading
                       ? "Carregando seu próximo horário…"
@@ -606,7 +608,7 @@ export default function Home() {
                       </Text>
                     </Pressable>
                   </View>
-                </>
+                </View>
               )}
             </View>
           </View>
@@ -636,28 +638,33 @@ export default function Home() {
               />
             )}
 
-            <Pressable style={S.outlineBtn} onPress={goToProducts}>
+            {/* ✅ Ver todos os produtos: bg #141414, sem borda, texto/ícone brancos */}
+            <Pressable style={S.allProductsBtn} onPress={goToProducts}>
               <View style={S.btnCenterRow}>
-                <Text style={S.outlineBtnText}>Ver todos os produtos</Text>
+                <Text style={S.allProductsBtnText}>Ver todos os produtos</Text>
                 <FontAwesome
                   name="angle-right"
                   size={18}
-                  color={UI.brand.primary}
+                  color="#FFFFFF"
                   style={{ marginLeft: 8 }}
                 />
               </View>
             </Pressable>
 
+            {/* ✅ Alinhamento vertical: "Histórico" e botão na mesma linha, centralizados */}
             <View style={[S.historyHeaderRow, S.sectionTitleSpacing]}>
-              <Text style={S.sectionTitle}>Histórico</Text>
+              <Text style={S.historyTitleInline}>Histórico</Text>
 
-              <Pressable style={S.seeMoreBtn} onPress={goToHistory}>
-                <Text style={S.seeMoreText}>Ver mais</Text>
-                <FontAwesome
-                  name="angle-right"
-                  size={18}
-                  color={UI.brand.primaryText}
-                />
+              <Pressable style={S.allProductsBtnSmall} onPress={goToHistory}>
+                <View style={S.btnCenterRow}>
+                  <Text style={S.allProductsBtnText}>Ver mais</Text>
+                  <FontAwesome
+                    name="angle-right"
+                    size={18}
+                    color="#FFFFFF"
+                    style={{ marginLeft: 8 }}
+                  />
+                </View>
               </Pressable>
             </View>
           </View>
@@ -841,10 +848,7 @@ const S = StyleSheet.create({
     borderColor: "rgba(124,108,255,0.35)",
   },
 
-  // ✅ novo: espaçamento maior entre as 3 partes do card hero
-  heroSections: {
-    gap: 25, // ajuste aqui se quiser mais/menos espaço (ex: 20, 24)
-  },
+  heroSections: { gap: 25 },
   heroSection: {},
 
   heroTitleRow: {
@@ -856,7 +860,6 @@ const S = StyleSheet.create({
 
   heroTitle: { color: UI.colors.text, fontSize: 16, fontWeight: "600" },
 
-  // ✅ removi o marginTop daqui pra não “somar” com o gap do heroSections
   apptService: {
     color: UI.colors.text,
     fontSize: 16,
@@ -866,7 +869,6 @@ const S = StyleSheet.create({
 
   apptMeta: { color: UI.colors.textDim, fontSize: 16, marginTop: 2 },
 
-  // ✅ removi marginTop, o espaçamento agora vem do heroSections
   metaRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -886,7 +888,6 @@ const S = StyleSheet.create({
   statusPillInService: { backgroundColor: "rgba(255,193,7,0.95)" },
   statusText: { color: UI.colors.black, fontSize: 12, fontWeight: "700" },
 
-  // ✅ removi marginTop, o espaçamento agora vem do heroSections
   actionsRow: { flexDirection: "row", gap: 10 },
   actionBtn: {
     flex: 1,
@@ -899,8 +900,12 @@ const S = StyleSheet.create({
   },
   actionText: { color: UI.colors.text, fontWeight: "700" },
 
+  emptyApptBox: {
+    padding: 5,
+    gap: 14,
+  },
+
   emptyApptText: {
-    marginTop: 6,
     color: UI.colors.text,
     fontSize: 13,
     fontWeight: "500",
@@ -918,6 +923,14 @@ const S = StyleSheet.create({
     color: UI.brand.primaryText,
   },
 
+  // ✅ título do header do Histórico SEM marginBottom (isso que tava “desalinhando”)
+  historyTitleInline: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: UI.brand.primaryText,
+    marginBottom: 0,
+  },
+
   sectionTitleSpacing: { marginTop: 28 },
 
   historyHeaderRow: {
@@ -925,24 +938,6 @@ const S = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
-  },
-
-  seeMoreBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    paddingVertical: 6,
-    paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: "rgba(0,0,0,0.04)",
-    borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.06)",
-  },
-
-  seeMoreText: {
-    color: UI.brand.primaryText,
-    fontSize: 13,
-    fontWeight: "700",
   },
 
   productCard: {
@@ -1015,21 +1010,22 @@ const S = StyleSheet.create({
     justifyContent: "center",
   },
 
+  // ✅ Ver detalhes (preto no texto/ícone/borda)
   detailsBtn: {
     height: 40,
     borderRadius: 999,
     paddingHorizontal: 12,
     backgroundColor: UI.colors.white,
     borderWidth: 1,
-    borderColor: UI.brand.primary,
+    borderColor: "#141414",
     alignItems: "center",
     justifyContent: "center",
   },
 
   detailsBtnText: {
-    color: UI.brand.primary,
+    color: "#141414",
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "600",
   },
 
   productDivider: {
@@ -1049,22 +1045,31 @@ const S = StyleSheet.create({
     paddingVertical: 10,
   },
 
-  outlineBtn: {
+  // ✅ Ver todos os produtos (bg #141414, sem borda, texto/ícone brancos)
+  allProductsBtn: {
     marginTop: 18,
-    height: 40,
+    height: 44,
     borderRadius: 999,
     paddingHorizontal: 14,
-    backgroundColor: UI.colors.white,
-    borderWidth: 1,
-    borderColor: UI.brand.primary,
+    backgroundColor: "#141414",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  outlineBtnText: {
-    color: UI.brand.primary,
+  // ✅ Versão sem marginTop pro header "Histórico"
+  allProductsBtnSmall: {
+    height: 44,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    backgroundColor: "#141414",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  allProductsBtnText: {
+    color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: "700",
   },
 
   historyItem: {

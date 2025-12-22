@@ -149,15 +149,16 @@ export default function BookingProfessional() {
   const [loading, setLoading] = useState(true);
   const [barbers, setBarbers] = useState<Barber[]>([]);
 
-  // ✅ gate: libera quando o fetch terminar (mesmo com erro/vazio)
   const didBarbersRef = useRef(false);
   const [dataReady, setDataReady] = useState(false);
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
+
   const safeTopStyle = useMemo(
     () => ({ height: insets.top, backgroundColor: UI.brand.primary }),
     [insets.top],
   );
+
   const topBounceHeight = useMemo(() => TOP_OFFSET + 1400, [TOP_OFFSET]);
 
   const goBack = useCallback(() => router.back(), [router]);
@@ -219,7 +220,9 @@ export default function BookingProfessional() {
       setLoading(true);
 
       const res = await api.get<BarbersResponse>(
-        `/api/mobile/barbers?unitId=${encodeURIComponent(unitId)}&serviceId=${encodeURIComponent(serviceId)}`,
+        `/api/mobile/barbers?unitId=${encodeURIComponent(
+          unitId,
+        )}&serviceId=${encodeURIComponent(serviceId)}`,
       );
 
       if ((res as any)?.error) throw new Error(String((res as any).error));
@@ -255,7 +258,6 @@ export default function BookingProfessional() {
     fetchBarbers();
   }, [fetchBarbers]);
 
-  // ✅ bypass: se só tem 1 profissional, pula direto pro time
   useEffect(() => {
     if (loading) return;
     if (!barbers || barbers.length !== 1) return;
@@ -285,7 +287,7 @@ export default function BookingProfessional() {
           <View style={safeTopStyle} />
 
           <View style={S.stickyRow}>
-            <Pressable onPress={goBack} style={S.backBtn}>
+            <Pressable onPress={goBack} style={S.backBtn} hitSlop={8}>
               <FontAwesome
                 name="chevron-left"
                 size={18}
@@ -316,25 +318,6 @@ export default function BookingProfessional() {
                 {unitName ? `Unidade: ${unitName}` : " "}
                 {serviceName ? `\nServiço: ${serviceName}` : ""}
               </Text>
-
-              {isEdit ? (
-                <Text style={S.heroNote}>
-                  Profissional atual marcado como{" "}
-                  <Text style={{ fontWeight: "700" }}>Atual</Text>.{" "}
-                  {currentStartTime ? (
-                    <>
-                      Horário atual:{" "}
-                      <Text style={{ fontWeight: "700" }}>
-                        {currentStartTime}
-                      </Text>
-                    </>
-                  ) : null}
-                </Text>
-              ) : (
-                <Text style={S.heroNote}>
-                  Exibidos em ordem alfabética (sem privilégio).
-                </Text>
-              )}
             </View>
           </View>
         </View>
@@ -376,7 +359,8 @@ export default function BookingProfessional() {
 }
 
 const S = StyleSheet.create({
-  page: { flex: 1, backgroundColor: UI.colors.bg },
+  // ✅ CHAVE: fundo branco pra recorte aparecer
+  page: { flex: 1, backgroundColor: UI.colors.white },
 
   fixedTop: {
     position: "absolute",
@@ -395,15 +379,16 @@ const S = StyleSheet.create({
     justifyContent: "space-between",
   },
 
+  // ✅ roxinho sólido + ícone branco
   backBtn: {
     width: 42,
     height: 42,
     borderRadius: 21,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.08)",
+    backgroundColor: UI.brand.primary,
     borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
+    borderColor: "rgba(255,255,255,0.22)",
   },
 
   title: { color: UI.colors.text, fontSize: 16, fontWeight: "700" },
