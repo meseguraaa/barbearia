@@ -392,8 +392,8 @@ export default function BookingService() {
           <View style={S.stickyRow}>
             <Pressable onPress={goBack} style={S.backBtn}>
               <FontAwesome
-                name="chevron-left"
-                size={18}
+                name="angle-left"
+                size={20}
                 color={UI.colors.white}
               />
             </Pressable>
@@ -487,9 +487,11 @@ const S = StyleSheet.create({
     width: 42,
     height: 42,
     borderRadius: 21,
+    backgroundColor: UI.brand.primary,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: UI.brand.primary,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.25)",
   },
 
   title: { color: UI.colors.text, fontSize: 16, fontWeight: "700" },

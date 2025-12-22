@@ -57,31 +57,32 @@ function formatPreviewDate(d: Date) {
   return format(d, "dd/MM/yyyy • HH:mm", { locale: ptBR });
 }
 
-// ✅ data do EVENTO (ação), não do agendamento
 function pickApptOccurredAt(appt: any) {
-  // se no seu schema existir canceledAt/completedAt/finishedAt, ele usa
   const d =
     appt?.canceledAt ??
     appt?.cancelledAt ??
     appt?.completedAt ??
     appt?.finishedAt ??
     appt?.performedAt ??
-    appt?.updatedAt ?? // ✅ normalmente existe e reflete quando mudou status
+    appt?.updatedAt ??
     appt?.scheduleAt;
 
   return new Date(d);
 }
 
-// ✅ pedidos: evento é quando mudou status (updatedAt) se já finalizou/cancelou
 function pickOrderOccurredAt(order: any) {
   const status = String(order?.status ?? "").toUpperCase();
-
   const isFinal =
     status === "COMPLETED" || status === "CANCELED" || status === "CANCELLED";
-
   const d = isFinal ? (order?.updatedAt ?? order?.createdAt) : order?.createdAt;
-
   return new Date(d);
+}
+
+function safeStars(n: any) {
+  const v = Number(n ?? 0);
+  if (!Number.isFinite(v) || v <= 0) return "";
+  const clamped = Math.max(1, Math.min(5, Math.round(v)));
+  return "★".repeat(clamped);
 }
 
 export async function OPTIONS() {
@@ -93,30 +94,39 @@ export async function GET(req: Request) {
     const me = await requireMobileAuth(req);
     const clientId = me.sub;
 
-    const [doneAppointments, canceledAppointments, orders] = await Promise.all([
-      prisma.appointment.findMany({
-        where: { clientId, status: "DONE" },
-        // ✅ ordem por scheduleAt não importa mais, vamos ordenar depois por occurredAt
-        orderBy: { scheduleAt: "desc" },
-        take: 10,
-        include: { barber: true, service: true },
-      }),
-      prisma.appointment.findMany({
-        where: { clientId, status: "CANCELED" },
-        orderBy: { scheduleAt: "desc" },
-        take: 10,
-        include: { barber: true, service: true },
-      }),
-      prisma.order.findMany({
-        where: { clientId },
-        // ✅ pegamos vários e filtramos no JS (evita erro de enum)
-        orderBy: { createdAt: "desc" },
-        take: 20,
-        include: { items: { include: { product: true, service: true } } },
-      }),
-    ]);
+    const [doneAppointments, canceledAppointments, orders, reviewedAppts] =
+      await Promise.all([
+        prisma.appointment.findMany({
+          where: { clientId, status: "DONE" },
+          orderBy: { scheduleAt: "desc" },
+          take: 10,
+          include: { barber: true, service: true },
+        }),
+        prisma.appointment.findMany({
+          where: { clientId, status: "CANCELED" },
+          orderBy: { scheduleAt: "desc" },
+          take: 10,
+          include: { barber: true, service: true },
+        }),
+        prisma.order.findMany({
+          where: { clientId },
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          include: { items: { include: { product: true, service: true } } },
+        }),
+        // ✅ AVALIAÇÕES FEITAS
+        prisma.appointment.findMany({
+          where: {
+            clientId,
+            status: "DONE",
+            review: { isNot: null },
+          },
+          orderBy: { updatedAt: "desc" },
+          take: 10,
+          include: { barber: true, service: true, review: true },
+        }),
+      ]);
 
-    // ✅ só pedidos com produto e fora “sacolinha”
     const productOrders = orders
       .filter((order) =>
         order.items.some(
@@ -125,14 +135,13 @@ export async function GET(req: Request) {
       )
       .filter((order) => {
         const st = String(order?.status ?? "").toUpperCase();
-        // remove bag/sacolinha
         return st !== "PENDING_CHECKIN";
       });
 
     const normalized: Array<{ occurredAt: Date; item: HistoryItem }> = [];
 
     for (const appt of doneAppointments) {
-      const occurredAt = pickApptOccurredAt(appt); // ✅ mudou aqui
+      const occurredAt = pickApptOccurredAt(appt);
       const barberPart = appt.barber?.name ? ` • ${appt.barber.name}` : "";
 
       normalized.push({
@@ -141,14 +150,14 @@ export async function GET(req: Request) {
           id: `done:${appt.id}`,
           title: appt.description || appt.service?.name || "Serviço",
           description: `Concluído${barberPart}`,
-          date: formatPreviewDate(occurredAt), // ✅ data do evento
+          date: formatPreviewDate(occurredAt),
           icon: "scissors",
         },
       });
     }
 
     for (const appt of canceledAppointments) {
-      const occurredAt = pickApptOccurredAt(appt); // ✅ mudou aqui
+      const occurredAt = pickApptOccurredAt(appt);
       const barberPart = appt.barber?.name ? ` • ${appt.barber.name}` : "";
 
       normalized.push({
@@ -157,18 +166,18 @@ export async function GET(req: Request) {
           id: `cancel:${appt.id}`,
           title: appt.description || appt.service?.name || "Serviço",
           description: `Cancelado${barberPart}`,
-          date: formatPreviewDate(occurredAt), // ✅ data do evento
+          date: formatPreviewDate(occurredAt),
           icon: "calendar",
         },
       });
     }
 
     for (const order of productOrders) {
-      const occurredAt = pickOrderOccurredAt(order); // ✅ mudou aqui
+      const occurredAt = pickOrderOccurredAt(order);
 
       const itemsLabel = order.items
         .filter((i: any) => i?.productId != null || i?.product?.id != null)
-        .map((i) => `${i.quantity}x ${i.product?.name ?? "Produto"}`)
+        .map((i: any) => `${i.quantity}x ${i.product?.name ?? "Produto"}`)
         .join(", ");
 
       const status = String(order.status ?? "").toUpperCase();
@@ -187,23 +196,50 @@ export async function GET(req: Request) {
           description: itemsLabel
             ? `${statusLabel} • ${itemsLabel}`
             : `${statusLabel} • Compra de produto`,
-          date: formatPreviewDate(occurredAt), // ✅ data do evento
+          date: formatPreviewDate(occurredAt),
           icon: "shopping-bag",
         },
       });
     }
 
-    // ✅ agora sim: ordem decrescente pelas ações (updatedAt/canceledAt/etc)
+    // ✅ entrou no feed como “evento”: review criado/atualizado
+    for (const appt of reviewedAppts as any[]) {
+      const reviewAt = appt?.review?.createdAt ?? appt?.review?.updatedAt;
+      const occurredAt = reviewAt
+        ? new Date(reviewAt)
+        : new Date(appt.updatedAt);
+
+      const barberName = appt.barber?.name || "Profissional";
+      const serviceName =
+        appt.service?.name || appt.description || "Atendimento";
+      const ratingLabel = appt?.review?.rating
+        ? safeStars(appt.review.rating)
+        : "";
+
+      normalized.push({
+        occurredAt,
+        item: {
+          id: `review:${appt.id}`,
+          title: "Avaliação enviada",
+          description: ratingLabel
+            ? `${barberName} • ${serviceName} • ${ratingLabel}`
+            : `${barberName} • ${serviceName}`,
+          date: formatPreviewDate(occurredAt),
+          icon: "star",
+        },
+      });
+    }
+
     normalized.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
     const items = normalized.slice(0, 5).map((x) => x.item);
 
-    // (mantive seu debug que estava ajudando demais)
     const _debug = {
       apptsTotal: doneAppointments.length + canceledAppointments.length,
       doneCount: doneAppointments.length,
       canceledCount: canceledAppointments.length,
       ordersTotal: orders.length,
       productOrdersCount: productOrders.length,
+      reviewsDoneCount: reviewedAppts.length,
       normalizedCount: normalized.length,
       topTypes: items.map((it) => String(it.id).split(":")[0]),
     };

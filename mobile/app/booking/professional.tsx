@@ -289,8 +289,8 @@ export default function BookingProfessional() {
           <View style={S.stickyRow}>
             <Pressable onPress={goBack} style={S.backBtn} hitSlop={8}>
               <FontAwesome
-                name="chevron-left"
-                size={18}
+                name="angle-left"
+                size={20}
                 color={UI.colors.white}
               />
             </Pressable>

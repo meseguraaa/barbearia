@@ -23,6 +23,7 @@ type HistoryItem = {
 
 type HistoryResponse = {
   ok: boolean;
+  reviews: HistoryItem[]; // ✅ avaliações feitas
   done: HistoryItem[];
   canceled: HistoryItem[];
   orders: HistoryItem[];
@@ -69,6 +70,7 @@ export default function ClientHistory() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
+  const [reviews, setReviews] = useState<HistoryItem[]>([]);
   const [done, setDone] = useState<HistoryItem[]>([]);
   const [canceled, setCanceled] = useState<HistoryItem[]>([]);
   const [orders, setOrders] = useState<HistoryItem[]>([]);
@@ -76,7 +78,6 @@ export default function ClientHistory() {
 
   const fetchingRef = useRef(false);
 
-  // ✅ gate da tela: libera quando o fetch terminou ao menos 1x
   const didHistoryRef = useRef(false);
   const [dataReady, setDataReady] = useState(false);
 
@@ -95,17 +96,20 @@ export default function ClientHistory() {
 
       if (!res?.ok) {
         console.log("[history] api error:", res?.error);
+        setReviews([]);
         setDone([]);
         setCanceled([]);
         setOrders([]);
         return;
       }
 
+      setReviews(Array.isArray(res.reviews) ? res.reviews : []);
       setDone(Array.isArray(res.done) ? res.done : []);
       setCanceled(Array.isArray(res.canceled) ? res.canceled : []);
       setOrders(Array.isArray(res.orders) ? res.orders : []);
     } catch (err: any) {
       console.log("[history] fetch error:", err?.data ?? err?.message ?? err);
+      setReviews([]);
       setDone([]);
       setCanceled([]);
       setOrders([]);
@@ -129,12 +133,15 @@ export default function ClientHistory() {
     [insets.top],
   );
 
-  const goBack = useCallback(() => {
-    router.back();
-  }, [router]);
+  const goBack = useCallback(() => router.back(), [router]);
 
   const sections = useMemo(() => {
     return [
+      {
+        title: "Avaliações",
+        subtitle: "Avaliações que você já enviou.",
+        data: reviews,
+      },
       {
         title: "Serviços realizados",
         subtitle: "Agendamentos concluídos.",
@@ -151,11 +158,11 @@ export default function ClientHistory() {
         data: orders,
       },
     ] as Array<{ title: string; subtitle: string; data: HistoryItem[] }>;
-  }, [canceled, done, orders]);
+  }, [reviews, canceled, done, orders]);
 
   const hasAny = useMemo(
-    () => done.length + canceled.length + orders.length > 0,
-    [done.length, canceled.length, orders.length],
+    () => reviews.length + done.length + canceled.length + orders.length > 0,
+    [reviews.length, done.length, canceled.length, orders.length],
   );
 
   const renderSectionHeader = useCallback(
@@ -203,12 +210,10 @@ export default function ClientHistory() {
   return (
     <ScreenGate dataReady={dataReady} skeleton={<HistorySkeleton />}>
       <View style={S.page}>
-        {/* Header fixo (seta + título central) */}
         <View style={S.fixedTop}>
           <View style={safeTopStyle} />
 
           <View style={S.stickyRow}>
-            {/* ✅ padronizado: roxinho + seta branca */}
             <Pressable style={S.backBtn} onPress={goBack}>
               <FontAwesome name="angle-left" size={22} color="#FFFFFF" />
             </Pressable>
@@ -272,7 +277,6 @@ const S = StyleSheet.create({
     gap: 12,
   },
 
-  // ✅ botão voltar roxinho + seta branca (padrão do app)
   backBtn: {
     width: 42,
     height: 42,
@@ -284,11 +288,7 @@ const S = StyleSheet.create({
     borderColor: "rgba(255,255,255,0.25)",
   },
 
-  centerTitleWrap: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  centerTitleWrap: { flex: 1, alignItems: "center", justifyContent: "center" },
 
   centerTitle: {
     color: UI.colors.white,
@@ -345,7 +345,9 @@ const S = StyleSheet.create({
     alignItems: "center",
     backgroundColor: UI.colors.white,
   },
+
   historyLeft: { flexDirection: "row", gap: 14, flex: 1, alignItems: "center" },
+
   historyIcon: {
     width: 36,
     height: 36,
@@ -354,9 +356,11 @@ const S = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
   historyTitle: { fontWeight: "700", color: UI.brand.primaryText },
   historyDesc: { fontSize: 13, color: "rgba(0,0,0,0.65)", marginTop: 2 },
   historyDate: { fontSize: 12, color: "rgba(0,0,0,0.40)", marginTop: 2 },
+
   historyDivider: {
     position: "absolute",
     left: UI.spacing.screenX,

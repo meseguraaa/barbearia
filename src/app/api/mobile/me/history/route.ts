@@ -55,6 +55,13 @@ function formatDate(d: Date) {
   return format(d, "dd/MM/yyyy • HH:mm", { locale: ptBR });
 }
 
+function safeStars(n: any) {
+  const v = Number(n ?? 0);
+  if (!Number.isFinite(v) || v <= 0) return "";
+  const clamped = Math.max(1, Math.min(5, Math.round(v)));
+  return "★".repeat(clamped);
+}
+
 export async function OPTIONS() {
   return NextResponse.json({}, { headers: corsHeaders() });
 }
@@ -66,35 +73,43 @@ export async function GET(req: Request) {
 
     const TAKE = 50;
 
-    const [doneAppointments, canceledAppointments, orders] = await Promise.all([
-      prisma.appointment.findMany({
-        where: { clientId, status: "DONE" }, // ✅ só enum válido
-        orderBy: { scheduleAt: "desc" },
-        take: TAKE,
-        include: { barber: true, service: true },
-      }),
-      prisma.appointment.findMany({
-        where: { clientId, status: "CANCELED" }, // ✅ só enum válido
-        orderBy: { scheduleAt: "desc" },
-        take: TAKE,
-        include: { barber: true, service: true },
-      }),
-      prisma.order.findMany({
-        where: {
-          clientId,
-          status: "COMPLETED", // ✅ histórico: só checkout concluído
-        },
-        orderBy: { createdAt: "desc" },
-        take: TAKE,
-        include: {
-          items: {
-            include: { product: true, service: true },
+    const [doneAppointments, canceledAppointments, orders, reviewedAppts] =
+      await Promise.all([
+        prisma.appointment.findMany({
+          where: { clientId, status: "DONE" },
+          orderBy: { scheduleAt: "desc" },
+          take: TAKE,
+          include: { barber: true, service: true },
+        }),
+        prisma.appointment.findMany({
+          where: { clientId, status: "CANCELED" },
+          orderBy: { scheduleAt: "desc" },
+          take: TAKE,
+          include: { barber: true, service: true },
+        }),
+        prisma.order.findMany({
+          where: { clientId, status: "COMPLETED" },
+          orderBy: { createdAt: "desc" },
+          take: TAKE,
+          include: { items: { include: { product: true, service: true } } },
+        }),
+        // ✅ AVALIAÇÕES FEITAS: DONE e com review
+        prisma.appointment.findMany({
+          where: {
+            clientId,
+            status: "DONE",
+            review: { isNot: null },
           },
-        },
-      }),
-    ]);
+          orderBy: { updatedAt: "desc" }, // (a gente ordena melhor no JS pela review.createdAt)
+          take: TAKE,
+          include: {
+            barber: true,
+            service: true,
+            review: true,
+          },
+        }),
+      ]);
 
-    // Só pedidos que têm pelo menos 1 produto
     const productOrders = orders.filter((order) =>
       order.items.some(
         (item) => item.productId != null || item.product != null,
@@ -146,8 +161,42 @@ export async function GET(req: Request) {
       };
     });
 
+    // ✅ avaliações feitas (evento é a criação/atualização do review)
+    const reviewsNormalized = reviewedAppts
+      .map((appt: any) => {
+        const reviewAt = appt?.review?.createdAt ?? appt?.review?.updatedAt;
+        const occurredAt = reviewAt
+          ? new Date(reviewAt)
+          : new Date(appt.updatedAt);
+
+        const barberName = appt.barber?.name || "Profissional";
+        const serviceName =
+          appt.service?.name || appt.description || "Atendimento";
+        const ratingLabel = appt?.review?.rating
+          ? safeStars(appt.review.rating)
+          : "";
+
+        return {
+          occurredAt,
+          item: {
+            id: `review:${appt.id}`,
+            title: "Avaliação enviada",
+            description: ratingLabel
+              ? `${barberName} • ${serviceName} • ${ratingLabel}`
+              : `${barberName} • ${serviceName}`,
+            date: formatDate(occurredAt),
+            icon: "star",
+          } as HistoryItem,
+        };
+      })
+      .sort(
+        (a: any, b: any) => b.occurredAt.getTime() - a.occurredAt.getTime(),
+      );
+
+    const reviews: HistoryItem[] = reviewsNormalized.map((x: any) => x.item);
+
     return NextResponse.json(
-      { ok: true, done, canceled, orders: ordersItems },
+      { ok: true, reviews, done, canceled, orders: ordersItems },
       { headers: corsHeaders() },
     );
   } catch (err: any) {

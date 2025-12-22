@@ -56,6 +56,25 @@ type NextAppt = {
   cancellationFeeNotice?: string | null;
 };
 
+// ✅ compatível com endpoint antigo (pending) e novo (pendings)
+type PendingReviewResponse = {
+  ok: boolean;
+  pending?: null | {
+    appointmentId: string;
+    scheduleAt: string;
+    barberName: string;
+    serviceName: string;
+  };
+  pendings?: Array<{
+    appointmentId: string;
+    scheduleAt: string;
+    barberName: string;
+    serviceName: string;
+  }>;
+  tags?: { id: string; label: string }[];
+  error?: string;
+};
+
 function formatBRL(value: number) {
   try {
     return new Intl.NumberFormat("pt-BR", {
@@ -123,7 +142,6 @@ const ProductCard = memo(function ProductCard({
         <Text style={S.productPrice}>{priceLabel}</Text>
 
         <View style={S.productFooter}>
-          {/* ✅ Ver detalhes: texto preto, ícone preto e borda preta, fundo branco */}
           <Pressable onPress={goDetails} style={S.detailsBtn} hitSlop={8}>
             <View style={S.btnCenterRow}>
               <Text style={S.detailsBtnText}>Ver detalhes</Text>
@@ -200,6 +218,10 @@ export default function Home() {
   const [pendingCartCount, setPendingCartCount] = useState<number>(0);
   const cartFetchingRef = useRef(false);
 
+  // ✅ badge no sino (quantas avaliações pendentes)
+  const [pendingReviewCount, setPendingReviewCount] = useState<number>(0);
+  const reviewFetchingRef = useRef(false);
+
   const fetchingRef = useRef(false);
   const fetchingHistoryRef = useRef(false);
   const fetchingProductsRef = useRef(false);
@@ -209,15 +231,17 @@ export default function Home() {
   const didHistoryRef = useRef(false);
   const didProductsRef = useRef(false);
   const didCartRef = useRef(false);
+  const didReviewRef = useRef(false);
   const [dataReady, setDataReady] = useState(false);
 
   const recomputeReady = useCallback(() => {
-    if (dataReady) return; // já liberou, não precisa recalcular
+    if (dataReady) return;
     const ok =
       didNextRef.current &&
       didHistoryRef.current &&
       didProductsRef.current &&
-      didCartRef.current;
+      didCartRef.current &&
+      didReviewRef.current;
     if (ok) setDataReady(true);
   }, [dataReady]);
 
@@ -336,17 +360,49 @@ export default function Home() {
     }
   }, [recomputeReady]);
 
+  // ✅ badge do sino: total de avaliações pendentes (suporta pending e pendings)
+  const fetchPendingReviewCount = useCallback(async () => {
+    if (reviewFetchingRef.current) return 0;
+    reviewFetchingRef.current = true;
+
+    try {
+      const res = await api.get<PendingReviewResponse>(
+        "/api/mobile/reviews/pending",
+      );
+
+      const listCount =
+        res?.ok && Array.isArray(res?.pendings) ? res.pendings.length : 0;
+
+      const singleCount = res?.ok && res?.pending?.appointmentId ? 1 : 0;
+
+      const count = listCount > 0 ? listCount : singleCount;
+
+      setPendingReviewCount(count);
+      return count;
+    } catch {
+      setPendingReviewCount(0);
+      return 0;
+    } finally {
+      reviewFetchingRef.current = false;
+
+      didReviewRef.current = true;
+      recomputeReady();
+    }
+  }, [recomputeReady]);
+
   useFocusEffect(
     useCallback(() => {
       fetchNext();
       fetchHistoryPreview();
       fetchProductsPreview();
       fetchPendingCart();
+      fetchPendingReviewCount();
     }, [
       fetchNext,
       fetchHistoryPreview,
       fetchProductsPreview,
       fetchPendingCart,
+      fetchPendingReviewCount,
     ]),
   );
 
@@ -403,6 +459,10 @@ export default function Home() {
       router.push("/client/cart");
     }
   }, [fetchPendingCart, pendingCartOrderId, router]);
+
+  const goNotifications = useCallback(() => {
+    router.push("/client/notifications");
+  }, [router]);
 
   const onPressReschedule = useCallback(() => {
     if (!next) return;
@@ -519,9 +579,7 @@ export default function Home() {
             <View style={S.heroCard}>
               {hasNext ? (
                 <>
-                  {/* ✅ HERO dividido em 3 partes, com mais espaço entre elas */}
                   <View style={S.heroSections}>
-                    {/* 1) Textos: "Seu agendamento..." até o profissional */}
                     <View style={S.heroSection}>
                       <View style={S.heroTitleRow}>
                         <Text style={S.heroTitle} numberOfLines={1}>
@@ -534,7 +592,6 @@ export default function Home() {
                       </Text>
                     </View>
 
-                    {/* 2) Unidade + badge */}
                     <View style={S.heroSection}>
                       <View style={S.metaRow}>
                         <View style={{ flex: 1, paddingRight: 10 }}>
@@ -562,7 +619,6 @@ export default function Home() {
                       </View>
                     </View>
 
-                    {/* 3) Botões */}
                     {showActions ? (
                       <View style={S.heroSection}>
                         <View style={S.actionsRow}>
@@ -589,7 +645,6 @@ export default function Home() {
                   </View>
                 </>
               ) : (
-                // ✅ AJUSTE APLICADO: container com padding igual nos 4 lados + espaço entre texto e botão
                 <View style={S.emptyApptBox}>
                   <Text style={S.emptyApptText}>
                     {nextLoading
@@ -638,7 +693,6 @@ export default function Home() {
               />
             )}
 
-            {/* ✅ Ver todos os produtos: bg #141414, sem borda, texto/ícone brancos */}
             <Pressable style={S.allProductsBtn} onPress={goToProducts}>
               <View style={S.btnCenterRow}>
                 <Text style={S.allProductsBtnText}>Ver todos os produtos</Text>
@@ -651,7 +705,6 @@ export default function Home() {
               </View>
             </Pressable>
 
-            {/* ✅ Alinhamento vertical: "Histórico" e botão na mesma linha, centralizados */}
             <View style={[S.historyHeaderRow, S.sectionTitleSpacing]}>
               <Text style={S.historyTitleInline}>Histórico</Text>
 
@@ -723,8 +776,19 @@ export default function Home() {
                 ) : null}
               </Pressable>
 
-              <Pressable style={S.iconBtn}>
+              {/* ✅ sino com badge IGUAL ao da sacolinha */}
+              <Pressable style={S.iconBtn} onPress={goNotifications}>
                 <FontAwesome name="bell-o" size={20} color={UI.colors.white} />
+
+                {pendingReviewCount > 0 ? (
+                  <View style={S.badge}>
+                    <Text style={S.badgeText}>
+                      {pendingReviewCount > 99
+                        ? "99+"
+                        : String(pendingReviewCount)}
+                    </Text>
+                  </View>
+                ) : null}
               </Pressable>
             </View>
           </View>
@@ -793,7 +857,7 @@ const S = StyleSheet.create({
     borderColor: UI.colors.cardBorder,
   },
 
-  // ✅ badge mais pra direita e mais pra cima (alinhamento topo)
+  // ✅ badge igual para sacolinha e sino
   badge: {
     position: "absolute",
     top: -6,
@@ -923,7 +987,6 @@ const S = StyleSheet.create({
     color: UI.brand.primaryText,
   },
 
-  // ✅ título do header do Histórico SEM marginBottom (isso que tava “desalinhando”)
   historyTitleInline: {
     fontSize: 18,
     fontWeight: "600",
@@ -1010,7 +1073,6 @@ const S = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // ✅ Ver detalhes (preto no texto/ícone/borda)
   detailsBtn: {
     height: 40,
     borderRadius: 999,
@@ -1045,7 +1107,6 @@ const S = StyleSheet.create({
     paddingVertical: 10,
   },
 
-  // ✅ Ver todos os produtos (bg #141414, sem borda, texto/ícone brancos)
   allProductsBtn: {
     marginTop: 18,
     height: 44,
@@ -1056,7 +1117,6 @@ const S = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // ✅ Versão sem marginTop pro header "Histórico"
   allProductsBtnSmall: {
     height: 44,
     borderRadius: 999,

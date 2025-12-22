@@ -50,6 +50,26 @@ type Product = {
   category: string | null;
 };
 
+type PendingReviewResponse = {
+  ok: boolean;
+  // formato novo
+  pendings?: Array<{
+    appointmentId: string;
+    scheduleAt: string;
+    barberName: string;
+    serviceName: string;
+  }>;
+  // formato antigo (fallback)
+  pending?: null | {
+    appointmentId: string;
+    scheduleAt: string;
+    barberName: string;
+    serviceName: string;
+  };
+  tags?: { id: string; label: string }[];
+  error?: string;
+};
+
 function formatBRL(value: number) {
   try {
     return new Intl.NumberFormat("pt-BR", {
@@ -139,7 +159,6 @@ const ProductTile = memo(function ProductTile({
 
       <View style={S.tileFooter}>
         {item.isOutOfStock ? (
-          // ✅ Ver detalhes: bg branco, borda #141414, texto/ícone preto
           <Pressable
             onPress={() => onOpen(item.id)}
             style={S.detailsBtn}
@@ -156,7 +175,6 @@ const ProductTile = memo(function ProductTile({
             </View>
           </Pressable>
         ) : (
-          // ✅ Reservar: bg #141414, sem borda, texto/ícone branco
           <Pressable
             onPress={() => onReserve(item.id)}
             disabled={reserving}
@@ -296,7 +314,6 @@ const ProductsFooter = memo(function ProductsFooter({
   return (
     <View style={S.footerWrap}>
       <View style={S.bottomCTA}>
-        {/* ✅ Ir para o carrinho: mesma config do "Ver todos os produtos" da Home */}
         <Pressable style={S.goCartBtn} onPress={onGoCart}>
           <View style={S.btnCenterRow}>
             <Text style={S.goCartBtnText}>Ir para o carrinho</Text>
@@ -342,17 +359,27 @@ export default function Products() {
   );
   const [pendingCartCount, setPendingCartCount] = useState<number>(0);
 
+  // ✅ review pendente + badge no sino
+  const [pendingReviewAppointmentId, setPendingReviewAppointmentId] = useState<
+    string | null
+  >(null);
+  const [pendingReviewCount, setPendingReviewCount] = useState<number>(0);
+
   const fetchingRef = useRef(false);
   const cartFetchingRef = useRef(false);
+  const reviewFetchingRef = useRef(false);
 
   // ✅ gate da tela
   const didProductsRef = useRef(false);
   const didCartRef = useRef(false);
+  const didReviewRef = useRef(false);
   const [dataReady, setDataReady] = useState(false);
 
   const recomputeReady = useCallback(() => {
-    if (dataReady) return; // ✅ não fica “mexendo” no estado depois que liberou
-    if (didProductsRef.current && didCartRef.current) setDataReady(true);
+    if (dataReady) return;
+    if (didProductsRef.current && didCartRef.current && didReviewRef.current) {
+      setDataReady(true);
+    }
   }, [dataReady]);
 
   const TOP_OFFSET = insets.top + STICKY_ROW_H;
@@ -404,6 +431,54 @@ export default function Products() {
     }
   }, [recomputeReady]);
 
+  // ✅ pega avaliação pendente (badge no sino)
+  const fetchPendingReview = useCallback(async () => {
+    if (reviewFetchingRef.current)
+      return { id: null as string | null, count: 0 };
+    reviewFetchingRef.current = true;
+
+    try {
+      const res = await api.get<PendingReviewResponse>(
+        "/api/mobile/reviews/pending",
+      );
+
+      // ✅ suporta os 2 formatos
+      const list = Array.isArray(res?.pendings) ? res.pendings : [];
+
+      const pendingIdFromList =
+        list.length > 0 && list[0]?.appointmentId
+          ? String(list[0].appointmentId)
+          : null;
+
+      const pendingIdFromSingle =
+        res?.ok && res?.pending?.appointmentId
+          ? String(res.pending.appointmentId)
+          : null;
+
+      const id = pendingIdFromList ?? pendingIdFromSingle;
+
+      const count = list.length > 0 ? list.length : id ? 1 : 0;
+
+      setPendingReviewAppointmentId(id);
+      setPendingReviewCount(count);
+
+      return { id, count };
+    } catch (err: any) {
+      console.log(
+        "[products] fetchPendingReview error:",
+        err?.data ?? err?.message ?? err,
+      );
+      setPendingReviewAppointmentId(null);
+      setPendingReviewCount(0);
+      return { id: null as string | null, count: 0 };
+    } finally {
+      reviewFetchingRef.current = false;
+
+      didReviewRef.current = true;
+      recomputeReady();
+    }
+  }, [recomputeReady]);
+
   const goCart = useCallback(async () => {
     try {
       const currentId = pendingCartOrderId;
@@ -429,6 +504,11 @@ export default function Products() {
       router.push("/client/cart");
     }
   }, [fetchPendingCart, pendingCartOrderId, router]);
+
+  // ✅ abre notificações
+  const goNotifications = useCallback(() => {
+    router.push("/client/notifications");
+  }, [router]);
 
   const reserveProduct = useCallback(
     async (productId: string) => {
@@ -548,7 +628,8 @@ export default function Products() {
     useCallback(() => {
       fetchAllProducts();
       fetchPendingCart();
-    }, [fetchAllProducts, fetchPendingCart]),
+      fetchPendingReview();
+    }, [fetchAllProducts, fetchPendingCart, fetchPendingReview]),
   );
 
   const categories = useMemo<Category[]>(() => {
@@ -668,8 +749,19 @@ export default function Products() {
                 ) : null}
               </Pressable>
 
-              <Pressable style={styles.iconBtn42}>
+              {/* ✅ sino com badge igual ao da sacolinha */}
+              <Pressable style={styles.iconBtn42} onPress={goNotifications}>
                 <FontAwesome name="bell-o" size={20} color={UI.colors.white} />
+
+                {pendingReviewCount > 0 ? (
+                  <View style={S.badge}>
+                    <Text style={S.badgeText}>
+                      {pendingReviewCount > 99
+                        ? "99+"
+                        : String(pendingReviewCount)}
+                    </Text>
+                  </View>
+                ) : null}
               </Pressable>
             </View>
           </View>
@@ -732,7 +824,7 @@ const S = StyleSheet.create({
 
   topRightRow: { flexDirection: "row", gap: 10, alignItems: "center" },
 
-  // ✅ badge mais pra direita e mais pra cima (alinhamento topo)
+  // ✅ badge (mesmo padrão)
   badge: {
     position: "absolute",
     top: -6,
@@ -867,7 +959,6 @@ const S = StyleSheet.create({
     justifyContent: "center",
   },
 
-  // ✅ Ver detalhes: bg branco, borda #141414, texto preto
   detailsBtn: {
     height: 40,
     borderRadius: 999,
@@ -885,7 +976,6 @@ const S = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // ✅ Reservar: bg #141414, sem borda, texto/ícone branco
   reserveBtn: {
     height: 40,
     borderRadius: 999,
@@ -1028,7 +1118,6 @@ const S = StyleSheet.create({
 
   bottomCTA: { gap: 10 },
 
-  // ✅ Ir para o carrinho: igual ao botão "Ver todos os produtos" (Home)
   goCartBtn: {
     height: 44,
     borderRadius: 999,

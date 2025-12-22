@@ -202,11 +202,7 @@ export default function BookingEdit() {
         <View style={safeTopStyle} />
         <View style={S.stickyRow}>
           <Pressable onPress={goBack} style={S.backBtn}>
-            <FontAwesome
-              name="chevron-left"
-              size={18}
-              color={UI.colors.white}
-            />
+            <FontAwesome name="angle-left" size={20} color={UI.colors.white} />
           </Pressable>
 
           <Text style={S.title}>Alterar agendamento</Text>
