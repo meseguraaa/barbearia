@@ -108,7 +108,7 @@ async function resolveProductUnitPrice(args: {
         birthdayBenefitEnabled: true,
         birthdayPriceLevel: true,
         prices: { select: { level: true, price: true } },
-      } as any,
+      },
     }),
     args.clientId
       ? prisma.user.findUnique({
@@ -167,7 +167,7 @@ async function resolveProductUnitPrice(args: {
     const picked = pickPrice(chosen);
 
     return {
-      unitId: product.unitId as string,
+      unitId: product.unitId,
       basePrice: baseBronze,
       finalPrice: picked.price,
       appliedLevel: picked.level,
@@ -179,7 +179,7 @@ async function resolveProductUnitPrice(args: {
   const picked = pickPrice(effectiveLevel);
 
   return {
-    unitId: product.unitId as string,
+    unitId: product.unitId,
     basePrice: baseBronze,
     finalPrice: picked.price,
     appliedLevel: picked.level,
