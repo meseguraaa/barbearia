@@ -31,6 +31,32 @@ function getRedirectTo(formData: FormData) {
   return redirectTo;
 }
 
+function normalizePriceToDecimalString(raw: string): string {
+  if (!raw) return "0";
+
+  const onlyDigitsAndSeparators = raw.replace(/[^\d,\.]/g, "");
+
+  if (
+    onlyDigitsAndSeparators.includes(",") &&
+    onlyDigitsAndSeparators.includes(".")
+  ) {
+    const withoutThousands = onlyDigitsAndSeparators.replace(/\./g, "");
+    return withoutThousands.replace(",", ".");
+  }
+
+  if (onlyDigitsAndSeparators.includes(",")) {
+    return onlyDigitsAndSeparators.replace(",", ".");
+  }
+
+  return onlyDigitsAndSeparators;
+}
+
+function assertPositiveInt(n: number, label: string) {
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`${label} inválido.`);
+  }
+}
+
 /* ---------------------------------------------------------
  * UNIT SCOPE (mesma regra do page.tsx)
  * ---------------------------------------------------------*/
@@ -84,6 +110,312 @@ function assertEnoughStock(
       `Estoque insuficiente para "${product.name}". Disponível: ${product.stockQuantity}, solicitado: ${qty}.`,
     );
   }
+}
+
+/* ---------------------------------------------------------
+ * 🔥 MOTOR DE PREÇO (novo)
+ * - Ainda NÃO temos “nível do cliente (M+1)” implementado
+ * - Então por enquanto:
+ *   - nível padrão: BRONZE
+ *   - se estiver na janela do aniversário e produto tiver benefício: usa birthdayPriceLevel
+ * - Depois, você só injeta effectiveLevel real aqui.
+ * ---------------------------------------------------------*/
+type CustomerLevel = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
+
+const LEVEL_FALLBACK: Record<CustomerLevel, CustomerLevel[]> = {
+  DIAMANTE: ["DIAMANTE", "OURO", "PRATA", "BRONZE"],
+  OURO: ["OURO", "PRATA", "BRONZE"],
+  PRATA: ["PRATA", "BRONZE"],
+  BRONZE: ["BRONZE"],
+};
+
+function getDatePartsInTz(date: Date, timeZone: string) {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = fmt.formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value;
+  return {
+    year: Number(get("year")),
+    month: Number(get("month")),
+    day: Number(get("day")),
+  };
+}
+
+// cria Date UTC representando meia-noite no TZ (bom o suficiente para janela por dia)
+function tzMidnightUtc(
+  year: number,
+  month: number,
+  day: number,
+  _timeZone: string,
+) {
+  // A gente usa como “âncora” diária; não precisa de hora exata local.
+  const iso = `${String(year).padStart(4, "0")}-${String(month).padStart(
+    2,
+    "0",
+  )}-${String(day).padStart(2, "0")}T00:00:00`;
+  // Interpreta como UTC:
+  return new Date(iso + "Z");
+}
+
+function addDays(date: Date, days: number) {
+  const d = new Date(date.getTime());
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
+function isWithinInclusive(date: Date, start: Date, end: Date) {
+  const t = date.getTime();
+  return t >= start.getTime() && t <= end.getTime();
+}
+
+async function resolveProductUnitPrice(args: {
+  productId: string;
+  clientId: string | null;
+  // nível vigente (M+1) ainda não existe -> default BRONZE
+  effectiveLevel?: CustomerLevel;
+  // timezone do tenant/unidade (por enquanto default)
+  timeZone?: string;
+  now?: Date;
+}) {
+  const timeZone = args.timeZone ?? "America/Sao_Paulo";
+  const now = args.now ?? new Date();
+  const effectiveLevel: CustomerLevel = args.effectiveLevel ?? "BRONZE";
+
+  const [product, client] = await Promise.all([
+    prisma.product.findUnique({
+      where: { id: args.productId },
+      select: {
+        id: true,
+        name: true,
+        price: true,
+        unitId: true,
+        stockQuantity: true,
+        isActive: true,
+        birthdayBenefitEnabled: true,
+        birthdayPriceLevel: true,
+        prices: { select: { level: true, price: true } }, // ProductPriceByLevel
+      } as any,
+    }),
+    args.clientId
+      ? prisma.user.findUnique({
+          where: { id: args.clientId },
+          select: { id: true, birthday: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  if (!product) throw new Error("Produto não encontrado.");
+  if (!(product as any).isActive) throw new Error("Produto indisponível.");
+  if (typeof (product as any).stockQuantity === "number") {
+    // apenas “guard rail” leve, a baixa real é no finalize
+    if ((product as any).stockQuantity <= 0) {
+      throw new Error("Produto sem estoque.");
+    }
+  }
+
+  // monta mapa de preços por nível
+  const priceByLevel = new Map<CustomerLevel, number>();
+  for (const row of (product as any).prices ?? []) {
+    priceByLevel.set(row.level as CustomerLevel, Number(row.price));
+  }
+
+  // fallback final: usa product.price se não houver BRONZE cadastrado
+  const baseBronze = priceByLevel.get("BRONZE") ?? Number(product.price);
+
+  function pickPrice(level: CustomerLevel) {
+    for (const l of LEVEL_FALLBACK[level]) {
+      const found = priceByLevel.get(l);
+      if (typeof found === "number" && Number.isFinite(found)) {
+        return { level: l, price: found };
+      }
+    }
+    return { level: "BRONZE" as CustomerLevel, price: baseBronze };
+  }
+
+  // janela de aniversário (3 dias antes + dia + 3 dias depois)
+  let inBirthdayWindow = false;
+
+  if (client?.birthday && (product as any).birthdayBenefitEnabled) {
+    const nowParts = getDatePartsInTz(now, timeZone);
+    const b = getDatePartsInTz(client.birthday, timeZone);
+
+    // aniversário no ano corrente (no TZ)
+    const birthdayThisYear = tzMidnightUtc(
+      nowParts.year,
+      b.month,
+      b.day,
+      timeZone,
+    );
+
+    const start = addDays(birthdayThisYear, -3);
+    const end = addDays(birthdayThisYear, +3);
+
+    // compara por dia: usa meia-noite no TZ (representada em UTC)
+    const todayAnchor = tzMidnightUtc(
+      nowParts.year,
+      nowParts.month,
+      nowParts.day,
+      timeZone,
+    );
+
+    inBirthdayWindow = isWithinInclusive(todayAnchor, start, end);
+  }
+
+  // se está na janela e produto tem benefício: aplica nível escolhido no produto
+  if (inBirthdayWindow && (product as any).birthdayBenefitEnabled) {
+    const chosen =
+      ((product as any).birthdayPriceLevel as CustomerLevel | null) ??
+      "DIAMANTE";
+    const picked = pickPrice(chosen);
+
+    return {
+      unitId: (product as any).unitId as string,
+      unitPrice: picked.price,
+      appliedLevel: picked.level,
+      appliedBecause: "BIRTHDAY" as const,
+      inBirthdayWindow: true,
+      productName: (product as any).name as string,
+    };
+  }
+
+  // senão: aplica nível vigente do cliente (por enquanto BRONZE)
+  const picked = pickPrice(effectiveLevel);
+
+  return {
+    unitId: (product as any).unitId as string,
+    unitPrice: picked.price,
+    appliedLevel: picked.level,
+    appliedBecause:
+      picked.level === "BRONZE" ? ("BASE" as const) : ("LEVEL" as const),
+    inBirthdayWindow: false,
+    productName: (product as any).name as string,
+  };
+}
+
+/* ---------------------------------------------------------
+ * ✅ NOVO: Adicionar produto na "conta" do cliente (PENDING_CHECKIN)
+ * - Congela o preço no OrderItem
+ * - Não baixa estoque aqui (só no finalize)
+ * - Respeita contexto de unidade ativo
+ * ---------------------------------------------------------*/
+export async function addProductToClientOpenOrder(formData: FormData) {
+  const clientId = formData.get("clientId") as string | null;
+  const productId = formData.get("productId") as string | null;
+
+  const qtyRaw = formData.get("quantity");
+  const quantity = Number(qtyRaw ?? 1);
+
+  if (!clientId) throw new Error("clientId é obrigatório.");
+  if (!productId) throw new Error("productId é obrigatório.");
+  assertPositiveInt(quantity, "Quantidade");
+
+  // 🔐 Permissão + escopo de unidade (blindagem server-side)
+  const admin = (await requireAdminPermission("canAccessCheckout")) as any;
+  const activeUnitId = await resolveUnitScope({
+    unitId: admin?.unitId ?? null,
+    canSeeAllUnits: !!admin?.canSeeAllUnits,
+  });
+
+  await withRevalidate(async () => {
+    // resolve preço (por enquanto nível padrão BRONZE + aniversário)
+    const resolved = await resolveProductUnitPrice({
+      productId,
+      clientId,
+      timeZone: "America/Sao_Paulo", // ✅ depois: puxar timezone do tenant/unidade
+    });
+
+    // se admin está filtrando por unidade, o produto precisa ser dessa unidade
+    if (activeUnitId && resolved.unitId !== activeUnitId) {
+      throw new Error("Este produto não pertence à unidade selecionada.");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // encontra um pedido aberto de produto (PENDING_CHECKIN) para esse cliente nessa unidade
+      const existing = await tx.order.findFirst({
+        where: {
+          clientId,
+          unitId: resolved.unitId,
+          status: "PENDING_CHECKIN",
+          items: { some: { productId: { not: null } } },
+        } as any,
+        include: {
+          items: true,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      let orderId = existing?.id;
+
+      if (!orderId) {
+        const created = await tx.order.create({
+          data: {
+            clientId,
+            unitId: resolved.unitId,
+            status: "PENDING_CHECKIN",
+            totalAmount: 0,
+          } as any,
+          select: { id: true },
+        });
+        orderId = created.id;
+      }
+
+      // tenta achar item do mesmo produto pra somar quantidade
+      const currentItem =
+        existing?.items?.find((it: any) => it.productId === productId) ?? null;
+
+      if (currentItem) {
+        const newQty = currentItem.quantity + quantity;
+
+        // preço congelado:
+        // - mantém o unitPrice já salvo (consistência da conta)
+        const unitPrice = Number(currentItem.unitPrice ?? 0);
+        const totalPrice = unitPrice * newQty;
+
+        await tx.orderItem.update({
+          where: { id: currentItem.id },
+          data: {
+            quantity: newQty,
+            totalPrice,
+          } as any,
+        });
+      } else {
+        const unitPrice = resolved.unitPrice;
+        const totalPrice = unitPrice * quantity;
+
+        await tx.orderItem.create({
+          data: {
+            order: { connect: { id: orderId } },
+            product: { connect: { id: productId } },
+            quantity,
+            unitPrice,
+            totalPrice,
+          } as any,
+        });
+      }
+
+      // recalcula total do pedido com soma dos itens
+      const items = await tx.orderItem.findMany({
+        where: { orderId },
+        select: { totalPrice: true },
+      });
+
+      const total = items.reduce(
+        (acc, it) => acc + Number(it.totalPrice ?? 0),
+        0,
+      );
+
+      await tx.order.update({
+        where: { id: orderId },
+        data: { totalAmount: total } as any,
+      });
+    });
+  });
+
+  redirect(getRedirectTo(formData));
 }
 
 /* ---------------------------------------------------------
@@ -281,7 +613,6 @@ export async function finalizeClientOpenOrders(formData: FormData) {
         }
 
         // ✅ Idempotência (anti-clique duplo / corrida):
-        // re-busca status dentro da transação e só segue se ainda estiver PENDING_CHECKIN
         const fresh = await tx.order.findUnique({
           where: { id: order.id },
           select: { id: true, status: true },

@@ -14,6 +14,7 @@ import {
   cancelProductOrder,
   finalizeServiceOrder,
   cancelServiceOrder,
+  addProductToClientOpenOrder, // ✅ NOVO
 } from "./actions";
 import { MonthPicker } from "@/components/month-picker";
 import type { OrderStatus } from "@prisma/client";
@@ -155,6 +156,8 @@ export default async function AdminCheckoutPage({
     pendingServiceOrders,
     // 🔹 Profissionals para selecionar na venda de produto
     barbers,
+    // ✅ NOVO: catálogo de produtos para adicionar na conta
+    productsCatalog,
   ] = await Promise.all([
     prisma.order.findMany({
       where: {
@@ -231,6 +234,21 @@ export default async function AdminCheckoutPage({
           where: { isActive: true },
           select: { unitId: true, isActive: true },
         },
+      },
+    }),
+
+    prisma.product.findMany({
+      where: {
+        isActive: true,
+        ...(activeUnitId ? { unitId: activeUnitId } : {}),
+        stockQuantity: { gt: 0 },
+      } as any,
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        unitId: true,
+        stockQuantity: true,
       },
     }),
   ]);
@@ -489,6 +507,13 @@ export default async function AdminCheckoutPage({
 
               const hasBarbersForAccount = barbersForAccount.length > 0;
 
+              // ✅ catálogo de produtos respeitando a unidade da conta (quando possível)
+              const productsForAccount = productUnitId
+                ? productsCatalog.filter((p) => p.unitId === productUnitId)
+                : productsCatalog;
+
+              const hasProductsToAdd = productsForAccount.length > 0;
+
               return (
                 <div
                   key={account.clientId}
@@ -691,6 +716,84 @@ export default async function AdminCheckoutPage({
                       </div>
                     </div>
                   )}
+
+                  {/* ✅ NOVO: ADICIONAR PRODUTO NA CONTA */}
+                  <div className="pt-2 border-t border-border-primary space-y-2">
+                    <p className="text-label-small text-content-secondary">
+                      Adicionar produto na conta
+                    </p>
+
+                    {!hasProductsToAdd ? (
+                      <p className="text-paragraph-small text-content-secondary">
+                        Nenhum produto com estoque disponível{" "}
+                        {productUnitId
+                          ? "nesta unidade."
+                          : activeUnitId
+                            ? "na unidade selecionada."
+                            : "no catálogo."}
+                      </p>
+                    ) : (
+                      <form
+                        action={addProductToClientOpenOrder}
+                        className="flex flex-wrap items-end gap-2"
+                      >
+                        <input
+                          type="hidden"
+                          name="clientId"
+                          value={account.clientId}
+                        />
+                        <input
+                          type="hidden"
+                          name="redirectTo"
+                          value={redirectTo}
+                        />
+
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs text-content-secondary">
+                            Produto
+                          </label>
+                          <select
+                            name="productId"
+                            required
+                            defaultValue=""
+                            className="h-9 min-w-60 rounded-md border border-border-primary bg-background-secondary px-2 text-sm text-content-primary"
+                            disabled={!hasProductsToAdd}
+                          >
+                            <option value="" disabled>
+                              Selecione o produto
+                            </option>
+                            {productsForAccount.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name} (estoque: {p.stockQuantity})
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                          <label className="text-xs text-content-secondary">
+                            Qtd
+                          </label>
+                          <input
+                            name="quantity"
+                            type="number"
+                            min={1}
+                            defaultValue={1}
+                            className="h-9 w-[90px] rounded-md border border-border-primary bg-background-secondary px-2 text-sm text-content-primary"
+                          />
+                        </div>
+
+                        <Button type="submit" variant="brand" size="sm">
+                          Adicionar produto
+                        </Button>
+
+                        <p className="text-xs text-content-secondary w-full">
+                          O preço é calculado no checkout (nível/aniversário) e
+                          fica congelado no item.
+                        </p>
+                      </form>
+                    )}
+                  </div>
 
                   {/* AÇÕES DA CONTA */}
                   <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border-primary">

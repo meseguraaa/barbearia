@@ -29,6 +29,23 @@ function formatDeadline(days: number) {
   return `${days} dias`;
 }
 
+function Badge({
+  children,
+  title,
+}: {
+  children: React.ReactNode;
+  title?: string;
+}) {
+  return (
+    <span
+      title={title}
+      className="inline-flex items-center rounded-full border border-border-primary bg-background-secondary px-2 py-0.5 text-[11px] text-content-secondary"
+    >
+      {children}
+    </span>
+  );
+}
+
 export function ProductRow({ product }: ProductRowProps) {
   // Garante que o objeto enviado para o dialog tenha os campos numéricos esperados
   const productForDialog: ProductForEditDialog = {
@@ -48,6 +65,14 @@ export function ProductRow({ product }: ProductRowProps) {
   const displayDescription = truncate(product.description);
 
   const deadlineText = formatDeadline(product.pickupDeadlineDays);
+
+  // ✅ NOVO (compatível): flags opcionais vindas do server (quando você atualizar o page.tsx)
+  // - birthdayBenefitEnabled: boolean
+  // - hasLevelPrices: boolean (true se existir qualquer ProductPriceByLevel)
+  const birthdayBenefitEnabled = Boolean(
+    (product as any).birthdayBenefitEnabled,
+  );
+  const hasLevelPrices = Boolean((product as any).hasLevelPrices);
 
   return (
     <tr className="border-t border-border-primary">
@@ -71,13 +96,29 @@ export function ProductRow({ product }: ProductRowProps) {
           </div>
 
           {/* Título + descrição truncados */}
-          <div className="flex flex-col">
+          <div className="flex min-w-0 flex-col gap-1">
             <span className="font-medium text-content-primary">
               {displayName}
             </span>
             <span className="text-[11px] text-content-secondary">
               {displayDescription}
             </span>
+
+            {/* ✅ Badges de “venda” (não quebram nada se flags não vierem ainda) */}
+            {(birthdayBenefitEnabled || hasLevelPrices) && (
+              <div className="flex flex-wrap gap-1">
+                {hasLevelPrices && (
+                  <Badge title="Este produto tem preços diferentes por nível de cliente.">
+                    💎 Níveis
+                  </Badge>
+                )}
+                {birthdayBenefitEnabled && (
+                  <Badge title="Este produto tem benefício de aniversário (3 dias antes + dia + 3 dias depois).">
+                    🎂 Aniversário
+                  </Badge>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </td>

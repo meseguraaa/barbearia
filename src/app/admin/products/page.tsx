@@ -34,6 +34,10 @@ export type ProductForRow = {
   // ✅ novo: unidade do produto (estoque por unidade)
   unitId: string;
   unitName: string;
+
+  // ✅ NOVO: sinais de configuração (UX no admin)
+  birthdayBenefitEnabled: boolean;
+  hasLevelPrices: boolean;
 };
 
 /**
@@ -82,6 +86,13 @@ export default async function ProductsPage() {
           name: true,
         },
       },
+
+      // ✅ NOVO: conta preços por nível (para badge "💎 Níveis")
+      _count: {
+        select: {
+          prices: true, // ProductPriceByLevel[]
+        },
+      },
     },
   });
 
@@ -108,6 +119,10 @@ export default async function ProductsPage() {
 
     unitId: p.unit?.id ?? p.unitId,
     unitName: p.unit?.name ?? "—",
+
+    // ✅ NOVO: flags pro ProductRow (sem quebrar)
+    birthdayBenefitEnabled: Boolean((p as any).birthdayBenefitEnabled),
+    hasLevelPrices: (p as any)._count?.prices > 0,
   }));
 
   return (

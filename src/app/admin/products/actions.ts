@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { Prisma } from "@prisma/client";
+import { Prisma, CustomerLevel } from "@prisma/client";
 
 // ===== Schemas =====
 
@@ -19,6 +19,44 @@ const imageStringSchema = z
       val.startsWith("https://"),
     "Formato de imagem inválido",
   );
+
+function normalizePriceToDecimalString(raw: string): string {
+  if (!raw) return "0";
+
+  const onlyDigitsAndSeparators = raw.replace(/[^\d,\.]/g, "");
+
+  if (
+    onlyDigitsAndSeparators.includes(",") &&
+    onlyDigitsAndSeparators.includes(".")
+  ) {
+    const withoutThousands = onlyDigitsAndSeparators.replace(/\./g, "");
+    return withoutThousands.replace(",", ".");
+  }
+
+  if (onlyDigitsAndSeparators.includes(",")) {
+    return onlyDigitsAndSeparators.replace(",", ".");
+  }
+
+  return onlyDigitsAndSeparators;
+}
+
+function parseOptionalDecimalFromFormValue(val: unknown): string | null {
+  const s = String(val ?? "").trim();
+  if (!s) return null;
+  const normalized = normalizePriceToDecimalString(s);
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return normalized;
+}
+
+function parseBoolFromForm(formData: FormData, key: string): boolean {
+  const v = formData.get(key);
+  if (v === null || v === undefined) return false;
+  const s = String(v).toLowerCase();
+  return s === "true" || s === "1" || s === "on" || s === "yes";
+}
+
+const customerLevelSchema = z.enum(["BRONZE", "PRATA", "OURO", "DIAMANTE"]);
 
 const baseProductSchema = z.object({
   name: z.string().min(3, "Nome obrigatório"),
@@ -58,32 +96,27 @@ const baseProductSchema = z.object({
       message:
         "Prazo para retirada deve ser um número inteiro entre 1 e 30 dias",
     }),
+
+  // ✅ NOVO: benefício de aniversário
+  birthdayBenefitEnabled: z.boolean().optional(),
+  birthdayPriceLevel: customerLevelSchema.optional(),
 });
 
-const createProductSchema = baseProductSchema;
-const updateProductSchema = baseProductSchema;
+const createProductSchema = baseProductSchema.superRefine((data, ctx) => {
+  if (data.birthdayBenefitEnabled) {
+    if (!data.birthdayPriceLevel) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["birthdayPriceLevel"],
+        message: "Selecione o nível do benefício de aniversário",
+      });
+    }
+  }
+});
+
+const updateProductSchema = createProductSchema;
 
 // ===== Helpers =====
-
-function normalizePriceToDecimalString(raw: string): string {
-  if (!raw) return "0";
-
-  const onlyDigitsAndSeparators = raw.replace(/[^\d,\.]/g, "");
-
-  if (
-    onlyDigitsAndSeparators.includes(",") &&
-    onlyDigitsAndSeparators.includes(".")
-  ) {
-    const withoutThousands = onlyDigitsAndSeparators.replace(/\./g, "");
-    return withoutThousands.replace(",", ".");
-  }
-
-  if (onlyDigitsAndSeparators.includes(",")) {
-    return onlyDigitsAndSeparators.replace(",", ".");
-  }
-
-  return onlyDigitsAndSeparators;
-}
 
 /**
  * Resolve um unitId:
@@ -117,9 +150,99 @@ async function getUnitIdFromFormOrDefault(formData: FormData): Promise<string> {
   return unit.id;
 }
 
+/**
+ * Lê preços por nível do form (opcional).
+ */
+function readLevelPricesFromForm(
+  formData: FormData,
+): Partial<Record<CustomerLevel, string>> {
+  const getFirst = (keys: string[]) => {
+    for (const k of keys) {
+      const v = formData.get(k);
+      const parsed = parseOptionalDecimalFromFormValue(v);
+      if (parsed !== null) return parsed;
+    }
+    return null;
+  };
+
+  const bronze = getFirst(["priceBronze", "levelPriceBronze", "price_BRONZE"]);
+  const prata = getFirst(["pricePrata", "levelPricePrata", "price_PRATA"]);
+  const ouro = getFirst(["priceOuro", "levelPriceOuro", "price_OURO"]);
+  const diamante = getFirst([
+    "priceDiamante",
+    "levelPriceDiamante",
+    "price_DIAMANTE",
+  ]);
+
+  const out: Partial<Record<CustomerLevel, string>> = {};
+  if (bronze !== null) out.BRONZE = bronze;
+  if (prata !== null) out.PRATA = prata;
+  if (ouro !== null) out.OURO = ouro;
+  if (diamante !== null) out.DIAMANTE = diamante;
+  return out;
+}
+
+async function upsertProductPricesByLevel(args: {
+  productId: string;
+  prices: Partial<Record<CustomerLevel, string>>;
+}) {
+  const entries = Object.entries(args.prices) as Array<[CustomerLevel, string]>;
+  if (entries.length === 0) return;
+
+  await prisma.$transaction(
+    entries.map(([level, priceStr]) =>
+      prisma.productPriceByLevel.upsert({
+        where: { productId_level: { productId: args.productId, level } },
+        create: {
+          productId: args.productId,
+          level,
+          price: new Prisma.Decimal(priceStr),
+        },
+        update: {
+          price: new Prisma.Decimal(priceStr),
+        },
+      }),
+    ),
+  );
+}
+
+// ✅ NOVO: buscar pricing completo pra preencher modal de edição
+export async function getProductPricing(productId: string) {
+  const p = await prisma.product.findUnique({
+    where: { id: productId },
+    select: {
+      id: true,
+      birthdayBenefitEnabled: true,
+      birthdayPriceLevel: true,
+      prices: {
+        select: { level: true, price: true },
+      },
+    },
+  });
+
+  if (!p) throw new Error("Produto não encontrado");
+
+  const levelPrices: Partial<Record<CustomerLevel, number>> = {};
+  for (const row of p.prices) {
+    levelPrices[row.level] = Number(row.price);
+  }
+
+  return {
+    productId: p.id,
+    birthdayBenefitEnabled: Boolean(p.birthdayBenefitEnabled),
+    birthdayPriceLevel: (p.birthdayPriceLevel ?? null) as CustomerLevel | null,
+    levelPrices,
+  };
+}
+
 // ===== Funções base (trabalham com prisma + revalidate) =====
 
 export async function createProduct(formData: FormData) {
+  const birthdayBenefitEnabled = parseBoolFromForm(
+    formData,
+    "birthdayBenefitEnabled",
+  );
+
   const parsed = createProductSchema.safeParse({
     name: formData.get("name"),
     imageUrl: formData.get("imageUrl"),
@@ -129,6 +252,9 @@ export async function createProduct(formData: FormData) {
     category: formData.get("category"),
     stockQuantity: formData.get("stockQuantity"),
     pickupDeadlineDays: formData.get("pickupDeadlineDays"),
+
+    birthdayBenefitEnabled,
+    birthdayPriceLevel: formData.get("birthdayPriceLevel"),
   });
 
   if (!parsed.success) {
@@ -147,12 +273,18 @@ export async function createProduct(formData: FormData) {
     category,
     stockQuantity,
     pickupDeadlineDays,
+    birthdayPriceLevel,
   } = parsed.data;
 
   const normalizedPrice = normalizePriceToDecimalString(price);
   const unitId = await getUnitIdFromFormOrDefault(formData);
 
-  await prisma.product.create({
+  const levelPrices = readLevelPricesFromForm(formData);
+  if (!levelPrices.BRONZE) {
+    levelPrices.BRONZE = normalizedPrice;
+  }
+
+  const created = await prisma.product.create({
     data: {
       name,
       imageUrl,
@@ -163,15 +295,30 @@ export async function createProduct(formData: FormData) {
       stockQuantity,
       pickupDeadlineDays,
 
-      // ✅ obrigatório agora
+      birthdayBenefitEnabled,
+      birthdayPriceLevel: birthdayBenefitEnabled
+        ? (birthdayPriceLevel as CustomerLevel)
+        : null,
+
       unit: { connect: { id: unitId } },
     },
+    select: { id: true },
+  });
+
+  await upsertProductPricesByLevel({
+    productId: created.id,
+    prices: levelPrices,
   });
 
   revalidatePath("/admin/products");
 }
 
 export async function updateProduct(productId: string, formData: FormData) {
+  const birthdayBenefitEnabled = parseBoolFromForm(
+    formData,
+    "birthdayBenefitEnabled",
+  );
+
   const parsed = updateProductSchema.safeParse({
     name: formData.get("name"),
     imageUrl: formData.get("imageUrl"),
@@ -181,6 +328,9 @@ export async function updateProduct(productId: string, formData: FormData) {
     category: formData.get("category"),
     stockQuantity: formData.get("stockQuantity"),
     pickupDeadlineDays: formData.get("pickupDeadlineDays"),
+
+    birthdayBenefitEnabled,
+    birthdayPriceLevel: formData.get("birthdayPriceLevel"),
   });
 
   if (!parsed.success) {
@@ -199,9 +349,12 @@ export async function updateProduct(productId: string, formData: FormData) {
     category,
     stockQuantity,
     pickupDeadlineDays,
+    birthdayPriceLevel,
   } = parsed.data;
 
   const normalizedPrice = normalizePriceToDecimalString(price);
+
+  const levelPrices = readLevelPricesFromForm(formData);
 
   await prisma.product.update({
     where: { id: productId },
@@ -214,8 +367,21 @@ export async function updateProduct(productId: string, formData: FormData) {
       category,
       stockQuantity,
       pickupDeadlineDays,
-      // ⚠️ não mexo em unit aqui pra não “mover produto de unidade” sem querer
+
+      birthdayBenefitEnabled,
+      birthdayPriceLevel: birthdayBenefitEnabled
+        ? (birthdayPriceLevel as CustomerLevel)
+        : null,
     },
+  });
+
+  if (Object.keys(levelPrices).length > 0 && !levelPrices.BRONZE) {
+    levelPrices.BRONZE = normalizedPrice;
+  }
+
+  await upsertProductPricesByLevel({
+    productId,
+    prices: levelPrices,
   });
 
   revalidatePath("/admin/products");

@@ -29,6 +29,101 @@ type UnitOption = {
   isActive: boolean;
 };
 
+type CustomerLevel = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
+
+const LEVEL_OPTIONS: Array<{ value: CustomerLevel; label: string }> = [
+  { value: "BRONZE", label: "Bronze" },
+  { value: "PRATA", label: "Prata" },
+  { value: "OURO", label: "Ouro" },
+  { value: "DIAMANTE", label: "Diamante" },
+];
+
+function PriceLevelGrid({
+  basePrice,
+  values,
+  onChange,
+}: {
+  basePrice: string;
+  values: Record<CustomerLevel, string>;
+  onChange: (level: CustomerLevel, value: string) => void;
+}) {
+  return (
+    <div className="space-y-2 rounded-xl border border-border-primary bg-background-tertiary p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-content-primary">
+            Preços por nível
+          </p>
+          <p className="text-xs text-content-secondary">
+            Se você deixar vazio, o sistema usa o preço normal (Bronze) como
+            base.
+          </p>
+        </div>
+
+        <div className="text-xs text-content-secondary">
+          Base:{" "}
+          <span className="text-content-primary">R$ {basePrice || "—"}</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="space-y-1">
+          <label className="text-xs text-content-secondary">Bronze</label>
+          <Input
+            name="priceBronze"
+            inputMode="decimal"
+            placeholder={basePrice ? `Ex: ${basePrice}` : "Ex: 79.90"}
+            value={values.BRONZE}
+            onChange={(e) => onChange("BRONZE", e.target.value)}
+            className="bg-background-secondary border-border-primary text-content-primary"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs text-content-secondary">Prata</label>
+          <Input
+            name="pricePrata"
+            inputMode="decimal"
+            placeholder="Ex: 74.90"
+            value={values.PRATA}
+            onChange={(e) => onChange("PRATA", e.target.value)}
+            className="bg-background-secondary border-border-primary text-content-primary"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs text-content-secondary">Ouro</label>
+          <Input
+            name="priceOuro"
+            inputMode="decimal"
+            placeholder="Ex: 69.90"
+            value={values.OURO}
+            onChange={(e) => onChange("OURO", e.target.value)}
+            className="bg-background-secondary border-border-primary text-content-primary"
+          />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs text-content-secondary">Diamante</label>
+          <Input
+            name="priceDiamante"
+            inputMode="decimal"
+            placeholder="Ex: 64.90"
+            value={values.DIAMANTE}
+            onChange={(e) => onChange("DIAMANTE", e.target.value)}
+            className="bg-background-secondary border-border-primary text-content-primary"
+          />
+        </div>
+      </div>
+
+      <p className="text-[11px] text-content-secondary">
+        Dica: você pode preencher só alguns níveis. Os demais herdam por
+        fallback (Diamante → Ouro → Prata → Bronze).
+      </p>
+    </div>
+  );
+}
+
 export function ProductNewDialog({
   units = [],
   defaultUnitId,
@@ -50,18 +145,58 @@ export function ProductNewDialog({
 
   const [selectedUnitId, setSelectedUnitId] = useState<string>(initialUnitId);
 
+  // ✅ NOVO: estado do benefício de aniversário (por produto)
+  const [birthdayEnabled, setBirthdayEnabled] = useState(false);
+  const [birthdayLevel, setBirthdayLevel] = useState<CustomerLevel>("DIAMANTE");
+
+  // ✅ NOVO: estado de preços por nível (opcional)
+  const [basePrice, setBasePrice] = useState("");
+  const [levelPrices, setLevelPrices] = useState<Record<CustomerLevel, string>>(
+    {
+      BRONZE: "",
+      PRATA: "",
+      OURO: "",
+      DIAMANTE: "",
+    },
+  );
+
   function handleCreate(formData: FormData) {
     // ✅ garante que unitId vai junto (estoque por unidade)
     formData.set("unitId", selectedUnitId);
 
+    // ✅ benefício de aniversário
+    formData.set("birthdayBenefitEnabled", birthdayEnabled ? "true" : "false");
+    if (birthdayEnabled) {
+      formData.set("birthdayPriceLevel", birthdayLevel);
+    } else {
+      formData.delete("birthdayPriceLevel");
+    }
+
+    // ✅ preços por nível (só manda os que o admin digitou)
+    // (server action já garante BRONZE com base no price normal se ficar vazio)
+    if (levelPrices.BRONZE.trim())
+      formData.set("priceBronze", levelPrices.BRONZE);
+    if (levelPrices.PRATA.trim()) formData.set("pricePrata", levelPrices.PRATA);
+    if (levelPrices.OURO.trim()) formData.set("priceOuro", levelPrices.OURO);
+    if (levelPrices.DIAMANTE.trim())
+      formData.set("priceDiamante", levelPrices.DIAMANTE);
+
     startTransition(async () => {
       await createProductAction(formData);
       setOpen(false);
+
+      // limpa estados quando fecha
+      setBirthdayEnabled(false);
+      setBirthdayLevel("DIAMANTE");
+      setBasePrice("");
+      setLevelPrices({ BRONZE: "", PRATA: "", OURO: "", DIAMANTE: "" });
     });
   }
 
   const hasUnits = units.length > 0;
   const unitIsLocked = !canSeeAllUnits && !!defaultUnitId;
+
+  const birthdayConfigInvalid = birthdayEnabled && !birthdayLevel;
 
   return (
     <Dialog open={open} onOpenChange={(next) => !isPending && setOpen(next)}>
@@ -185,7 +320,103 @@ export function ProductNewDialog({
               required
               placeholder="Ex: 79.90"
               className="bg-background-tertiary border-border-primary text-content-primary"
+              value={basePrice}
+              onChange={(e) => setBasePrice(e.target.value)}
             />
+            <p className="text-xs text-content-secondary">
+              Esse é o preço padrão (Bronze). Os demais níveis são opcionais.
+            </p>
+          </div>
+
+          {/* ✅ NOVO: PREÇOS POR NÍVEL */}
+          <PriceLevelGrid
+            basePrice={basePrice}
+            values={levelPrices}
+            onChange={(level, value) =>
+              setLevelPrices((prev) => ({ ...prev, [level]: value }))
+            }
+          />
+
+          {/* ✅ NOVO: BENEFÍCIO DE ANIVERSÁRIO (por produto) */}
+          <div className="space-y-2 rounded-xl border border-border-primary bg-background-tertiary p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-content-primary">
+                  Benefício de aniversário
+                </p>
+                <p className="text-xs text-content-secondary">
+                  Ativo por 3 dias antes, no dia, e 3 dias depois do aniversário
+                  do cliente. Você escolhe qual “nível de preço” aplicar para
+                  este produto.
+                </p>
+              </div>
+
+              <label className="inline-flex items-center gap-2 text-xs text-content-secondary">
+                <input
+                  type="checkbox"
+                  checked={birthdayEnabled}
+                  onChange={(e) => setBirthdayEnabled(e.target.checked)}
+                  className="h-4 w-4 accent-current"
+                />
+                Ativar
+              </label>
+            </div>
+
+            {birthdayEnabled ? (
+              <div className="space-y-1">
+                <label className="text-xs text-content-secondary">
+                  Aplicar preço como
+                  <span className="text-red-500"> *</span>
+                </label>
+
+                <Select
+                  value={birthdayLevel}
+                  onValueChange={(v) => setBirthdayLevel(v as CustomerLevel)}
+                >
+                  <SelectTrigger className="bg-background-secondary border-border-primary text-content-primary">
+                    <SelectValue placeholder="Selecione o nível" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LEVEL_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {birthdayConfigInvalid ? (
+                  <p className="text-xs text-red-500">
+                    Se o benefício está ativo, selecione o nível.
+                  </p>
+                ) : (
+                  <p className="text-xs text-content-secondary">
+                    Ex.: “Diamante” aplica o preço Diamante deste produto
+                    durante a janela do aniversário.
+                  </p>
+                )}
+
+                {/* inputs hidden (pra garantir submit mesmo se shadcn Select não gerar input nativo) */}
+                <input
+                  type="hidden"
+                  name="birthdayBenefitEnabled"
+                  value={birthdayEnabled ? "true" : "false"}
+                />
+                <input
+                  type="hidden"
+                  name="birthdayPriceLevel"
+                  value={birthdayLevel}
+                />
+              </div>
+            ) : (
+              <>
+                <input
+                  type="hidden"
+                  name="birthdayBenefitEnabled"
+                  value="false"
+                />
+              </>
+            )}
           </div>
 
           {/* PORCENTAGEM DO BARBEIRO */}
@@ -259,14 +490,17 @@ export function ProductNewDialog({
               variant="brand"
               disabled={
                 isPending ||
+                birthdayConfigInvalid ||
                 (!unitIsLocked &&
                   (!selectedUnitId || selectedUnitId.length === 0))
               }
               title={
-                !unitIsLocked &&
-                (!selectedUnitId || selectedUnitId.length === 0)
-                  ? "Selecione uma unidade"
-                  : undefined
+                birthdayConfigInvalid
+                  ? "Selecione o nível do benefício de aniversário"
+                  : !unitIsLocked &&
+                      (!selectedUnitId || selectedUnitId.length === 0)
+                    ? "Selecione uma unidade"
+                    : undefined
               }
             >
               {isPending ? "Salvando..." : "Criar produto"}

@@ -8,7 +8,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  //url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
 // ============
@@ -64,6 +64,19 @@ enum OrderStatus {
   CANCELED
 }
 
+// ✅ NOVO: níveis de cliente (gamificação)
+enum CustomerLevel {
+  BRONZE
+  PRATA
+  OURO
+  DIAMANTE
+}
+
+// ✅ NOVO: tipos de regra especial de nível
+enum CustomerLevelRuleType {
+  HAS_ACTIVE_PLAN
+}
+
 // ============
 // MODELS
 // ============
@@ -105,6 +118,10 @@ model User {
 
   // 🔹 Permissões de acesso ao painel admin (quando role = ADMIN)
   adminAccess AdminAccess?
+
+  // ✅ NOVO: estado de nível por unidade (nível vigente/earned com defasagem M -> M+1)
+  customerLevelStates  CustomerLevelState[]
+  customerLevelPeriods CustomerLevelPeriod[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -187,6 +204,12 @@ model Unit {
   // ✅ NOVO: lançamentos de multa de cancelamento (financeiro do barbeiro)
   cancellationFees BarberCancellationFee[]
 
+  // ✅ NOVO: gamificação / nível do cliente (config + regras + histórico por período + estado vigente)
+  customerLevelConfigs CustomerLevelConfig[]
+  customerLevelRules   CustomerLevelRule[]
+  customerLevelStates  CustomerLevelState[]
+  customerLevelPeriods CustomerLevelPeriod[]
+
   createdAt                  DateTime                   @default(now())
   updatedAt                  DateTime                   @updatedAt
   barberWeeklyAvailabilities BarberWeeklyAvailability[]
@@ -194,6 +217,111 @@ model Unit {
   services                   Service[]
 
   @@map("units")
+}
+
+// ✅ NOVO: CONFIGURAÇÃO POR NÍVEL (por unidade/tenant)
+model CustomerLevelConfig {
+  id String @id @default(cuid())
+
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  level CustomerLevel
+
+  // ✅ Contagem do MÊS (calendário) baseada em:
+  // - agendamentos status = DONE
+  // - pedidos status = COMPLETED
+  minAppointmentsDone Int @default(0)
+  minOrdersCompleted  Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([unitId, level])
+  @@index([unitId])
+  @@map("customer_level_configs")
+}
+
+// ✅ NOVO: REGRAS ESPECIAIS (por unidade/tenant)
+model CustomerLevelRule {
+  id String @id @default(cuid())
+
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  type CustomerLevelRuleType
+
+  // Ex: HAS_ACTIVE_PLAN => DIAMANTE
+  targetLevel CustomerLevel
+
+  // Maior = mais prioridade (para futuros tipos de regra)
+  priority  Int     @default(100)
+  isEnabled Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([unitId, isEnabled])
+  @@map("customer_level_rules")
+}
+
+// ✅ NOVO: ESTADO DO NÍVEL VIGENTE (por unidade + cliente)
+// Regra de negócio: conquista no mês M, usa no mês M+1.
+// Logo, esse registro guarda o nível vigente (current) e o último earned fechado.
+model CustomerLevelState {
+  id String @id @default(cuid())
+
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Nível vigente (benefícios/preços) no mês atual
+  levelCurrent CustomerLevel @default(BRONZE)
+
+  // Nível conquistado no último período fechado (mês anterior)
+  levelEarnedLastPeriod CustomerLevel @default(BRONZE)
+
+  // Data (início do mês) a partir da qual o levelCurrent é válido
+  levelEffectiveFrom DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([unitId, userId])
+  @@index([userId])
+  @@index([unitId])
+  @@map("customer_level_states")
+}
+
+// ✅ NOVO: HISTÓRICO POR PERÍODO (por unidade + cliente + mês)
+// periodKey: "YYYY-MM" (ex.: "2025-12")
+model CustomerLevelPeriod {
+  id String @id @default(cuid())
+
+  unitId String
+  unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  periodKey String
+
+  appointmentsDone Int @default(0)
+  ordersCompleted  Int @default(0)
+
+  earnedLevel CustomerLevel @default(BRONZE)
+
+  computedAt DateTime @default(now())
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([unitId, userId, periodKey])
+  @@index([unitId, periodKey])
+  @@index([userId, periodKey])
+  @@map("customer_level_periods")
 }
 
 // ⭐ Pivot: BARBEIRO x UNIDADE (N:N)
@@ -543,6 +671,13 @@ model Product {
   // ✅ PRAZO DE RETIRADA (em dias) para reservas feitas pelo cliente
   pickupDeadlineDays Int @default(2)
 
+  // ✅ NOVO: preço por nível (tabela)
+  prices ProductPriceByLevel[]
+
+  // ✅ NOVO: benefício de aniversário por produto (janela 3 dias antes + dia + 3 dias depois)
+  birthdayBenefitEnabled Boolean        @default(false)
+  birthdayPriceLevel     CustomerLevel?
+
   // ⭐ RELAÇÃO COM VENDAS
   sales ProductSale[]
 
@@ -553,6 +688,24 @@ model Product {
   updatedAt DateTime @default(now())
 
   @@index([unitId])
+}
+
+// ✅ NOVO: PREÇO DO PRODUTO POR NÍVEL
+model ProductPriceByLevel {
+  id String @id @default(cuid())
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  level CustomerLevel
+  price Decimal       @db.Decimal(10, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, level])
+  @@index([level])
+  @@map("product_prices_by_level")
 }
 
 // =======================
