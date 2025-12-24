@@ -1,5 +1,6 @@
 // src/app/api/mobile/orders/route.ts
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { verifyAppJwt } from "@/lib/app-jwt";
 
@@ -32,54 +33,166 @@ function parseLimit(raw: string | null): number {
   return Math.min(50, Math.floor(n));
 }
 
-function parseQuantity(input: any): number {
-  const n = Number(input);
+function parseQuantity(v: any): number {
+  const n = Number(v);
   if (!Number.isFinite(n)) return 1;
   const q = Math.floor(n);
   return q >= 1 ? q : 1;
 }
 
-/**
- * ✅ Fallback de roteamento:
- * Em alguns cenários (conflito app/ vs src/app, build antigo, etc),
- * o GET que deveria cair em /orders/[id] acaba caindo aqui.
- *
- * Então, se a URL for /api/mobile/orders/<id>, a gente trata como detalhe.
- */
-function extractOrderIdFromPathname(pathname: string): string | null {
-  const parts = pathname.split("/").filter(Boolean);
-  const idx = parts.lastIndexOf("orders");
-  if (idx === -1) return null;
+/* ---------------------------------------------------------
+ * 🔥 MOTOR DE PREÇO (Mobile) - mesmo do /products
+ * ---------------------------------------------------------*/
+type CustomerLevel = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
 
-  const maybeId = parts[idx + 1] ?? "";
-  if (!maybeId) return null;
+const LEVEL_FALLBACK: Record<CustomerLevel, CustomerLevel[]> = {
+  DIAMANTE: ["DIAMANTE", "OURO", "PRATA", "BRONZE"],
+  OURO: ["OURO", "PRATA", "BRONZE"],
+  PRATA: ["PRATA", "BRONZE"],
+  BRONZE: ["BRONZE"],
+};
 
-  const id = String(maybeId).trim();
-  if (!id || id === "route.ts") return null;
+function getDatePartsInTz(date: Date, timeZone: string) {
+  const fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  const parts = fmt.formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value;
+  return {
+    year: Number(get("year")),
+    month: Number(get("month")),
+    day: Number(get("day")),
+  };
+}
 
-  return id;
+function tzMidnightUtc(year: number, month: number, day: number) {
+  const iso = `${String(year).padStart(4, "0")}-${String(month).padStart(
+    2,
+    "0",
+  )}-${String(day).padStart(2, "0")}T00:00:00Z`;
+  return new Date(iso);
+}
+
+function addDays(date: Date, days: number) {
+  const d = new Date(date.getTime());
+  d.setUTCDate(d.getUTCDate() + days);
+  return d;
+}
+
+function isWithinInclusive(date: Date, start: Date, end: Date) {
+  const t = date.getTime();
+  return t >= start.getTime() && t <= end.getTime();
+}
+
+async function resolveProductUnitPrice(args: {
+  productId: string;
+  clientId: string | null;
+  effectiveLevel?: CustomerLevel;
+  timeZone?: string;
+  now?: Date;
+}) {
+  const timeZone = args.timeZone ?? "America/Sao_Paulo";
+  const now = args.now ?? new Date();
+  const effectiveLevel: CustomerLevel = args.effectiveLevel ?? "BRONZE";
+
+  const [product, client] = await Promise.all([
+    prisma.product.findUnique({
+      where: { id: args.productId },
+      select: {
+        id: true,
+        price: true,
+        unitId: true,
+        birthdayBenefitEnabled: true,
+        birthdayPriceLevel: true,
+        prices: { select: { level: true, price: true } },
+      } as any,
+    }),
+    args.clientId
+      ? prisma.user.findUnique({
+          where: { id: args.clientId },
+          select: { id: true, birthday: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  if (!product) throw new Error("Produto não encontrado.");
+
+  const rows = Array.isArray((product as any).prices)
+    ? (product as any).prices
+    : [];
+
+  const priceByLevel = new Map<CustomerLevel, number>();
+  for (const row of rows as any[]) {
+    priceByLevel.set(row.level as CustomerLevel, Number(row.price));
+  }
+
+  const baseBronze = priceByLevel.get("BRONZE") ?? Number(product.price);
+
+  function pickPrice(level: CustomerLevel) {
+    for (const l of LEVEL_FALLBACK[level]) {
+      const found = priceByLevel.get(l);
+      if (typeof found === "number" && Number.isFinite(found)) {
+        return { level: l, price: found };
+      }
+    }
+    return { level: "BRONZE" as CustomerLevel, price: baseBronze };
+  }
+
+  let inBirthdayWindow = false;
+
+  if (client?.birthday && (product as any).birthdayBenefitEnabled) {
+    const nowParts = getDatePartsInTz(now, timeZone);
+    const b = getDatePartsInTz(client.birthday, timeZone);
+
+    const birthdayThisYear = tzMidnightUtc(nowParts.year, b.month, b.day);
+    const start = addDays(birthdayThisYear, -3);
+    const end = addDays(birthdayThisYear, +3);
+
+    const todayAnchor = tzMidnightUtc(
+      nowParts.year,
+      nowParts.month,
+      nowParts.day,
+    );
+    inBirthdayWindow = isWithinInclusive(todayAnchor, start, end);
+  }
+
+  if (inBirthdayWindow && (product as any).birthdayBenefitEnabled) {
+    const chosen = (((product as any)
+      .birthdayPriceLevel as CustomerLevel | null) ??
+      "DIAMANTE") as CustomerLevel;
+
+    const picked = pickPrice(chosen);
+
+    return {
+      unitId: product.unitId as string,
+      basePrice: baseBronze,
+      finalPrice: picked.price,
+      appliedLevel: picked.level,
+      appliedBecause: "BIRTHDAY" as const,
+      inBirthdayWindow: true,
+    };
+  }
+
+  const picked = pickPrice(effectiveLevel);
+
+  return {
+    unitId: product.unitId as string,
+    basePrice: baseBronze,
+    finalPrice: picked.price,
+    appliedLevel: picked.level,
+    appliedBecause:
+      picked.level === "BRONZE" ? ("BASE" as const) : ("LEVEL" as const),
+    inBirthdayWindow: false,
+  };
 }
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
 
-/**
- * POST /api/mobile/orders
- *
- * Body:
- * - productId: string
- * - quantity: number (default 1)
- *
- * Regras:
- * ✅ NÃO baixa estoque
- * ✅ NÃO registra ProductSale
- * ✅ Cria/atualiza Order status PENDING_CHECKIN (sacolinha)
- * ✅ unitId obrigatório (via produto)
- *
- * Regra do app:
- * ✅ Se reservar o mesmo produto 2x, incrementa quantidade
- */
 export async function POST(req: Request) {
   const headers = corsHeaders();
 
@@ -93,24 +206,32 @@ export async function POST(req: Request) {
       );
     }
 
-    const body = await req.json().catch(() => null);
-    const productId = String((body as any)?.productId ?? "").trim();
-    const quantity = parseQuantity((body as any)?.quantity);
+    const body = await req.json().catch(() => ({}));
+    const productId = String(body?.productId ?? "").trim();
+    const quantity = parseQuantity(body?.quantity);
 
     if (!productId) {
       return NextResponse.json(
-        { error: "Dados inválidos (productId)." },
+        { error: "invalid_productId" },
         { status: 400, headers },
       );
     }
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1) Produto ativo
+      const clientId = auth.sub;
+      const customerLevel: CustomerLevel = "BRONZE";
+
+      const pricing = await resolveProductUnitPrice({
+        productId,
+        clientId,
+        effectiveLevel: customerLevel,
+        timeZone: "America/Sao_Paulo",
+      });
+
       const product = await tx.product.findFirst({
         where: { id: productId, isActive: true },
         select: {
           id: true,
-          price: true,
           stockQuantity: true,
           pickupDeadlineDays: true,
           unitId: true,
@@ -118,19 +239,15 @@ export async function POST(req: Request) {
       });
 
       if (!product) throw new Error("Produto não encontrado ou inativo.");
-
       if (!product.unitId) {
         throw new Error(
           "Produto sem unidade vinculada (unitId). Não é possível criar o pedido.",
         );
       }
-
-      // Mesmo sem baixar estoque agora, garantimos que a quantidade faz sentido
       if (product.stockQuantity < quantity) {
         throw new Error("Quantidade indisponível no estoque.");
       }
 
-      // (Sem expiração agora, mas mantemos reservedUntil como informativo)
       const deadlineDays =
         typeof product.pickupDeadlineDays === "number" &&
         Number.isFinite(product.pickupDeadlineDays) &&
@@ -138,59 +255,51 @@ export async function POST(req: Request) {
           ? product.pickupDeadlineDays
           : 2;
 
+      const reservedUntil = new Date();
+      reservedUntil.setDate(reservedUntil.getDate() + deadlineDays);
+
+      // ✅ Decimal do jeito certo
+      const unitPrice = new Prisma.Decimal(pricing.finalPrice);
+      const itemTotal = unitPrice.mul(quantity);
+
       const now = new Date();
-      const desiredReservedUntil = new Date(now);
-      desiredReservedUntil.setDate(
-        desiredReservedUntil.getDate() + deadlineDays,
-      );
 
-      const unitPrice = product.price; // Decimal
-
-      // 2) Reaproveita um pedido pendente (mesma unidade)
-      // ⚠️ Sem expiração: não filtramos por reservedUntil
       const existingOrder = await tx.order.findFirst({
         where: {
           clientId: auth.sub,
           status: "PENDING_CHECKIN",
           unitId: product.unitId,
+          OR: [{ reservedUntil: null }, { reservedUntil: { gt: now } }],
         },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         select: {
           id: true,
-          reservedUntil: true,
           totalAmount: true,
+          reservedUntil: true,
           items: {
             where: { productId: product.id },
-            select: {
-              id: true,
-              quantity: true,
-              totalPrice: true,
-            },
+            select: { id: true, quantity: true, totalPrice: true },
             take: 1,
           },
         },
       });
 
-      // helper: reservedUntil = max(current, desired)
       const nextReservedUntil = (() => {
-        if (!existingOrder?.reservedUntil) return desiredReservedUntil;
-        return existingOrder.reservedUntil > desiredReservedUntil
+        if (!existingOrder?.reservedUntil) return reservedUntil;
+        return existingOrder.reservedUntil > reservedUntil
           ? existingOrder.reservedUntil
-          : desiredReservedUntil;
+          : reservedUntil;
       })();
 
       if (!existingOrder) {
-        // 3) Cria novo pedido
-        const totalPrice = unitPrice.mul(quantity);
-
         const order = await tx.order.create({
           data: {
             clientId: auth.sub,
             appointmentId: null,
             barberId: null,
             status: "PENDING_CHECKIN",
-            reservedUntil: desiredReservedUntil,
-            totalAmount: totalPrice,
+            reservedUntil,
+            totalAmount: itemTotal,
             unitId: product.unitId,
             items: {
               create: [
@@ -198,7 +307,7 @@ export async function POST(req: Request) {
                   productId: product.id,
                   quantity,
                   unitPrice,
-                  totalPrice,
+                  totalPrice: itemTotal,
                 },
               ],
             },
@@ -209,7 +318,6 @@ export async function POST(req: Request) {
         return { orderId: order.id, reservedUntil: order.reservedUntil };
       }
 
-      // 4) Atualiza pedido existente: incrementa quantidade do item (se já existe)
       const existingItem = existingOrder.items?.[0] ?? null;
 
       if (existingItem) {
@@ -219,15 +327,15 @@ export async function POST(req: Request) {
           throw new Error("Quantidade indisponível no estoque.");
         }
 
-        const newItemTotal = unitPrice.mul(newQty);
-        const delta = newItemTotal.sub(existingItem.totalPrice);
+        const newTotal = unitPrice.mul(newQty);
+        const delta = newTotal.sub(existingItem.totalPrice);
 
         await tx.orderItem.update({
           where: { id: existingItem.id },
           data: {
             quantity: newQty,
             unitPrice,
-            totalPrice: newItemTotal,
+            totalPrice: newTotal,
           },
         });
 
@@ -242,9 +350,6 @@ export async function POST(req: Request) {
 
         return { orderId: existingOrder.id, reservedUntil: nextReservedUntil };
       }
-
-      // 5) Pedido existe mas não tem esse produto ainda: cria item
-      const itemTotal = unitPrice.mul(quantity);
 
       await tx.orderItem.create({
         data: {
@@ -313,24 +418,6 @@ export async function POST(req: Request) {
   }
 }
 
-/**
- * GET /api/mobile/orders
- * GET /api/mobile/orders/:id   ✅ fallback tratado aqui também
- *
- * Query:
- * - view: "bag" | "history"  (atalho do app)
- *     - bag => status=PENDING_CHECKIN
- *     - history => status=COMPLETED
- * - status: optional (tem prioridade sobre view)
- * - cursor: orderId
- * - limit: number (default 20, max 50)
- *
- * Response (lista):
- * - { ok, orders, items, count, nextCursor }
- *
- * Response (detalhe):
- * - { ok: true, order }
- */
 export async function GET(req: Request) {
   const headers = corsHeaders();
 
@@ -346,81 +433,11 @@ export async function GET(req: Request) {
 
     const url = new URL(req.url);
 
-    // ✅ fallback: se vier /orders/<id>, devolve detalhe
-    const orderIdFromPath = extractOrderIdFromPathname(url.pathname);
-    if (orderIdFromPath) {
-      const o = await prisma.order.findFirst({
-        where: { id: orderIdFromPath, clientId: auth.sub },
-        select: {
-          id: true,
-          status: true,
-          reservedUntil: true,
-          totalAmount: true,
-          createdAt: true,
-          unitId: true,
-          unit: { select: { id: true, name: true } },
-          items: {
-            select: {
-              id: true,
-              quantity: true,
-              unitPrice: true,
-              totalPrice: true,
-              productId: true,
-              product: {
-                select: {
-                  id: true,
-                  name: true,
-                  imageUrl: true,
-                  category: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      if (!o) {
-        return NextResponse.json(
-          { error: "not_found" },
-          { status: 404, headers },
-        );
-      }
-
-      const order = {
-        id: o.id,
-        status: o.status,
-        createdAt: o.createdAt,
-        reservedUntil: o.reservedUntil,
-        totalAmount: Number(o.totalAmount),
-        unitId: o.unitId,
-        unitName: o.unit?.name ?? "—",
-        items: o.items.map((it) => ({
-          id: it.id,
-          productId: it.productId,
-          quantity: it.quantity,
-          unitPrice: Number(it.unitPrice),
-          totalPrice: Number(it.totalPrice),
-          product: it.product
-            ? {
-                id: it.product.id,
-                name: it.product.name,
-                imageUrl: it.product.imageUrl ?? null,
-                category: it.product.category ?? null,
-              }
-            : null,
-        })),
-      };
-
-      return NextResponse.json({ ok: true, order }, { status: 200, headers });
-    }
-
-    // ✅ comportamento normal: lista
-    const view = (url.searchParams.get("view") ?? "").trim(); // bag | history
+    const view = (url.searchParams.get("view") ?? "").trim();
     const statusRaw = (url.searchParams.get("status") ?? "").trim();
     const cursor = (url.searchParams.get("cursor") ?? "").trim();
     const limit = parseLimit(url.searchParams.get("limit"));
 
-    // view é um atalho. status explícito tem prioridade.
     const status =
       statusRaw ||
       (view === "bag"
@@ -470,41 +487,84 @@ export async function GET(req: Request) {
     const hasMore = dbOrders.length > limit;
     const page = hasMore ? dbOrders.slice(0, limit) : dbOrders;
 
-    const orders = page.map((o) => ({
-      id: o.id,
-      status: o.status,
-      createdAt: o.createdAt,
-      reservedUntil: o.reservedUntil,
-      totalAmount: Number(o.totalAmount),
-      unitId: o.unitId,
-      unitName: o.unit?.name ?? "—",
-      items: o.items.map((it) => ({
-        id: it.id,
-        productId: it.productId,
-        quantity: it.quantity,
-        unitPrice: Number(it.unitPrice),
-        totalPrice: Number(it.totalPrice),
-        product: it.product
-          ? {
-              id: it.product.id,
-              name: it.product.name,
-              imageUrl: it.product.imageUrl ?? null,
-              category: it.product.category ?? null,
+    const customerLevel: CustomerLevel = "BRONZE";
+    const clientId = auth.sub;
+
+    const orders = await Promise.all(
+      page.map(async (o) => {
+        const enrichedItems = await Promise.all(
+          o.items.map(async (it) => {
+            if (!it.productId) {
+              return {
+                id: it.id,
+                productId: it.productId,
+                quantity: it.quantity,
+                unitPrice: Number(it.unitPrice),
+                totalPrice: Number(it.totalPrice),
+                product: null,
+              };
             }
-          : null,
-      })),
-    }));
+
+            const pricing = await resolveProductUnitPrice({
+              productId: it.productId,
+              clientId,
+              effectiveLevel: customerLevel,
+              timeZone: "America/Sao_Paulo",
+            });
+
+            const basePrice = Number(pricing.basePrice);
+            const finalPrice = Number(pricing.finalPrice);
+            const hasDiscount =
+              Number.isFinite(basePrice) &&
+              Number.isFinite(finalPrice) &&
+              finalPrice < basePrice;
+
+            const badge =
+              pricing.appliedBecause === "BIRTHDAY"
+                ? { type: "BIRTHDAY" as const, label: "🎂 Aniversário" }
+                : pricing.appliedBecause === "LEVEL"
+                  ? { type: "LEVEL" as const, label: "⭐ Oferta do seu nível" }
+                  : null;
+
+            return {
+              id: it.id,
+              productId: it.productId,
+              quantity: it.quantity,
+              unitPrice: Number(it.unitPrice),
+              totalPrice: Number(it.totalPrice),
+              product: it.product
+                ? {
+                    id: it.product.id,
+                    name: it.product.name,
+                    imageUrl: it.product.imageUrl ?? null,
+                    category: it.product.category ?? null,
+                    basePrice,
+                    finalPrice,
+                    hasDiscount,
+                    badge,
+                  }
+                : null,
+            };
+          }),
+        );
+
+        return {
+          id: o.id,
+          status: o.status,
+          createdAt: o.createdAt,
+          reservedUntil: o.reservedUntil,
+          totalAmount: Number(o.totalAmount),
+          unitId: o.unitId,
+          unitName: o.unit?.name ?? "—",
+          items: enrichedItems,
+        };
+      }),
+    );
 
     const nextCursor = hasMore ? (orders[orders.length - 1]?.id ?? null) : null;
 
     return NextResponse.json(
-      {
-        ok: true,
-        orders,
-        items: orders, // alias
-        count: orders.length,
-        nextCursor,
-      },
+      { ok: true, orders, items: orders, count: orders.length, nextCursor },
       { status: 200, headers },
     );
   } catch (e: any) {
@@ -528,7 +588,7 @@ export async function GET(req: Request) {
       );
     }
 
-    console.error("[mobile orders GET] error:", e);
+    console.error("[mobile orders] error:", e);
     return NextResponse.json(
       { error: "server_error" },
       { status: 500, headers },

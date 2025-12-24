@@ -26,25 +26,42 @@ const STICKY_ROW_H = 74;
 
 type Category = { id: string; label: string };
 
+type ProductBadge =
+  | { type: "BIRTHDAY"; label: string }
+  | { type: "LEVEL"; label: string }
+  | null;
+
 type ApiProduct = {
   id: string;
   name: string;
   imageUrl: string | null;
   description: string;
-  price: number;
   category: string | null;
   stockQuantity: number;
   isOutOfStock: boolean;
   pickupDeadlineDays: number;
   unitId: string;
   unitName: string;
+
+  // ✅ motor de preço
+  price: number; // preço final (compat)
+  basePrice?: number;
+  finalPrice?: number;
+  hasDiscount?: boolean;
+  badge?: ProductBadge;
 };
 
 type Product = {
   id: string;
   name: string;
-  price: string;
-  oldPrice: string;
+
+  // ✅ agora numérico
+  price: number;
+  basePrice?: number;
+  finalPrice?: number;
+  hasDiscount?: boolean;
+  badge?: ProductBadge;
+
   image: string;
   isOutOfStock: boolean;
   category: string | null;
@@ -52,14 +69,12 @@ type Product = {
 
 type PendingReviewResponse = {
   ok: boolean;
-  // formato novo
   pendings?: Array<{
     appointmentId: string;
     scheduleAt: string;
     barberName: string;
     serviceName: string;
   }>;
-  // formato antigo (fallback)
   pending?: null | {
     appointmentId: string;
     scheduleAt: string;
@@ -70,16 +85,31 @@ type PendingReviewResponse = {
   error?: string;
 };
 
-function formatBRL(value: number) {
+// -----------------------------
+// 💰 dinheiro: sem “,00” quando inteiro
+// -----------------------------
+function formatMoneySmartBRL(value: number) {
+  const v = Number(value ?? 0);
+  const safe = Number.isFinite(v) ? v : 0;
+
+  const isInt = Math.abs(safe - Math.round(safe)) < 1e-9;
+
   try {
-    return new Intl.NumberFormat("pt-BR", {
+    return safe.toLocaleString("pt-BR", {
       style: "currency",
       currency: "BRL",
-    }).format(value);
+      minimumFractionDigits: isInt ? 0 : 2,
+      maximumFractionDigits: isInt ? 0 : 2,
+    });
   } catch {
-    const v = Number.isFinite(value) ? value : 0;
-    return `R$ ${v.toFixed(2).replace(".", ",")}`;
+    const fixed = isInt ? String(Math.round(safe)) : safe.toFixed(2);
+    return `R$ ${fixed.replace(".", ",")}`;
   }
+}
+
+function safeNumber(v: any, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 function sumQtyFromOrder(order: any): number {
@@ -89,6 +119,81 @@ function sumQtyFromOrder(order: any): number {
     return acc + (Number.isFinite(q) ? q : 0);
   }, 0);
   return total > 0 ? total : 0;
+}
+
+// =======================
+// 🎨 NÍVEL DO CLIENTE (cores copiadas do Admin)
+// =======================
+type CustomerLevelKey = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
+
+function normalizeCustomerLevelKey(user: any): CustomerLevelKey | null {
+  const raw = String(
+    user?.customerLevel?.key ??
+      user?.customerLevel?.level ??
+      user?.customerLevel?.value ??
+      user?.customerLevel ??
+      user?.level?.key ??
+      user?.level?.value ??
+      user?.level ??
+      user?.levelKey ??
+      user?.levelEnum ??
+      "",
+  ).trim();
+
+  if (
+    raw === "BRONZE" ||
+    raw === "PRATA" ||
+    raw === "OURO" ||
+    raw === "DIAMANTE"
+  )
+    return raw;
+
+  const label = String(
+    user?.customerLevel?.label ??
+      user?.level?.label ??
+      user?.levelLabel ??
+      user?.tier?.label ??
+      user?.tier ??
+      "",
+  )
+    .trim()
+    .toLowerCase();
+
+  if (label.includes("bronze")) return "BRONZE";
+  if (label.includes("prata")) return "PRATA";
+  if (label.includes("ouro")) return "OURO";
+  if (label.includes("diam")) return "DIAMANTE";
+
+  return null;
+}
+
+function levelChipColors(level: CustomerLevelKey) {
+  switch (level) {
+    case "BRONZE":
+      return {
+        bg: "rgba(245, 158, 11, 0.10)", // amber-500/10
+        border: "rgba(245, 158, 11, 0.30)", // amber-500/30
+        text: "rgb(180, 83, 9)", // amber-700
+      };
+    case "PRATA":
+      return {
+        bg: "rgba(100, 116, 139, 0.10)", // slate-500/10
+        border: "rgba(100, 116, 139, 0.30)", // slate-500/30
+        text: "rgb(226, 232, 240)", // slate-200
+      };
+    case "OURO":
+      return {
+        bg: "rgba(234, 179, 8, 0.10)", // yellow-500/10
+        border: "rgba(234, 179, 8, 0.30)", // yellow-500/30
+        text: "rgb(161, 98, 7)", // yellow-700 (aprox)
+      };
+    case "DIAMANTE":
+      return {
+        bg: "rgba(14, 165, 233, 0.10)", // sky-500/10
+        border: "rgba(14, 165, 233, 0.30)", // sky-500/30
+        text: "rgb(3, 105, 161)", // sky-700
+      };
+  }
 }
 
 type ProductsHeaderProps = {
@@ -132,12 +237,46 @@ const ProductTile = memo(function ProductTile({
   onReserve: (id: string) => void;
   reserving: boolean;
 }) {
-  const hasOldPrice = !!item.oldPrice?.trim();
+  const pricing = useMemo(() => {
+    const base = safeNumber(item.basePrice, NaN);
+    const final = safeNumber(item.finalPrice, NaN);
+
+    if (Number.isFinite(base) && Number.isFinite(final)) {
+      const hasDiscount = !!item.hasDiscount && final < base;
+      return { base, final, hasDiscount };
+    }
+
+    const p = safeNumber(item.price, 0);
+    return { base: p, final: p, hasDiscount: false };
+  }, [item.basePrice, item.finalPrice, item.hasDiscount, item.price]);
+
+  const baseLabel = useMemo(
+    () => formatMoneySmartBRL(pricing.base),
+    [pricing.base],
+  );
+  const finalLabel = useMemo(
+    () => formatMoneySmartBRL(pricing.final),
+    [pricing.final],
+  );
 
   return (
     <Pressable style={S.productCard} onPress={() => onOpen(item.id)}>
       <View style={S.productImgWrap}>
         <Image source={{ uri: item.image }} style={S.productImage} />
+
+        {/* 🎂 / ⭐ */}
+        {item.badge?.label ? (
+          <View
+            style={[
+              S.badgePill,
+              item.badge.type === "BIRTHDAY" ? S.badgePillBirthday : null,
+            ]}
+          >
+            <Text style={S.badgePillText} numberOfLines={1}>
+              {item.badge.label}
+            </Text>
+          </View>
+        ) : null}
 
         {item.isOutOfStock ? (
           <View style={S.outOfStockPill}>
@@ -150,12 +289,23 @@ const ProductTile = memo(function ProductTile({
         {item.name}
       </Text>
 
-      <View style={S.priceRow}>
-        <Text style={S.productPrice}>{item.price}</Text>
-        {hasOldPrice ? (
-          <Text style={S.productOldPrice}>{item.oldPrice}</Text>
-        ) : null}
-      </View>
+      {/* ✅ regra do preço */}
+      {pricing.hasDiscount ? (
+        <View style={S.priceStack}>
+          <Text style={S.productOldPriceBig} numberOfLines={1}>
+            {baseLabel}
+          </Text>
+          <Text style={S.productPrice} numberOfLines={1}>
+            {finalLabel}
+          </Text>
+        </View>
+      ) : (
+        <View style={S.priceRow}>
+          <Text style={S.productPrice} numberOfLines={1}>
+            {finalLabel}
+          </Text>
+        </View>
+      )}
 
       <View style={S.tileFooter}>
         {item.isOutOfStock ? (
@@ -346,6 +496,52 @@ export default function Products() {
     [user?.image],
   );
 
+  // ✅ nível do cliente (label curta)
+  const userLevelLabel = useMemo(() => {
+    const raw =
+      (user as any)?.level?.label ??
+      (user as any)?.levelLabel ??
+      (user as any)?.level ??
+      (user as any)?.customerLevel?.label ??
+      (user as any)?.customerLevel ??
+      (user as any)?.tier?.label ??
+      (user as any)?.tier ??
+      null;
+
+    const s = String(raw ?? "").trim();
+    if (!s) return null;
+
+    return s.length > 12 ? `${s.slice(0, 12)}…` : s;
+  }, [user]);
+
+  const userLevelIcon = useMemo(() => {
+    const l = String(userLevelLabel ?? "").toLowerCase();
+    if (l.includes("diam")) return "diamond";
+    if (l.includes("ouro")) return "trophy";
+    if (l.includes("prata")) return "certificate";
+    return "star";
+  }, [userLevelLabel]);
+
+  const userLevelKey = useMemo(() => normalizeCustomerLevelKey(user), [user]);
+
+  const userLevelStyle = useMemo(() => {
+    if (!userLevelKey) return null;
+    const c = levelChipColors(userLevelKey);
+
+    return {
+      container: {
+        backgroundColor: c.bg,
+        borderColor: c.border,
+      },
+      text: {
+        color: c.text,
+      },
+      icon: {
+        color: c.text,
+      },
+    } as const;
+  }, [userLevelKey]);
+
   const [search, setSearch] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [products, setProducts] = useState<Product[]>([]);
@@ -353,13 +549,11 @@ export default function Products() {
 
   const [reservingId, setReservingId] = useState<string | null>(null);
 
-  // ✅ sacolinha pendente + badge count
   const [pendingCartOrderId, setPendingCartOrderId] = useState<string | null>(
     null,
   );
   const [pendingCartCount, setPendingCartCount] = useState<number>(0);
 
-  // ✅ review pendente + badge no sino
   const [pendingReviewAppointmentId, setPendingReviewAppointmentId] = useState<
     string | null
   >(null);
@@ -369,7 +563,6 @@ export default function Products() {
   const cartFetchingRef = useRef(false);
   const reviewFetchingRef = useRef(false);
 
-  // ✅ gate da tela
   const didProductsRef = useRef(false);
   const didCartRef = useRef(false);
   const didReviewRef = useRef(false);
@@ -431,7 +624,6 @@ export default function Products() {
     }
   }, [recomputeReady]);
 
-  // ✅ pega avaliação pendente (badge no sino)
   const fetchPendingReview = useCallback(async () => {
     if (reviewFetchingRef.current)
       return { id: null as string | null, count: 0 };
@@ -442,7 +634,6 @@ export default function Products() {
         "/api/mobile/reviews/pending",
       );
 
-      // ✅ suporta os 2 formatos
       const list = Array.isArray(res?.pendings) ? res.pendings : [];
 
       const pendingIdFromList =
@@ -456,7 +647,6 @@ export default function Products() {
           : null;
 
       const id = pendingIdFromList ?? pendingIdFromSingle;
-
       const count = list.length > 0 ? list.length : id ? 1 : 0;
 
       setPendingReviewAppointmentId(id);
@@ -505,7 +695,6 @@ export default function Products() {
     }
   }, [fetchPendingCart, pendingCartOrderId, router]);
 
-  // ✅ abre notificações
   const goNotifications = useCallback(() => {
     router.push("/client/notifications");
   }, [router]);
@@ -526,9 +715,7 @@ export default function Products() {
 
         const orderId = res?.orderId;
 
-        if (!res?.ok || !orderId) {
-          throw new Error("invalid_response");
-        }
+        if (!res?.ok || !orderId) throw new Error("invalid_response");
 
         setPendingCartOrderId(String(orderId));
         await fetchPendingCart();
@@ -585,11 +772,38 @@ export default function Products() {
             p.imageUrl ||
             "https://picsum.photos/seed/product-placeholder/600/420";
 
+          const basePrice = safeNumber((p as any)?.basePrice, NaN);
+          const finalPrice = safeNumber((p as any)?.finalPrice, NaN);
+
+          const hasDiscount =
+            !!(p as any)?.hasDiscount &&
+            Number.isFinite(basePrice) &&
+            Number.isFinite(finalPrice) &&
+            finalPrice < basePrice;
+
+          const badge: ProductBadge =
+            (p as any)?.badge && typeof (p as any).badge === "object"
+              ? {
+                  type:
+                    (p as any).badge.type === "BIRTHDAY" ? "BIRTHDAY" : "LEVEL",
+                  label: String((p as any).badge.label ?? "").trim(),
+                }
+              : null;
+
+          const final = Number.isFinite(finalPrice)
+            ? finalPrice
+            : safeNumber(p.price, 0);
+
           return {
             id: String(p.id),
             name: String(p.name ?? "Produto"),
-            price: formatBRL(Number(p.price ?? 0)),
-            oldPrice: "",
+
+            price: final,
+            basePrice: Number.isFinite(basePrice) ? basePrice : undefined,
+            finalPrice: Number.isFinite(finalPrice) ? finalPrice : undefined,
+            hasDiscount,
+            badge: badge?.label ? badge : null,
+
             image,
             isOutOfStock: !!p.isOutOfStock,
             category: p.category ? String(p.category) : null,
@@ -733,6 +947,31 @@ export default function Products() {
             </View>
 
             <View style={S.topRightRow}>
+              {/* ⭐ Nível do cliente (à esquerda do carrinho) */}
+              {userLevelLabel ? (
+                <Pressable
+                  style={[
+                    styles.iconBtn42,
+                    S.levelBtn,
+                    userLevelStyle?.container,
+                  ]}
+                  onPress={() => {}}
+                  hitSlop={8}
+                >
+                  <FontAwesome
+                    name={userLevelIcon as any}
+                    size={18}
+                    color={userLevelStyle?.icon?.color ?? UI.colors.white}
+                  />
+                  <Text
+                    style={[S.levelMiniText, userLevelStyle?.text]}
+                    numberOfLines={1}
+                  >
+                    {userLevelLabel}
+                  </Text>
+                </Pressable>
+              ) : null}
+
               <Pressable style={styles.iconBtn42} onPress={goCart}>
                 <FontAwesome
                   name="shopping-bag"
@@ -749,7 +988,6 @@ export default function Products() {
                 ) : null}
               </Pressable>
 
-              {/* ✅ sino com badge igual ao da sacolinha */}
               <Pressable style={styles.iconBtn42} onPress={goNotifications}>
                 <FontAwesome name="bell-o" size={20} color={UI.colors.white} />
 
@@ -824,7 +1062,20 @@ const S = StyleSheet.create({
 
   topRightRow: { flexDirection: "row", gap: 10, alignItems: "center" },
 
-  // ✅ badge (mesmo padrão)
+  // ⭐ botão de nível (mesma base do iconBtn42, só adiciona mini label)
+  levelBtn: {
+    paddingTop: 7,
+  },
+  levelMiniText: {
+    marginTop: 2,
+    fontSize: 9.5,
+    fontWeight: "900",
+    color: UI.colors.white,
+    includeFontPadding: false,
+    textAlign: "center",
+    maxWidth: 38,
+  },
+
   badge: {
     position: "absolute",
     top: -6,
@@ -1064,6 +1315,31 @@ const S = StyleSheet.create({
   },
   productImage: { height: 124, width: "100%" },
 
+  // 🎂 / ⭐
+  badgePill: {
+    position: "absolute",
+    left: 10,
+    top: 10,
+    maxWidth: 190,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "rgba(20,20,20,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
+    zIndex: 2,
+  },
+  badgePillBirthday: {
+    backgroundColor: "rgba(124,108,255,0.95)",
+    borderColor: "rgba(255,255,255,0.30)",
+  },
+  badgePillText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+
   outOfStockPill: {
     position: "absolute",
     right: 10,
@@ -1074,6 +1350,7 @@ const S = StyleSheet.create({
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 6,
+    zIndex: 3,
   },
   outOfStockText: {
     color: UI.colors.white,
@@ -1097,15 +1374,24 @@ const S = StyleSheet.create({
     gap: 8,
     marginTop: 8,
   },
+
+  // ✅ quando tem desconto, vira stack
+  priceStack: {
+    marginTop: 8,
+    gap: 2,
+  },
+
   productPrice: {
     fontSize: 16,
     fontWeight: "800",
     color: UI.brand.primaryText,
   },
-  productOldPrice: {
+
+  // base riscado (mais “leve”)
+  productOldPriceBig: {
     textDecorationLine: "line-through",
     color: UI.colors.black45,
-    fontWeight: "600",
+    fontWeight: "800",
     fontSize: 12,
   },
 

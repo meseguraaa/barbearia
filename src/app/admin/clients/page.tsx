@@ -1,5 +1,6 @@
 import { Metadata } from "next";
 import Link from "next/link";
+import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -25,12 +26,66 @@ import {
 } from "@/components/ui/pagination";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { CustomerLevel } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Admin | Clientes",
 };
+
+const UNIT_COOKIE_NAME = "admin_unit_context";
+const UNIT_ALL_VALUE = "all";
+
+const LEVEL_RANK: Record<CustomerLevel, number> = {
+  BRONZE: 1,
+  PRATA: 2,
+  OURO: 3,
+  DIAMANTE: 4,
+};
+
+type LevelFilter = "all" | CustomerLevel;
+function normalizeLevel(v: string | undefined): LevelFilter {
+  if (v === "BRONZE") return "BRONZE";
+  if (v === "PRATA") return "PRATA";
+  if (v === "OURO") return "OURO";
+  if (v === "DIAMANTE") return "DIAMANTE";
+  return "all";
+}
+
+function levelLabel(level: CustomerLevel) {
+  switch (level) {
+    case "BRONZE":
+      return "Bronze";
+    case "PRATA":
+      return "Prata";
+    case "OURO":
+      return "Ouro";
+    case "DIAMANTE":
+      return "Diamante";
+  }
+}
+
+function levelBadgeClass(level: CustomerLevel) {
+  switch (level) {
+    case "BRONZE":
+      return "bg-amber-500/10 text-amber-700 border-amber-500/30";
+    case "PRATA":
+      return "bg-slate-500/10 text-slate-200 border-slate-500/30";
+    case "OURO":
+      return "bg-yellow-500/10 text-yellow-700 border-yellow-500/30";
+    case "DIAMANTE":
+      return "bg-sky-500/10 text-sky-700 border-sky-500/30";
+  }
+}
+
+function pickHighestLevel(levels: CustomerLevel[]): CustomerLevel {
+  let best: CustomerLevel = "BRONZE";
+  for (const l of levels) {
+    if (LEVEL_RANK[l] > LEVEL_RANK[best]) best = l;
+  }
+  return best;
+}
 
 function buildFrequencyLabel(doneDates: Date[]): string {
   if (doneDates.length === 0) return "Sem histórico";
@@ -62,6 +117,8 @@ type ClientRow = {
   image: string | null;
   createdAt: Date;
   birthday: Date | null;
+
+  customerLevel: CustomerLevel;
 
   totalAppointments: number;
   doneCount: number;
@@ -149,27 +206,19 @@ function normalizePlan(v: string | undefined): PlanFilter {
 export default async function ClientsPage({
   searchParams,
 }: {
-  // ✅ Next App Router: searchParams é Promise e precisa await
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  // 🔐 Permissão: apenas admins com "Clientes" liberado (ou Dono) acessam
   await requireAdminPermission("canAccessClients");
 
-  // ✅ resolve searchParams antes de usar
   const resolvedSearchParams = await searchParams;
 
-  // =========================
-  // FILTROS (A, D, E)
-  // =========================
   const qRaw = getSingleParam(resolvedSearchParams.q);
   const q = (qRaw ?? "").trim();
 
   const sort = normalizeSort(getSingleParam(resolvedSearchParams.sort));
   const plan = normalizePlan(getSingleParam(resolvedSearchParams.plan));
+  const level = normalizeLevel(getSingleParam(resolvedSearchParams.level));
 
-  // =========================
-  // PAGINAÇÃO
-  // =========================
   const PAGE_SIZE = 10;
 
   const pageParamRaw = resolvedSearchParams?.page;
@@ -180,14 +229,8 @@ export default async function ClientsPage({
   const requestedPage = Number(pageParam ?? "1");
   const safeRequestedPage = Number.isFinite(requestedPage) ? requestedPage : 1;
 
-  // =========================
-  // PRISMA WHERE + ORDERBY (A, D)
-  // =========================
-  const whereUser: any = {
-    role: "CLIENT",
-  };
+  const whereUser: any = { role: "CLIENT" };
 
-  // A) Busca por texto (q)
   if (q.length > 0) {
     whereUser.OR = [
       { name: { contains: q, mode: "insensitive" } },
@@ -196,7 +239,6 @@ export default async function ClientsPage({
     ];
   }
 
-  // D) Ordenação
   const orderBy =
     sort === "name_desc"
       ? ({ name: "desc" } as const)
@@ -206,9 +248,7 @@ export default async function ClientsPage({
           ? ({ createdAt: "asc" } as const)
           : ({ name: "asc" } as const);
 
-  const totalClients = await prisma.user.count({
-    where: whereUser,
-  });
+  const totalClients = await prisma.user.count({ where: whereUser });
 
   const totalPages = Math.max(1, Math.ceil(totalClients / PAGE_SIZE));
   const page = clampInt(safeRequestedPage, 1, totalPages);
@@ -220,7 +260,42 @@ export default async function ClientsPage({
     take: PAGE_SIZE,
   });
 
-  // Se não encontrar ninguém (por filtros), ainda mostra a barra de filtros
+  const cookieStore = await cookies();
+  const selectedUnit =
+    cookieStore.get(UNIT_COOKIE_NAME)?.value ?? UNIT_ALL_VALUE;
+
+  const clientIds = users.map((u) => u.id);
+
+  const levelStates = await prisma.customerLevelState.findMany({
+    where: {
+      userId: { in: clientIds },
+      ...(selectedUnit !== UNIT_ALL_VALUE ? { unitId: selectedUnit } : {}),
+    },
+    select: {
+      userId: true,
+      unitId: true,
+      levelCurrent: true,
+    },
+  });
+
+  const levelByUserId = new Map<string, CustomerLevel>();
+
+  if (selectedUnit !== UNIT_ALL_VALUE) {
+    for (const st of levelStates) {
+      levelByUserId.set(st.userId, st.levelCurrent);
+    }
+  } else {
+    const levelsPerUser = new Map<string, CustomerLevel[]>();
+    for (const st of levelStates) {
+      const arr = levelsPerUser.get(st.userId) ?? [];
+      arr.push(st.levelCurrent);
+      levelsPerUser.set(st.userId, arr);
+    }
+    for (const [userId, levels] of levelsPerUser.entries()) {
+      levelByUserId.set(userId, pickHighestLevel(levels));
+    }
+  }
+
   if (users.length === 0) {
     return (
       <div className="max-w-7xl mx-auto space-y-6">
@@ -235,7 +310,6 @@ export default async function ClientsPage({
           <AdminNewClientDialog />
         </header>
 
-        {/* FILTROS */}
         <section className="rounded-xl border border-border-primary bg-background-tertiary p-4 space-y-4">
           <form method="GET" className="space-y-4">
             <div className="flex flex-col md:flex-row gap-3 md:items-end">
@@ -282,6 +356,23 @@ export default async function ClientsPage({
                 </select>
               </div>
 
+              <div className="w-full md:w-[220px]">
+                <label className="text-[11px] text-content-secondary">
+                  Nível
+                </label>
+                <select
+                  name="level"
+                  defaultValue={level}
+                  className="h-10 w-full rounded-md border border-border-primary bg-background-secondary px-3 text-sm text-content-primary"
+                >
+                  <option value="all">Todos</option>
+                  <option value="BRONZE">Bronze</option>
+                  <option value="PRATA">Prata</option>
+                  <option value="OURO">Ouro</option>
+                  <option value="DIAMANTE">Diamante</option>
+                </select>
+              </div>
+
               <div className="flex gap-2">
                 <Button type="submit" variant="edit2">
                   Filtrar
@@ -297,45 +388,29 @@ export default async function ClientsPage({
     );
   }
 
-  const clientIds = users.map((u) => u.id);
-
-  // 🔹 Serviços (para fallback de preço quando não houver snapshot)
   const services = await prisma.service.findMany();
   const servicePriceById = new Map<string, number>(
     services.map((s) => [s.id, Number(s.price)]),
   );
 
-  // 🔹 Agendamentos dos clientes (✅ por clientId, não por telefone)
   const appointments = await prisma.appointment.findMany({
-    where: {
-      clientId: { in: clientIds },
-    },
+    where: { clientId: { in: clientIds } },
     orderBy: { scheduleAt: "asc" },
   });
 
-  // 🔹 Planos dos clientes
   const clientPlans = await prisma.clientPlan.findMany({
     where: { clientId: { in: clientIds } },
     include: { plan: true },
     orderBy: { startDate: "asc" },
   });
 
-  // 🔹 Pedidos de PRODUTOS concluídos dos clientes
   const productOrders = await prisma.order.findMany({
     where: {
       clientId: { in: clientIds },
       status: "COMPLETED",
-      items: {
-        some: {
-          productId: {
-            not: null,
-          },
-        },
-      },
+      items: { some: { productId: { not: null } } },
     },
-    include: {
-      items: true,
-    },
+    include: { items: true },
   });
 
   const today = new Date();
@@ -354,7 +429,6 @@ export default async function ClientsPage({
       (apt) => apt.status === "CANCELED",
     );
 
-    // 🔹 Cancelamentos com taxa
     const canceledWithFee = canceledAppointments.filter(
       (apt) => apt.cancelFeeApplied,
     );
@@ -364,11 +438,9 @@ export default async function ClientsPage({
       return sum + fee;
     }, 0);
 
-    // 🔹 Total de planos
     const userClientPlans = clientPlans.filter((cp) => cp.clientId === user.id);
     const totalPlans = userClientPlans.length;
 
-    // 🔹 Plano ativo
     const activePlan = userClientPlans.find((cp) => {
       const hasCredits = cp.usedBookings < cp.plan.totalBookings;
       const isActive = cp.status === "ACTIVE";
@@ -376,7 +448,6 @@ export default async function ClientsPage({
       return isActive && isWithinValidity && hasCredits;
     });
 
-    // 🔹 Frequência e último atendimento
     const doneDates = doneAppointments.map((apt) => apt.scheduleAt);
     const frequencyLabel = buildFrequencyLabel(doneDates);
 
@@ -385,7 +456,6 @@ export default async function ClientsPage({
         ? new Date(Math.max(...doneDates.map((d) => d.getTime())))
         : null;
 
-    // 🔹 Total gasto
     const totalFromAppointments = doneAppointments.reduce((sum, apt) => {
       if ((apt as any).clientPlanId) return sum;
 
@@ -419,7 +489,6 @@ export default async function ClientsPage({
     const totalSpent =
       totalFromAppointments + totalFromPlans + totalFromProducts;
 
-    // WhatsApp (telefone do cadastro)
     const rawPhone = user.phone ?? "";
     const phoneDigits = rawPhone.replace(/\D/g, "");
 
@@ -441,6 +510,9 @@ export default async function ClientsPage({
       createdAt: user.createdAt,
       birthday: (user as any).birthday ?? null,
       image: user.image ?? null,
+
+      customerLevel: levelByUserId.get(user.id) ?? "BRONZE",
+
       totalAppointments,
       doneCount: doneAppointments.length,
       canceledCount: canceledAppointments.length,
@@ -455,20 +527,23 @@ export default async function ClientsPage({
     };
   });
 
-  // E) Plano (pós-processamento, V1)
-  const filteredRows =
+  const planFiltered =
     plan === "active"
       ? rows.filter((r) => r.hasActivePlan)
       : plan === "none"
         ? rows.filter((r) => !r.hasActivePlan)
         : rows;
 
+  const filteredRows =
+    level === "all"
+      ? planFiltered
+      : planFiltered.filter((r) => r.customerLevel === level);
+
   const { pages, showLeftEllipsis, showRightEllipsis, firstPage, lastPage } =
     getPageRange(page, totalPages);
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
-      {/* HEADER + FILTROS */}
       <header className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -491,18 +566,6 @@ export default async function ClientsPage({
               <span className="font-semibold text-content-primary">
                 {totalClients}
               </span>
-              {plan !== "all" && (
-                <>
-                  {" "}
-                  <span className="text-content-secondary">
-                    (nesta página:{" "}
-                    <span className="font-semibold text-content-primary">
-                      {filteredRows.length}
-                    </span>{" "}
-                    após filtro de plano)
-                  </span>
-                </>
-              )}
               .
             </p>
           </div>
@@ -510,7 +573,6 @@ export default async function ClientsPage({
           <AdminNewClientDialog />
         </div>
 
-        {/* FILTROS */}
         <section className="rounded-xl border border-border-primary bg-background-tertiary p-4 space-y-4">
           <form method="GET" className="space-y-4">
             <div className="flex flex-col md:flex-row gap-3 md:items-end">
@@ -557,6 +619,23 @@ export default async function ClientsPage({
                 </select>
               </div>
 
+              <div className="w-full md:w-[220px]">
+                <label className="text-[11px] text-content-secondary">
+                  Nível
+                </label>
+                <select
+                  name="level"
+                  defaultValue={level}
+                  className="h-10 w-full rounded-md border border-border-primary bg-background-secondary px-3 text-sm text-content-primary"
+                >
+                  <option value="all">Todos</option>
+                  <option value="BRONZE">Bronze</option>
+                  <option value="PRATA">Prata</option>
+                  <option value="OURO">Ouro</option>
+                  <option value="DIAMANTE">Diamante</option>
+                </select>
+              </div>
+
               <div className="flex gap-2">
                 <Button type="submit" variant="edit2">
                   Filtrar
@@ -570,7 +649,6 @@ export default async function ClientsPage({
         </section>
       </header>
 
-      {/* LISTA EM ACCORDION */}
       <section className="space-y-4">
         <Accordion type="single" collapsible className="space-y-2">
           {filteredRows.map((row) => (
@@ -579,10 +657,12 @@ export default async function ClientsPage({
               value={row.id}
               className="border border-border-primary rounded-xl bg-background-tertiary"
             >
-              <div className="flex items-center justify-between gap-4 px-4 py-3">
-                <AccordionTrigger className="flex flex-1 items-center gap-4 hover:no-underline px-0 py-0">
-                  <div className="flex-1 flex items-center gap-3 text-left">
-                    <div className="h-10 w-10 rounded-full overflow-hidden bg-background-secondary border border-border-primary flex items-center justify-center">
+              <div className="flex items-center gap-6 px-4 py-3 w-full">
+                {/* ✅ TRIGGER = GRID (inclui a coluna fixa da seta) */}
+                <AccordionTrigger className="flex-1 min-w-0 px-0 py-0 hover:no-underline grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.6fr)_32px] items-center gap-6">
+                  {/* COL 1: Nome + Email */}
+                  <div className="min-w-0 flex items-center gap-3 text-left">
+                    <div className="h-10 w-10 rounded-full overflow-hidden bg-background-secondary border border-border-primary flex items-center justify-center shrink-0">
                       {row.image ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -602,42 +682,59 @@ export default async function ClientsPage({
                       )}
                     </div>
 
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-paragraph-medium-size font-semibold text-content-primary">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <p className="text-paragraph-medium-size font-semibold text-content-primary truncate">
                           {row.name}
                         </p>
 
                         {row.hasActivePlan && (
                           <Badge
                             variant="outline"
-                            className="text-xs border-green-600/40 text-green-600"
+                            className="text-xs border-green-600/40 text-green-600 shrink-0"
                           >
                             Plano ativo
                           </Badge>
                         )}
                       </div>
 
-                      <p className="text-xs text-content-secondary truncate max-w-[220px]">
+                      <p className="text-xs text-content-secondary truncate">
                         {row.email || "Sem e-mail"}
                       </p>
                     </div>
                   </div>
 
-                  <div className="hidden md:flex flex-col text-left min-w-40">
+                  {/* COL 2: Nível */}
+                  <div className="hidden sm:flex flex-col text-left min-w-0">
+                    <span className="text-[11px] text-content-secondary">
+                      Nível
+                    </span>
+                    <div className="min-w-0">
+                      <Badge
+                        variant="outline"
+                        className={`text-xs ${levelBadgeClass(row.customerLevel)}`}
+                      >
+                        {levelLabel(row.customerLevel)}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* COL 3: Telefone */}
+                  <div className="hidden md:flex flex-col text-left min-w-0">
                     <span className="text-[11px] text-content-secondary">
                       Telefone
                     </span>
-                    <span className="text-xs text-content-primary">
+                    <span className="text-xs text-content-primary truncate">
                       {row.phone}
                     </span>
                   </div>
 
-                  <div className="hidden sm:flex flex-col text-left min-w-[180px]">
+                  {/* COL 4: Último agendamento */}
+                  <div className="hidden sm:flex flex-col text-left min-w-0">
                     <span className="text-[11px] text-content-secondary">
-                      Último atendimento
+                      Último agendamento
                     </span>
-                    <span className="text-xs text-content-primary">
+                    <span className="text-xs text-content-primary truncate">
                       {row.lastDoneDate
                         ? format(row.lastDoneDate, "dd/MM/yyyy HH:mm", {
                             locale: ptBR,
@@ -645,9 +742,12 @@ export default async function ClientsPage({
                         : "Sem atendimento"}
                     </span>
                   </div>
+
+                  {/* COL 5 é a seta do AccordionTrigger (automática) */}
                 </AccordionTrigger>
 
-                <div className="flex items-center gap-2">
+                {/* ✅ AÇÕES grudadas no canto direito */}
+                <div className="ml-auto flex items-center justify-end gap-2 whitespace-nowrap">
                   <AdminEditClientDialog
                     client={{
                       id: row.id,
@@ -675,7 +775,6 @@ export default async function ClientsPage({
 
               <AccordionContent className="border-t border-border-primary px-4 py-4">
                 <div className="grid gap-4 md:grid-cols-3">
-                  {/* Dados do cliente */}
                   <div className="rounded-xl border border-border-primary bg-background-secondary p-4 space-y-2">
                     <p className="text-label-small text-content-primary">
                       Dados do cliente
@@ -688,6 +787,20 @@ export default async function ClientsPage({
                         </span>
                         <span className="text-content-primary font-medium flex-1 min-w-0 truncate">
                           {row.name}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-content-secondary shrink-0">
+                          Nível:
+                        </span>
+                        <span className="flex-1 min-w-0 truncate">
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${levelBadgeClass(row.customerLevel)}`}
+                          >
+                            {levelLabel(row.customerLevel)}
+                          </Badge>
                         </span>
                       </div>
 
@@ -735,7 +848,6 @@ export default async function ClientsPage({
                     </div>
                   </div>
 
-                  {/* Atendimentos */}
                   <div className="rounded-xl border border-border-primary bg-background-secondary p-4 space-y-2">
                     <p className="text-label-small text-content-primary">
                       Atendimentos
@@ -789,7 +901,6 @@ export default async function ClientsPage({
                     </div>
                   </div>
 
-                  {/* Financeiro / Planos */}
                   <div className="rounded-xl border border-border-primary bg-background-secondary p-4 space-y-3">
                     <p className="text-label-small text-content-primary">
                       Financeiro
@@ -857,7 +968,6 @@ export default async function ClientsPage({
           ))}
         </Accordion>
 
-        {/* PAGINAÇÃO (shadcn) */}
         {totalPages > 1 && (
           <div className="pt-4 flex justify-center">
             <Pagination>
@@ -875,7 +985,6 @@ export default async function ClientsPage({
                   />
                 </PaginationItem>
 
-                {/* Primeira página + ellipsis */}
                 {page > 3 && (
                   <PaginationItem>
                     <PaginationLink
@@ -892,7 +1001,6 @@ export default async function ClientsPage({
                   </PaginationItem>
                 )}
 
-                {/* Miolo */}
                 {pages.map((p) => (
                   <PaginationItem key={p}>
                     <PaginationLink
@@ -910,7 +1018,6 @@ export default async function ClientsPage({
                   </PaginationItem>
                 )}
 
-                {/* Última página */}
                 {page < totalPages - 2 && (
                   <PaginationItem>
                     <PaginationLink

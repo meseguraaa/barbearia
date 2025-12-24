@@ -17,6 +17,12 @@ const AUTH_STORAGE_KEY = "auth_session";
 
 type Role = "CLIENT" | "BARBER" | "ADMIN";
 
+type CustomerLevel = {
+  id?: string | null;
+  label: string;
+  icon?: string | null; // ex: "star", "trophy", "crown" (FontAwesome name)
+};
+
 type AuthUser = {
   id: string;
   name: string | null;
@@ -26,6 +32,9 @@ type AuthUser = {
   phone?: string | null;
   isOwner?: boolean;
   adminAccess?: any | null;
+
+  // ✅ NOVO: nível do cliente (padronizado)
+  customerLevel?: CustomerLevel | null;
 };
 
 type StoredSession = {
@@ -118,6 +127,45 @@ async function prefetchWithTimeout(url: string, timeoutMs: number) {
   if (timeoutId) clearTimeout(timeoutId);
 
   return result;
+}
+
+// ✅ Normaliza qualquer shape do backend para CustomerLevel
+function normalizeCustomerLevel(u: any): CustomerLevel | null {
+  const fromObj =
+    u?.customerLevel && typeof u.customerLevel === "object"
+      ? u.customerLevel
+      : u?.level && typeof u.level === "object"
+        ? u.level
+        : null;
+
+  const labelFromObj =
+    fromObj?.label != null ? String(fromObj.label).trim() : "";
+
+  const labelFromFlat =
+    u?.levelLabel != null ? String(u.levelLabel).trim() : "";
+
+  const label = labelFromObj || labelFromFlat;
+
+  if (!label) return null;
+
+  const iconFromObj = fromObj?.icon != null ? String(fromObj.icon).trim() : "";
+
+  const iconFromFlat = u?.levelIcon != null ? String(u.levelIcon).trim() : "";
+
+  const id =
+    fromObj?.id != null && String(fromObj.id).trim()
+      ? String(fromObj.id).trim()
+      : u?.levelId != null && String(u.levelId).trim()
+        ? String(u.levelId).trim()
+        : null;
+
+  const icon = (iconFromObj || iconFromFlat || "").trim();
+
+  return {
+    id,
+    label,
+    icon: icon || null,
+  };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -214,6 +262,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await api.get<{ user: any }>("/api/mobile/me");
       const u = (res as any)?.user;
 
+      const normalizedLevel = normalizeCustomerLevel(u);
+
       setUser((prev) => {
         if (!prev) return prev;
         return {
@@ -226,6 +276,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           isOwner: (u?.isOwner ?? prev.isOwner) as any,
           adminAccess: (u?.adminAccess ?? prev.adminAccess) as any,
           id: (u?.id ?? prev.id) as any,
+
+          // ✅ nível
+          customerLevel: normalizedLevel ?? prev.customerLevel ?? null,
         };
       });
 
@@ -350,6 +403,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!alive) return;
 
         const u = (res as any)?.user;
+        const normalizedLevel = normalizeCustomerLevel(u);
 
         setUser((prev) => {
           if (!prev) return prev;
@@ -363,6 +417,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             isOwner: (u?.isOwner ?? prev.isOwner) as any,
             adminAccess: (u?.adminAccess ?? prev.adminAccess) as any,
             id: (u?.id ?? prev.id) as any,
+
+            // ✅ nível
+            customerLevel: normalizedLevel ?? prev.customerLevel ?? null,
           };
         });
 

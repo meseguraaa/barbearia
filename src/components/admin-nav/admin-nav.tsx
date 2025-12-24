@@ -90,6 +90,13 @@ const adminLinks: AdminLink[] = [
     icon: Users,
     module: "CLIENTS",
   },
+  // ✅ NOVO: Nível de Cliente (logo abaixo de Clientes)
+  {
+    href: "/admin/client-levels",
+    label: "Nível de Cliente",
+    icon: Tag,
+    // sem module por enquanto: feature nova e ainda vamos criar permissão/CRUD
+  },
   {
     href: "/admin/finance",
     label: "Financeiro",

@@ -93,6 +93,81 @@ type MeApiUser = {
   birthday: string | Date | null;
 };
 
+// =======================
+// 🎨 NÍVEL DO CLIENTE (cores copiadas do Admin)
+// =======================
+type CustomerLevelKey = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
+
+function normalizeCustomerLevelKey(user: any): CustomerLevelKey | null {
+  const raw = String(
+    user?.customerLevel?.key ??
+      user?.customerLevel?.level ??
+      user?.customerLevel?.value ??
+      user?.customerLevel ??
+      user?.level?.key ??
+      user?.level?.value ??
+      user?.level ??
+      user?.levelKey ??
+      user?.levelEnum ??
+      "",
+  ).trim();
+
+  if (
+    raw === "BRONZE" ||
+    raw === "PRATA" ||
+    raw === "OURO" ||
+    raw === "DIAMANTE"
+  )
+    return raw;
+
+  const label = String(
+    user?.customerLevel?.label ??
+      user?.level?.label ??
+      user?.levelLabel ??
+      user?.tier?.label ??
+      user?.tier ??
+      "",
+  )
+    .trim()
+    .toLowerCase();
+
+  if (label.includes("bronze")) return "BRONZE";
+  if (label.includes("prata")) return "PRATA";
+  if (label.includes("ouro")) return "OURO";
+  if (label.includes("diam")) return "DIAMANTE";
+
+  return null;
+}
+
+function levelChipColors(level: CustomerLevelKey) {
+  switch (level) {
+    case "BRONZE":
+      return {
+        bg: "rgba(245, 158, 11, 0.10)", // amber-500/10
+        border: "rgba(245, 158, 11, 0.30)", // amber-500/30
+        text: "rgb(180, 83, 9)", // amber-700
+      };
+    case "PRATA":
+      return {
+        bg: "rgba(100, 116, 139, 0.10)", // slate-500/10
+        border: "rgba(100, 116, 139, 0.30)", // slate-500/30
+        text: "rgb(226, 232, 240)", // slate-200
+      };
+    case "OURO":
+      return {
+        bg: "rgba(234, 179, 8, 0.10)", // yellow-500/10
+        border: "rgba(234, 179, 8, 0.30)", // yellow-500/30
+        text: "rgb(161, 98, 7)", // yellow-700 (aprox)
+      };
+    case "DIAMANTE":
+      return {
+        bg: "rgba(14, 165, 233, 0.10)", // sky-500/10
+        border: "rgba(14, 165, 233, 0.30)", // sky-500/30
+        text: "rgb(3, 105, 161)", // sky-700
+      };
+  }
+}
+
 const Field = memo(function Field({
   label,
   value,
@@ -141,7 +216,7 @@ const Field = memo(function Field({
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
 
   const [loadingMe, setLoadingMe] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -168,6 +243,52 @@ export default function Profile() {
     () => [S.scrollContent, { paddingBottom: 28 + insets.bottom }],
     [insets.bottom],
   );
+
+  // ✅ nível (label curta) + cores do Admin
+  const userLevelLabel = useMemo(() => {
+    const raw =
+      (user as any)?.level?.label ??
+      (user as any)?.levelLabel ??
+      (user as any)?.level ??
+      (user as any)?.customerLevel?.label ??
+      (user as any)?.customerLevel ??
+      (user as any)?.tier?.label ??
+      (user as any)?.tier ??
+      null;
+
+    const s = String(raw ?? "").trim();
+    if (!s) return null;
+
+    return s.length > 12 ? `${s.slice(0, 12)}…` : s;
+  }, [user]);
+
+  const userLevelIcon = useMemo(() => {
+    const l = String(userLevelLabel ?? "").toLowerCase();
+    if (l.includes("diam")) return "diamond";
+    if (l.includes("ouro")) return "trophy";
+    if (l.includes("prata")) return "certificate";
+    return "star";
+  }, [userLevelLabel]);
+
+  const userLevelKey = useMemo(() => normalizeCustomerLevelKey(user), [user]);
+
+  const userLevelStyle = useMemo(() => {
+    if (!userLevelKey) return null;
+    const c = levelChipColors(userLevelKey);
+
+    return {
+      container: {
+        backgroundColor: c.bg,
+        borderColor: c.border,
+      },
+      text: {
+        color: c.text,
+      },
+      icon: {
+        color: c.text,
+      },
+    } as const;
+  }, [userLevelKey]);
 
   async function forceLogoutToLogin() {
     try {
@@ -295,6 +416,7 @@ export default function Profile() {
               <View style={S.darkInner}>
                 {/* ✅ Card igual ao heroCard da Home */}
                 <View style={S.heroCard}>
+                  // 1) NO JSX: move o pill pra depois do heroTextCol
                   <View style={S.profileHeroRow}>
                     <View style={S.avatarWrap}>
                       <Image source={{ uri: avatar }} style={S.avatarBig} />
@@ -318,6 +440,28 @@ export default function Profile() {
                         {email || " "}
                       </Text>
                     </View>
+
+                    {userLevelLabel ? (
+                      <View
+                        style={[
+                          S.levelPill,
+                          S.levelPillRight,
+                          userLevelStyle?.container,
+                        ]}
+                      >
+                        <FontAwesome
+                          name={userLevelIcon as any}
+                          size={14}
+                          color={userLevelStyle?.icon?.color ?? UI.colors.white}
+                        />
+                        <Text
+                          style={[S.levelPillText, userLevelStyle?.text]}
+                          numberOfLines={1}
+                        >
+                          {userLevelLabel}
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 </View>
               </View>
@@ -459,6 +603,25 @@ const S = StyleSheet.create({
     alignItems: "center",
   },
 
+  // ⭐ pill de nível (canto esquerdo do card)
+  levelPill: {
+    height: 56,
+    minWidth: 64,
+    paddingHorizontal: 10,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+  },
+  levelPillText: {
+    fontSize: 10,
+    fontWeight: "900",
+    includeFontPadding: false,
+    maxWidth: 80,
+    textAlign: "center",
+  },
+
   avatarWrap: { position: "relative" },
   avatarBig: {
     width: 74,
@@ -496,19 +659,6 @@ const S = StyleSheet.create({
     color: "rgba(255,255,255,0.82)",
     fontSize: 13,
     marginTop: 3,
-    fontWeight: "500",
-  },
-
-  hintRow: {
-    marginTop: 12,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    paddingHorizontal: 6,
-  },
-  hintText: {
-    color: "rgba(255,255,255,0.70)",
-    fontSize: 12,
     fontWeight: "500",
   },
 
@@ -600,7 +750,11 @@ const S = StyleSheet.create({
   },
 
   heroTextCol: {
-    flex: 1,
+    flex: 1, // ✅ empurra o pill pra direita
     paddingVertical: 4,
+  },
+
+  levelPillRight: {
+    marginLeft: "auto", // ✅ gruda no canto direito
   },
 });

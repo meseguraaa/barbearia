@@ -1,4 +1,3 @@
-// app/(app)/(tabs)/products/[id].tsx  (ajuste o path conforme seu projeto)
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
@@ -22,12 +21,26 @@ import { ProductDetailsSkeleton } from "../../../../src/components/loading/Produ
 
 const HERO_H = 320;
 
+type ProductBadge =
+  | { type: "BIRTHDAY"; label: string }
+  | { type: "LEVEL"; label: string }
+  | null;
+
 type ApiProduct = {
   id: string;
   name: string;
   imageUrl: string | null;
   description: string;
+
+  // compat: preço final
   price: number;
+
+  // ✅ motor de preço
+  basePrice?: number;
+  finalPrice?: number;
+  hasDiscount?: boolean;
+  badge?: ProductBadge;
+
   category: string | null;
   stockQuantity: number;
   isOutOfStock: boolean;
@@ -36,16 +49,31 @@ type ApiProduct = {
   unitName: string;
 };
 
-function formatBRL(value: number) {
+// -----------------------------
+// 💰 dinheiro: sem “,00” quando inteiro
+// -----------------------------
+function formatMoneySmartBRL(value: number) {
+  const v = Number(value ?? 0);
+  const safe = Number.isFinite(v) ? v : 0;
+
+  const isInt = Math.abs(safe - Math.round(safe)) < 1e-9;
+
   try {
-    return new Intl.NumberFormat("pt-BR", {
+    return safe.toLocaleString("pt-BR", {
       style: "currency",
       currency: "BRL",
-    }).format(value);
+      minimumFractionDigits: isInt ? 0 : 2,
+      maximumFractionDigits: isInt ? 0 : 2,
+    });
   } catch {
-    const v = Number.isFinite(value) ? value : 0;
-    return `R$ ${v.toFixed(2).replace(".", ",")}`;
+    const fixed = isInt ? String(Math.round(safe)) : safe.toFixed(2);
+    return `R$ ${fixed.replace(".", ",")}`;
   }
+}
+
+function safeNumber(v: any, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 export default function ProductDetails() {
@@ -93,16 +121,47 @@ export default function ProductDetails() {
         return;
       }
 
+      const basePrice = safeNumber(p?.basePrice, NaN);
+      const finalPrice = safeNumber(p?.finalPrice, NaN);
+
+      const hasDiscount =
+        !!p?.hasDiscount &&
+        Number.isFinite(basePrice) &&
+        Number.isFinite(finalPrice) &&
+        finalPrice < basePrice;
+
+      const badge: ProductBadge =
+        p?.badge &&
+        typeof p.badge === "object" &&
+        String(p.badge.label ?? "").trim()
+          ? {
+              type: p.badge.type === "BIRTHDAY" ? "BIRTHDAY" : "LEVEL",
+              label: String(p.badge.label ?? "").trim(),
+            }
+          : null;
+
+      const final = Number.isFinite(finalPrice)
+        ? finalPrice
+        : safeNumber(p?.price, 0);
+
       setProduct({
         id: String(p.id),
         name: String(p.name ?? "Produto"),
         imageUrl: typeof p.imageUrl === "string" ? p.imageUrl : null,
         description: String(p.description ?? ""),
-        price: Number(p.price ?? 0),
+
+        // compat: price = final
+        price: final,
+
+        basePrice: Number.isFinite(basePrice) ? basePrice : undefined,
+        finalPrice: Number.isFinite(finalPrice) ? finalPrice : undefined,
+        hasDiscount,
+        badge,
+
         category: p.category ? String(p.category) : null,
-        stockQuantity: Number(p.stockQuantity ?? 0),
+        stockQuantity: safeNumber(p.stockQuantity, 0),
         isOutOfStock: !!p.isOutOfStock,
-        pickupDeadlineDays: Number(p.pickupDeadlineDays ?? 2),
+        pickupDeadlineDays: safeNumber(p.pickupDeadlineDays, 2),
         unitId: String(p.unitId ?? ""),
         unitName: String(p.unitName ?? "—"),
       });
@@ -127,9 +186,30 @@ export default function ProductDetails() {
     fetchProduct();
   }, [fetchProduct]);
 
-  const priceLabel = useMemo(
-    () => formatBRL(product?.price ?? 0),
-    [product?.price],
+  // ✅ regra de exibição: base riscado + final quando desconto
+  const pricing = useMemo(() => {
+    const p = product;
+    if (!p) return { base: 0, final: 0, hasDiscount: false };
+
+    const base = safeNumber(p.basePrice, NaN);
+    const final = safeNumber(p.finalPrice, NaN);
+
+    if (Number.isFinite(base) && Number.isFinite(final)) {
+      const has = !!p.hasDiscount && final < base;
+      return { base, final, hasDiscount: has };
+    }
+
+    const only = safeNumber(p.price, 0);
+    return { base: only, final: only, hasDiscount: false };
+  }, [product]);
+
+  const baseLabel = useMemo(
+    () => formatMoneySmartBRL(pricing.base),
+    [pricing.base],
+  );
+  const finalLabel = useMemo(
+    () => formatMoneySmartBRL(pricing.final),
+    [pricing.final],
   );
 
   const extra = useMemo(() => {
@@ -168,9 +248,7 @@ export default function ProductDetails() {
 
       const orderId = res?.orderId;
 
-      if (!res?.ok || !orderId) {
-        throw new Error("invalid_response");
-      }
+      if (!res?.ok || !orderId) throw new Error("invalid_response");
 
       router.push({ pathname: "/client/cart", params: { orderId } });
     } catch (err) {
@@ -201,7 +279,6 @@ export default function ProductDetails() {
       ) : !product ? (
         <View style={S.page}>
           <View style={[S.headerFloat, { top: insets.top + 10 }]}>
-            {/* ✅ Voltar roxinho com seta branca */}
             <Pressable onPress={() => router.back()} style={S.backBtn}>
               <FontAwesome name="angle-left" size={20} color="#FFFFFF" />
             </Pressable>
@@ -276,11 +353,32 @@ export default function ProductDetails() {
               style={S.heroImage}
             />
             <View style={S.heroOverlay} />
-            {/* ✅ badge de estoque removido */}
+
+            {/* 🎂 / ⭐ badge do motor */}
+            {product.badge?.label ? (
+              <View
+                style={[
+                  S.heroBadge,
+                  product.badge.type === "BIRTHDAY"
+                    ? S.heroBadgeBirthday
+                    : null,
+                ]}
+              >
+                <Text style={S.heroBadgeText} numberOfLines={1}>
+                  {product.badge.label}
+                </Text>
+              </View>
+            ) : null}
+
+            {/* (opcional) pill de esgotado no hero */}
+            {product.isOutOfStock ? (
+              <View style={S.outPill}>
+                <Text style={S.outPillText}>ESGOTADO</Text>
+              </View>
+            ) : null}
           </View>
 
           <View style={[S.headerFloat, { top: insets.top + 10 }]}>
-            {/* ✅ Voltar roxinho com seta branca */}
             <Pressable onPress={() => router.back()} style={S.backBtn}>
               <FontAwesome name="angle-left" size={20} color="#FFFFFF" />
             </Pressable>
@@ -293,13 +391,19 @@ export default function ProductDetails() {
           >
             <View style={S.mainShell}>
               <View style={S.mainInner}>
-                {/* ✅ categoria abaixo da foto removida */}
                 <Text style={S.title}>{product.name}</Text>
 
-                <View style={S.priceRow}>
-                  <Text style={S.price}>{priceLabel}</Text>
-                </View>
-                {/* ✅ não realocar estoque aqui */}
+                {/* ✅ regra do preço */}
+                {pricing.hasDiscount ? (
+                  <View style={S.priceStack}>
+                    <Text style={S.oldPrice}>{baseLabel}</Text>
+                    <Text style={S.price}>{finalLabel}</Text>
+                  </View>
+                ) : (
+                  <View style={S.priceRow}>
+                    <Text style={S.price}>{finalLabel}</Text>
+                  </View>
+                )}
               </View>
             </View>
 
@@ -323,7 +427,6 @@ export default function ProductDetails() {
           </ScrollView>
 
           <View style={[S.ctaBar, { paddingBottom: insets.bottom + 12 }]}>
-            {/* ✅ Reservar com o mesmo padrão do "Ver todos os produtos" (home): bg #141414, sem borda, texto/ícone brancos */}
             <Pressable
               style={[
                 S.reserveBtn,
@@ -351,7 +454,6 @@ export default function ProductDetails() {
                     : "Reservar"}
               </Text>
 
-              {/* setinha opcional, mas mantém o “feeling” do botão da home */}
               <FontAwesome
                 name="angle-right"
                 size={18}
@@ -386,7 +488,6 @@ const S = StyleSheet.create({
     zIndex: 20,
   },
 
-  // ✅ botão voltar roxinho (seta branca)
   backBtn: {
     width: 42,
     height: 42,
@@ -396,6 +497,49 @@ const S = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.25)",
+  },
+
+  // 🎂 / ⭐ pill no hero
+  heroBadge: {
+    position: "absolute",
+    left: UI.spacing.screenX,
+    bottom: 16,
+    maxWidth: 260,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "rgba(20,20,20,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
+  },
+  heroBadgeBirthday: {
+    backgroundColor: "rgba(124,108,255,0.95)",
+    borderColor: "rgba(255,255,255,0.30)",
+  },
+  heroBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+
+  // (opcional) esgotado
+  outPill: {
+    position: "absolute",
+    right: UI.spacing.screenX,
+    bottom: 16,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: UI.brand.primary,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.30)",
+  },
+  outPillText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "900",
+    letterSpacing: 0.3,
   },
 
   mainShell: {
@@ -423,6 +567,19 @@ const S = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
+  },
+
+  // ✅ stack quando tem desconto
+  priceStack: {
+    marginTop: 14,
+    gap: 4,
+  },
+
+  oldPrice: {
+    textDecorationLine: "line-through",
+    color: "rgba(0,0,0,0.45)",
+    fontSize: 13,
+    fontWeight: "800",
   },
 
   price: { color: UI.brand.primary, fontSize: 20, fontWeight: "600" },
@@ -480,7 +637,6 @@ const S = StyleSheet.create({
     borderColor: "rgba(0,0,0,0.08)",
   },
 
-  // ✅ botão Reservar no padrão "Ver todos os produtos"
   reserveBtn: {
     height: 44,
     borderRadius: 999,

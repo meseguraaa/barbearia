@@ -55,6 +55,48 @@ function parseBirthday(input: unknown): Date | null {
   return null;
 }
 
+type CustomerLevelDTO = {
+  level: "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
+  label: string;
+  icon: string; // FontAwesome name
+};
+
+function levelToDTO(levelRaw: any): CustomerLevelDTO {
+  const level = String(levelRaw || "BRONZE").toUpperCase();
+
+  switch (level) {
+    case "DIAMANTE":
+      return { level: "DIAMANTE", label: "Diamante", icon: "diamond" };
+    case "OURO":
+      return { level: "OURO", label: "Ouro", icon: "trophy" };
+    case "PRATA":
+      return { level: "PRATA", label: "Prata", icon: "star" };
+    case "BRONZE":
+    default:
+      return { level: "BRONZE", label: "Bronze", icon: "star-o" };
+  }
+}
+
+async function getUserLevel(userId: string) {
+  // ✅ Pega o estado mais recente (se houver)
+  const state = await prisma.customerLevelState.findFirst({
+    where: { userId },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      levelCurrent: true,
+      unitId: true,
+      levelEffectiveFrom: true,
+      updatedAt: true,
+    },
+  });
+
+  const dto = levelToDTO(state?.levelCurrent);
+  return {
+    customerLevel: dto,
+    _debugLevelState: state, // se não quiser debug, pode remover
+  };
+}
+
 export async function GET(req: Request) {
   try {
     const bearer = getBearerToken(req);
@@ -78,7 +120,14 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "user_inactive" }, { status: 403 });
     }
 
-    return NextResponse.json({ user });
+    const { customerLevel } = await getUserLevel(userId);
+
+    return NextResponse.json({
+      user: {
+        ...user,
+        customerLevel, // ✅ agora o app tem label + icon + level
+      },
+    });
   } catch (err) {
     console.error("[api/mobile/me] GET error:", err);
     return NextResponse.json({ error: "invalid_token" }, { status: 401 });
@@ -121,10 +170,8 @@ export async function PATCH(req: Request) {
       phone = null;
     } else if (typeof phoneRaw === "string") {
       const p = phoneRaw.trim();
-      // deixa vazio virar null
       phone = p.length ? p : null;
 
-      // validação simples (evita lixo enorme)
       if (phone && phone.length > 32) {
         return NextResponse.json({ error: "phone_too_long" }, { status: 400 });
       }
@@ -135,7 +182,6 @@ export async function PATCH(req: Request) {
     let birthday: Date | null | undefined = undefined;
     if (birthdayRaw !== undefined) {
       const parsed = parseBirthday(birthdayRaw);
-      // se mandou algo inválido, rejeita
       if (birthdayRaw && !parsed) {
         return NextResponse.json(
           { error: "invalid_birthday" },
@@ -154,7 +200,14 @@ export async function PATCH(req: Request) {
       select: selectUser(),
     });
 
-    return NextResponse.json({ user });
+    const { customerLevel } = await getUserLevel(userId);
+
+    return NextResponse.json({
+      user: {
+        ...user,
+        customerLevel,
+      },
+    });
   } catch (err) {
     console.error("[api/mobile/me] PATCH error:", err);
     return NextResponse.json({ error: "invalid_token" }, { status: 401 });

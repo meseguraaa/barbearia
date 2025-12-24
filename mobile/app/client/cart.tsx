@@ -28,12 +28,18 @@ type CartItem = {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
-  product: {
+  product: null | {
     id: string;
     name: string;
     imageUrl: string | null;
     category: string | null;
-  } | null;
+
+    // ✅ enriquecido pelo backend (novo)
+    basePrice?: number; // preço "cheio" (BRONZE)
+    finalPrice?: number; // preço do motor (pode ser o mesmo do unitPrice)
+    hasDiscount?: boolean;
+    badge?: null | { type: "BIRTHDAY" | "LEVEL"; label: string };
+  };
 };
 
 type CartOrder = {
@@ -56,14 +62,25 @@ type CartResponse = {
   items?: CartOrder[];
 };
 
-function formatMoneyBRL(value: number) {
+// -----------------------------
+// 💰 dinheiro: sem “,00” quando inteiro
+// -----------------------------
+function formatMoneySmartBRL(value: number) {
+  const v = Number(value ?? 0);
+  const safe = Number.isFinite(v) ? v : 0;
+
+  const isInt = Math.abs(safe - Math.round(safe)) < 1e-9;
+
   try {
-    return Number(value || 0).toLocaleString("pt-BR", {
+    return safe.toLocaleString("pt-BR", {
       style: "currency",
       currency: "BRL",
+      minimumFractionDigits: isInt ? 0 : 2,
+      maximumFractionDigits: isInt ? 0 : 2,
     });
   } catch {
-    return `R$ ${Number(value || 0).toFixed(2)}`;
+    const fixed = isInt ? String(Math.round(safe)) : safe.toFixed(2);
+    return `R$ ${fixed.replace(".", ",")}`;
   }
 }
 
@@ -138,7 +155,6 @@ export default function CartScreen() {
   const [order, setOrder] = useState<CartOrder | null>(null);
   const [failed, setFailed] = useState(false);
 
-  // ✅ gate: libera quando o load terminar 1x (mesmo vazio/erro)
   const [dataReady, setDataReady] = useState(false);
 
   const goBack = useCallback(() => {
@@ -161,12 +177,9 @@ export default function CartScreen() {
     setDataReady(false);
 
     if (!orderId) {
-      if (__DEV__) console.log("[cart] missing orderId param");
-
       setLoading(false);
       setOrder(null);
       setFailed(false);
-
       setDataReady(true);
       return;
     }
@@ -175,13 +188,9 @@ export default function CartScreen() {
       setFailed(false);
       setLoading(true);
 
-      if (__DEV__) console.log("[cart] loading orderId:", orderId);
-
       const res: CartResponse = (await api.get(
         `/api/mobile/orders/${encodeURIComponent(orderId)}`,
       )) as any;
-
-      if (__DEV__) console.log("[cart] response:", res);
 
       const direct = (res?.order ?? res?.item ?? null) as CartOrder | null;
 
@@ -361,6 +370,21 @@ export default function CartScreen() {
     const category = item.product?.category ?? null;
     const imageUrl = item.product?.imageUrl ?? null;
 
+    // ✅ visibilidade do motor (com fallback)
+    const base = Number(item.product?.basePrice ?? NaN);
+    const final = Number.isFinite(Number(item.product?.finalPrice))
+      ? Number(item.product?.finalPrice)
+      : Number(item.unitPrice); // fallback: preço salvo no item
+
+    const hasDiscount =
+      typeof item.product?.hasDiscount === "boolean"
+        ? item.product.hasDiscount
+        : Number.isFinite(base) && Number.isFinite(final) && final < base;
+
+    const badge = item.product?.badge ?? null;
+
+    const lineTotal = Number(item.totalPrice); // já vem calculado no backend
+
     return (
       <View style={S.itemCard}>
         <View style={S.itemImageWrap}>
@@ -378,9 +402,19 @@ export default function CartScreen() {
         </View>
 
         <View style={{ flex: 1 }}>
-          <Text style={S.itemName} numberOfLines={2}>
-            {name}
-          </Text>
+          <View style={S.itemTopRow}>
+            <Text style={S.itemName} numberOfLines={2}>
+              {name}
+            </Text>
+
+            {badge ? (
+              <View style={S.badgePill}>
+                <Text style={S.badgePillText} numberOfLines={1}>
+                  {badge.label}
+                </Text>
+              </View>
+            ) : null}
+          </View>
 
           {category ? (
             <Text style={S.itemMeta} numberOfLines={1}>
@@ -388,9 +422,18 @@ export default function CartScreen() {
             </Text>
           ) : null}
 
+          {/* preços */}
+          <View style={S.pricesRow}>
+            <Text style={S.unitFinalPrice}>{formatMoneySmartBRL(final)}</Text>
+
+            {hasDiscount && Number.isFinite(base) ? (
+              <Text style={S.unitBasePrice}>{formatMoneySmartBRL(base)}</Text>
+            ) : null}
+          </View>
+
           <View style={S.itemBottomRow}>
             <Text style={S.itemQty}>Qtd: {item.quantity}</Text>
-            <Text style={S.itemPrice}>{formatMoneyBRL(item.totalPrice)}</Text>
+            <Text style={S.itemPrice}>{formatMoneySmartBRL(lineTotal)}</Text>
           </View>
         </View>
       </View>
@@ -412,7 +455,6 @@ export default function CartScreen() {
           <View style={safeTopStyle} />
 
           <View style={S.stickyRow}>
-            {/* ✅ padronizado: roxinho + seta branca */}
             <Pressable style={S.backBtn} onPress={goBack}>
               <FontAwesome name="angle-left" size={22} color="#FFFFFF" />
             </Pressable>
@@ -455,11 +497,10 @@ export default function CartScreen() {
             <View style={S.totalRow}>
               <Text style={S.totalLabel}>Total</Text>
               <Text style={S.totalValue}>
-                {formatMoneyBRL(order.totalAmount)}
+                {formatMoneySmartBRL(order.totalAmount)}
               </Text>
             </View>
 
-            {/* ✅ Entendi no padrão "Ver todos os produtos" (home) */}
             <Pressable style={S.allProductsBtn} onPress={onPressEntendi}>
               <View style={S.btnCenterRow}>
                 <Text style={S.allProductsBtnText}>Entendi</Text>
@@ -498,7 +539,6 @@ const S = StyleSheet.create({
     gap: 12,
   },
 
-  // ✅ botão voltar roxinho + seta branca (padrão do app)
   backBtn: {
     width: 42,
     height: 42,
@@ -659,13 +699,63 @@ const S = StyleSheet.create({
     justifyContent: "center",
   },
 
-  itemName: { fontSize: 14, fontWeight: "700", color: UI.brand.primaryText },
+  itemTopRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  itemName: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: "700",
+    color: UI.brand.primaryText,
+  },
+
+  // ✅ badge do motor
+  badgePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(124,108,255,0.14)",
+    borderWidth: 1,
+    borderColor: "rgba(124,108,255,0.22)",
+    maxWidth: 160,
+  },
+
+  badgePillText: {
+    color: UI.brand.primaryText,
+    fontSize: 11,
+    fontWeight: "800",
+  },
 
   itemMeta: {
     marginTop: 2,
     fontSize: 12,
     color: UI.colors.black45,
     fontWeight: "600",
+  },
+
+  // ✅ linha de preços (unitário)
+  pricesRow: {
+    marginTop: 8,
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 8,
+  },
+
+  unitFinalPrice: {
+    fontSize: 14,
+    fontWeight: "900",
+    color: UI.brand.primaryText,
+  },
+
+  unitBasePrice: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: UI.colors.black45,
+    textDecorationLine: "line-through",
   },
 
   itemBottomRow: {
@@ -678,7 +768,7 @@ const S = StyleSheet.create({
 
   itemQty: { fontSize: 12, color: UI.colors.black45, fontWeight: "700" },
 
-  itemPrice: { fontSize: 13, fontWeight: "800", color: UI.brand.primaryText },
+  itemPrice: { fontSize: 13, fontWeight: "900", color: UI.brand.primaryText },
 
   footer: {
     position: "absolute",
@@ -701,9 +791,8 @@ const S = StyleSheet.create({
 
   totalLabel: { fontSize: 13, color: UI.colors.black45, fontWeight: "800" },
 
-  totalValue: { fontSize: 16, color: UI.brand.primaryText, fontWeight: "800" },
+  totalValue: { fontSize: 16, color: UI.brand.primaryText, fontWeight: "900" },
 
-  // ❌ mantido (usado em "Tentar novamente" e nos cards concluído/cancelado)
   primaryBtn: {
     height: 48,
     borderRadius: 16,
@@ -732,7 +821,6 @@ const S = StyleSheet.create({
     fontSize: 14,
   },
 
-  // ✅ padrão do botão "Ver todos os produtos" (home)
   allProductsBtn: {
     height: 44,
     borderRadius: 999,

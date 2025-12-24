@@ -22,10 +22,24 @@ import { HomeSkeleton } from "../../../src/components/loading/HomeSkeleton";
 
 const STICKY_ROW_H = 74;
 
+type ProductBadge =
+  | { type: "BIRTHDAY"; label: string }
+  | { type: "LEVEL"; label: string }
+  | null;
+
 type Product = {
   id: string;
   name: string;
+
+  // ✅ compat: preço final continua existindo (mas UI usa base/final)
   price: number;
+
+  // ✅ novo motor de preço
+  basePrice?: number;
+  finalPrice?: number;
+  hasDiscount?: boolean;
+  badge?: ProductBadge;
+
   imageUrl: string | null;
   unitName: string;
   isOutOfStock: boolean;
@@ -56,7 +70,6 @@ type NextAppt = {
   cancellationFeeNotice?: string | null;
 };
 
-// ✅ compatível com endpoint antigo (pending) e novo (pendings)
 type PendingReviewResponse = {
   ok: boolean;
   pending?: null | {
@@ -75,15 +88,25 @@ type PendingReviewResponse = {
   error?: string;
 };
 
-function formatBRL(value: number) {
+// -----------------------------
+// 💰 dinheiro: sem “,00” quando inteiro
+// -----------------------------
+function formatMoneySmartBRL(value: number) {
+  const v = Number(value ?? 0);
+  const safe = Number.isFinite(v) ? v : 0;
+
+  const isInt = Math.abs(safe - Math.round(safe)) < 1e-9;
+
   try {
-    return new Intl.NumberFormat("pt-BR", {
+    return safe.toLocaleString("pt-BR", {
       style: "currency",
       currency: "BRL",
-    }).format(value);
+      minimumFractionDigits: isInt ? 0 : 2,
+      maximumFractionDigits: isInt ? 0 : 2,
+    });
   } catch {
-    const v = Number.isFinite(value) ? value : 0;
-    return `R$ ${v.toFixed(2).replace(".", ",")}`;
+    const fixed = isInt ? String(Math.round(safe)) : safe.toFixed(2);
+    return `R$ ${fixed.replace(".", ",")}`;
   }
 }
 
@@ -96,6 +119,86 @@ function sumQtyFromOrder(order: any): number {
   return total > 0 ? total : 0;
 }
 
+function safeNumber(v: any, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+// =======================
+// 🎨 NÍVEL DO CLIENTE (cores copiadas do Admin)
+// =======================
+type CustomerLevelKey = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
+
+function normalizeCustomerLevelKey(user: any): CustomerLevelKey | null {
+  const raw = String(
+    user?.customerLevel?.key ??
+      user?.customerLevel?.level ??
+      user?.customerLevel?.value ??
+      user?.customerLevel ??
+      user?.level?.key ??
+      user?.level?.value ??
+      user?.level ??
+      user?.levelKey ??
+      user?.levelEnum ??
+      "",
+  ).trim();
+
+  if (
+    raw === "BRONZE" ||
+    raw === "PRATA" ||
+    raw === "OURO" ||
+    raw === "DIAMANTE"
+  )
+    return raw;
+
+  const label = String(
+    user?.customerLevel?.label ??
+      user?.level?.label ??
+      user?.levelLabel ??
+      user?.tier?.label ??
+      user?.tier ??
+      "",
+  )
+    .trim()
+    .toLowerCase();
+
+  if (label.includes("bronze")) return "BRONZE";
+  if (label.includes("prata")) return "PRATA";
+  if (label.includes("ouro")) return "OURO";
+  if (label.includes("diam")) return "DIAMANTE";
+
+  return null;
+}
+
+function levelChipColors(level: CustomerLevelKey) {
+  switch (level) {
+    case "BRONZE":
+      return {
+        bg: "rgba(245, 158, 11, 0.10)", // amber-500/10
+        border: "rgba(245, 158, 11, 0.30)", // amber-500/30
+        text: "rgb(180, 83, 9)", // amber-700
+      };
+    case "PRATA":
+      return {
+        bg: "rgba(100, 116, 139, 0.10)", // slate-500/10
+        border: "rgba(100, 116, 139, 0.30)", // slate-500/30
+        text: "rgb(226, 232, 240)", // slate-200
+      };
+    case "OURO":
+      return {
+        bg: "rgba(234, 179, 8, 0.10)", // yellow-500/10
+        border: "rgba(234, 179, 8, 0.30)", // yellow-500/30
+        text: "rgb(161, 98, 7)", // yellow-700 (aprox)
+      };
+    case "DIAMANTE":
+      return {
+        bg: "rgba(14, 165, 233, 0.10)", // sky-500/10
+        border: "rgba(14, 165, 233, 0.30)", // sky-500/30
+        text: "rgb(3, 105, 161)", // sky-700
+      };
+  }
+}
+
 const ProductCard = memo(function ProductCard({
   item,
   showDivider,
@@ -105,11 +208,45 @@ const ProductCard = memo(function ProductCard({
   showDivider: boolean;
   onPressDetails: (id: string) => void;
 }) {
-  const priceLabel = useMemo(() => formatBRL(item.price), [item.price]);
-
   const goDetails = useCallback(() => {
     onPressDetails(item.id);
   }, [item.id, onPressDetails]);
+
+  // ✅ decide quais valores usar
+  const pricing = useMemo(() => {
+    const base = safeNumber(item.basePrice, NaN);
+    const final = safeNumber(item.finalPrice, NaN);
+
+    const hasBase = Number.isFinite(base);
+    const hasFinal = Number.isFinite(final);
+
+    // se vier do endpoint: usa (base/final)
+    if (hasBase && hasFinal) {
+      const hasDiscount = !!item.hasDiscount && final < base;
+      return {
+        base,
+        final,
+        hasDiscount,
+      };
+    }
+
+    // fallback: só "price"
+    const p = safeNumber(item.price, 0);
+    return {
+      base: p,
+      final: p,
+      hasDiscount: false,
+    };
+  }, [item.basePrice, item.finalPrice, item.hasDiscount, item.price]);
+
+  const baseLabel = useMemo(
+    () => formatMoneySmartBRL(pricing.base),
+    [pricing.base],
+  );
+  const finalLabel = useMemo(
+    () => formatMoneySmartBRL(pricing.final),
+    [pricing.final],
+  );
 
   return (
     <Pressable onPress={goDetails} style={S.productCard} android_ripple={{}}>
@@ -122,6 +259,20 @@ const ProductCard = memo(function ProductCard({
           }}
           style={S.productImage}
         />
+
+        {/* 🎯 badge (aniversário / nível) */}
+        {item.badge?.label ? (
+          <View
+            style={[
+              S.badgePill,
+              item.badge.type === "BIRTHDAY" ? S.badgePillBirthday : null,
+            ]}
+          >
+            <Text style={S.badgePillText} numberOfLines={1}>
+              {item.badge.label}
+            </Text>
+          </View>
+        ) : null}
 
         {item.isOutOfStock ? (
           <View style={S.outOfStockPill}>
@@ -139,7 +290,21 @@ const ProductCard = memo(function ProductCard({
           {item.unitName}
         </Text>
 
-        <Text style={S.productPrice}>{priceLabel}</Text>
+        {/* ✅ regra do preço (riscado + novo) */}
+        {pricing.hasDiscount ? (
+          <View style={S.priceStack}>
+            <Text style={S.basePriceStriked} numberOfLines={1}>
+              {baseLabel}
+            </Text>
+            <Text style={S.finalPrice} numberOfLines={1}>
+              {finalLabel}
+            </Text>
+          </View>
+        ) : (
+          <Text style={S.productPrice} numberOfLines={1}>
+            {finalLabel}
+          </Text>
+        )}
 
         <View style={S.productFooter}>
           <Pressable onPress={goDetails} style={S.detailsBtn} hitSlop={8}>
@@ -205,20 +370,67 @@ export default function Home() {
     [user?.image],
   );
 
+  // ✅ nível do cliente (label curta)
+  const userLevelLabel = useMemo(() => {
+    const raw =
+      (user as any)?.level?.label ??
+      (user as any)?.levelLabel ??
+      (user as any)?.level ??
+      (user as any)?.customerLevel?.label ??
+      (user as any)?.customerLevel ??
+      (user as any)?.tier?.label ??
+      (user as any)?.tier ??
+      null;
+
+    const s = String(raw ?? "").trim();
+    if (!s) return null;
+
+    // corta pra não virar textão em cima do header
+    return s.length > 12 ? `${s.slice(0, 12)}…` : s;
+  }, [user]);
+
+  // ✅ ícone por nível (mantém o mesmo que você já tinha)
+  const userLevelIcon = useMemo(() => {
+    const l = String(userLevelLabel ?? "").toLowerCase();
+    if (l.includes("diam")) return "diamond";
+    if (l.includes("ouro")) return "trophy";
+    if (l.includes("prata")) return "certificate";
+    return "star";
+  }, [userLevelLabel]);
+
+  // ✅ cores copiadas do Admin (bg/text/border)
+  const userLevelKey = useMemo(() => normalizeCustomerLevelKey(user), [user]);
+
+  const userLevelStyle = useMemo(() => {
+    if (!userLevelKey) return null;
+    const c = levelChipColors(userLevelKey);
+
+    return {
+      container: {
+        backgroundColor: c.bg,
+        borderColor: c.border,
+      },
+      text: {
+        color: c.text,
+      },
+      icon: {
+        color: c.text,
+      },
+    } as const;
+  }, [userLevelKey]);
+
   const [next, setNext] = useState<NextAppt | null>(null);
   const [nextLoading, setNextLoading] = useState(true);
 
   const [historyPreview, setHistoryPreview] = useState<HistoryItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
 
-  // ✅ sacolinha pendente + badge count
   const [pendingCartOrderId, setPendingCartOrderId] = useState<string | null>(
     null,
   );
   const [pendingCartCount, setPendingCartCount] = useState<number>(0);
   const cartFetchingRef = useRef(false);
 
-  // ✅ badge no sino (quantas avaliações pendentes)
   const [pendingReviewCount, setPendingReviewCount] = useState<number>(0);
   const reviewFetchingRef = useRef(false);
 
@@ -226,7 +438,6 @@ export default function Home() {
   const fetchingHistoryRef = useRef(false);
   const fetchingProductsRef = useRef(false);
 
-  // ✅ gate da tela (só libera quando TODOS terminarem ao menos 1 vez)
   const didNextRef = useRef(false);
   const didHistoryRef = useRef(false);
   const didProductsRef = useRef(false);
@@ -309,14 +520,40 @@ export default function Home() {
 
       const mapped: Product[] = rawList
         .slice(0, 4)
-        .map((p: any) => ({
-          id: String(p?.id ?? ""),
-          name: String(p?.name ?? "Produto"),
-          price: Number(p?.price ?? 0),
-          imageUrl: typeof p?.imageUrl === "string" ? p.imageUrl : null,
-          unitName: String(p?.unitName ?? "—"),
-          isOutOfStock: !!p?.isOutOfStock,
-        }))
+        .map((p: any) => {
+          const basePrice = safeNumber(p?.basePrice, NaN);
+          const finalPrice = safeNumber(p?.finalPrice, NaN);
+          const hasDiscount =
+            !!p?.hasDiscount &&
+            Number.isFinite(basePrice) &&
+            Number.isFinite(finalPrice) &&
+            finalPrice < basePrice;
+
+          const badge: ProductBadge =
+            p?.badge && typeof p.badge === "object"
+              ? {
+                  type: p.badge.type === "BIRTHDAY" ? "BIRTHDAY" : "LEVEL",
+                  label: String(p.badge.label ?? "").trim(),
+                }
+              : null;
+
+          const final = Number.isFinite(finalPrice)
+            ? finalPrice
+            : safeNumber(p?.price, 0);
+
+          return {
+            id: String(p?.id ?? ""),
+            name: String(p?.name ?? "Produto"),
+            price: final,
+            basePrice: Number.isFinite(basePrice) ? basePrice : undefined,
+            finalPrice: Number.isFinite(finalPrice) ? finalPrice : undefined,
+            hasDiscount,
+            badge: badge?.label ? badge : null,
+            imageUrl: typeof p?.imageUrl === "string" ? p.imageUrl : null,
+            unitName: String(p?.unitName ?? "—"),
+            isOutOfStock: !!p?.isOutOfStock,
+          };
+        })
         .filter((p) => !!p.id);
 
       setProducts(mapped);
@@ -330,7 +567,6 @@ export default function Home() {
     }
   }, [recomputeReady]);
 
-  // ✅ pega sacolinha + soma quantidades (badge)
   const fetchPendingCart = useCallback(async () => {
     if (cartFetchingRef.current) return { id: null as string | null, count: 0 };
     cartFetchingRef.current = true;
@@ -360,7 +596,6 @@ export default function Home() {
     }
   }, [recomputeReady]);
 
-  // ✅ badge do sino: total de avaliações pendentes (suporta pending e pendings)
   const fetchPendingReviewCount = useCallback(async () => {
     if (reviewFetchingRef.current) return 0;
     reviewFetchingRef.current = true;
@@ -760,6 +995,27 @@ export default function Home() {
             </View>
 
             <View style={S.topRightRow}>
+              {/* ⭐ Nível do cliente (à esquerda da sacolinha) */}
+              {userLevelLabel ? (
+                <Pressable
+                  style={[S.iconBtn, S.levelBtn, userLevelStyle?.container]}
+                  onPress={() => {}}
+                  hitSlop={8}
+                >
+                  <FontAwesome
+                    name={userLevelIcon as any}
+                    size={18}
+                    color={userLevelStyle?.icon?.color ?? UI.colors.white}
+                  />
+                  <Text
+                    style={[S.levelMiniText, userLevelStyle?.text]}
+                    numberOfLines={1}
+                  >
+                    {userLevelLabel}
+                  </Text>
+                </Pressable>
+              ) : null}
+
               <Pressable style={S.iconBtn} onPress={goCart}>
                 <FontAwesome
                   name="shopping-bag"
@@ -776,7 +1032,6 @@ export default function Home() {
                 ) : null}
               </Pressable>
 
-              {/* ✅ sino com badge IGUAL ao da sacolinha */}
               <Pressable style={S.iconBtn} onPress={goNotifications}>
                 <FontAwesome name="bell-o" size={20} color={UI.colors.white} />
 
@@ -857,7 +1112,20 @@ const S = StyleSheet.create({
     borderColor: UI.colors.cardBorder,
   },
 
-  // ✅ badge igual para sacolinha e sino
+  // ⭐ botão de nível (mesma base do iconBtn, só adiciona mini label)
+  levelBtn: {
+    paddingTop: 7,
+  },
+  levelMiniText: {
+    marginTop: 2,
+    fontSize: 9.5,
+    fontWeight: "900",
+    color: UI.colors.white,
+    includeFontPadding: false,
+    textAlign: "center",
+    maxWidth: 38,
+  },
+
   badge: {
     position: "absolute",
     top: -6,
@@ -1017,6 +1285,32 @@ const S = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.05)",
   },
 
+  // 🎂 / ⭐
+  badgePill: {
+    position: "absolute",
+    left: 10,
+    top: 10,
+    maxWidth: 175,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "rgba(20,20,20,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
+  },
+
+  badgePillBirthday: {
+    backgroundColor: "rgba(124,108,255,0.95)",
+    borderColor: "rgba(255,255,255,0.30)",
+  },
+
+  badgePillText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+  },
+
   outOfStockPill: {
     position: "absolute",
     right: 10,
@@ -1059,6 +1353,25 @@ const S = StyleSheet.create({
     fontWeight: "700",
     color: UI.brand.primaryText,
     marginTop: 6,
+  },
+
+  // ✅ stack do preço quando tem desconto
+  priceStack: {
+    marginTop: 6,
+    gap: 2,
+  },
+
+  basePriceStriked: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "rgba(0,0,0,0.48)",
+    textDecorationLine: "line-through",
+  },
+
+  finalPrice: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: UI.brand.primaryText,
   },
 
   productFooter: {
