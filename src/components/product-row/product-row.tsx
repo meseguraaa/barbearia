@@ -62,25 +62,26 @@ export function ProductRow({ product }: ProductRowProps) {
   };
 
   const displayName = truncate(product.name);
-  const displayDescription = truncate(product.description);
-
   const deadlineText = formatDeadline(product.pickupDeadlineDays);
 
-  // ✅ NOVO (compatível): flags opcionais vindas do server (quando você atualizar o page.tsx)
-  // - birthdayBenefitEnabled: boolean
-  // - hasLevelPrices: boolean (true se existir qualquer ProductPriceByLevel)
+  // flags opcionais
   const birthdayBenefitEnabled = Boolean(
     (product as any).birthdayBenefitEnabled,
   );
   const hasLevelPrices = Boolean((product as any).hasLevelPrices);
 
+  // ✅ destaque
+  const isFeatured = Boolean((product as any).isFeatured);
+
+  const hasAnyBadge = isFeatured || birthdayBenefitEnabled || hasLevelPrices;
+
   return (
     <tr className="border-t border-border-primary">
       {/* NOME + FOTO */}
       <td className="px-4 py-3">
-        <div className="flex items-center gap-3">
-          {/* Imagem sempre quadrada com cover */}
-          <div className="h-10 w-10 overflow-hidden rounded-lg border border-border-primary bg-background-secondary">
+        <div className="flex items-center gap-4">
+          {/* Imagem */}
+          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-border-primary bg-background-secondary">
             {product.imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -95,25 +96,28 @@ export function ProductRow({ product }: ProductRowProps) {
             )}
           </div>
 
-          {/* Título + descrição truncados */}
-          <div className="flex min-w-0 flex-col gap-1">
-            <span className="font-medium text-content-primary">
+          {/* Nome + badges */}
+          <div className="flex min-w-0 flex-col gap-2">
+            <span className="font-medium text-content-primary leading-tight">
               {displayName}
             </span>
-            <span className="text-[11px] text-content-secondary">
-              {displayDescription}
-            </span>
 
-            {/* ✅ Badges de “venda” (não quebram nada se flags não vierem ainda) */}
-            {(birthdayBenefitEnabled || hasLevelPrices) && (
-              <div className="flex flex-wrap gap-1">
+            {hasAnyBadge && (
+              <div className="flex flex-wrap items-center gap-2">
+                {isFeatured && (
+                  <Badge title="Este produto aparece no carrossel de Destaques do app.">
+                    ⭐ Destaque
+                  </Badge>
+                )}
+
                 {hasLevelPrices && (
                   <Badge title="Este produto tem preços diferentes por nível de cliente.">
                     💎 Níveis
                   </Badge>
                 )}
+
                 {birthdayBenefitEnabled && (
-                  <Badge title="Este produto tem benefício de aniversário (3 dias antes + dia + 3 dias depois).">
+                  <Badge title="Este produto tem benefício de aniversário.">
                     🎂 Aniversário
                   </Badge>
                 )}
@@ -123,9 +127,9 @@ export function ProductRow({ product }: ProductRowProps) {
         </div>
       </td>
 
-      {/* ✅ UNIDADE */}
+      {/* UNIDADE */}
       <td className="px-4 py-3">
-        <div className="flex flex-col">
+        <div className="flex flex-col gap-1">
           <span className="text-content-primary">
             {product.unitName || "—"}
           </span>
@@ -136,24 +140,26 @@ export function ProductRow({ product }: ProductRowProps) {
       </td>
 
       {/* PREÇO */}
-      <td className="px-4 py-3">R$ {Number(product.price).toFixed(2)}</td>
+      <td className="px-4 py-3 whitespace-nowrap">
+        R$ {Number(product.price).toFixed(2)}
+      </td>
 
-      {/* COMISSÃO DO BARBEIRO */}
-      <td className="px-4 py-3">
+      {/* COMISSÃO */}
+      <td className="px-4 py-3 whitespace-nowrap">
         {product.barberPercentage !== null
           ? `${product.barberPercentage}%`
           : "-"}
       </td>
 
-      {/* CATEGORIA / FINALIDADE */}
+      {/* CATEGORIA */}
       <td className="px-4 py-3">{product.category || "—"}</td>
 
       {/* ESTOQUE */}
-      <td className="px-4 py-3">
-        {product.stockQuantity} unidade{product.stockQuantity === 1 ? "" : "s"}
+      <td className="px-4 py-3 whitespace-nowrap">
+        {product.stockQuantity} un.
       </td>
 
-      {/* ✅ PRAZO */}
+      {/* PRAZO */}
       <td className="px-4 py-3">
         <span className="text-content-primary">{deadlineText}</span>
         <span className="block text-[11px] text-content-secondary">
@@ -168,7 +174,7 @@ export function ProductRow({ product }: ProductRowProps) {
 
       {/* AÇÕES */}
       <td className="px-4 py-3">
-        <div className="flex items-center justify-end gap-2">
+        <div className="flex items-center justify-end gap-3">
           <ProductEditDialog product={productForDialog} />
 
           <form action={toggleProductStatusAction.bind(null, product.id)}>

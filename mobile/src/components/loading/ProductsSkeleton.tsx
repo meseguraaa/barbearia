@@ -60,7 +60,9 @@ function ProductsSkeletonBase({ active = true }: Props) {
             </View>
           </View>
 
+          {/* ✅ Products real: Level + Bag + Bell (aniversário NÃO deve aparecer no skeleton) */}
           <View style={S.topRightRow}>
+            <ShimmerBlock width={42} height={42} radius={21} active={active} />
             <ShimmerBlock width={42} height={42} radius={21} active={active} />
             <ShimmerBlock width={42} height={42} radius={21} active={active} />
           </View>
@@ -97,33 +99,8 @@ function ProductsSkeletonBase({ active = true }: Props) {
                 />
               </View>
 
-              {/* Chips */}
-              <View style={S.chipsRow}>
-                <ShimmerBlock
-                  width={70}
-                  height={36}
-                  radius={999}
-                  active={active}
-                />
-                <ShimmerBlock
-                  width={92}
-                  height={36}
-                  radius={999}
-                  active={active}
-                />
-                <ShimmerBlock
-                  width={82}
-                  height={36}
-                  radius={999}
-                  active={active}
-                />
-                <ShimmerBlock
-                  width={104}
-                  height={36}
-                  radius={999}
-                  active={active}
-                />
-              </View>
+              {/* ✅ chips de categoria NÃO devem aparecer no carregamento */}
+              {/* (removido) */}
             </View>
 
             {/* Hero card */}
@@ -403,10 +380,9 @@ const S = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginBottom: 14,
+    // ✅ como removemos os chips, não precisamos de marginBottom grande aqui
+    marginBottom: 0,
   },
-
-  chipsRow: { flexDirection: "row", gap: 10 },
 
   heroCard: {
     marginTop: 14,

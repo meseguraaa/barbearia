@@ -56,7 +56,9 @@ function HomeSkeletonBase({ active = true }: Props) {
           </View>
 
           {/* Botões direita */}
+          {/* ✅ Home atual: Level + Bag + Bell (aniversário NÃO deve aparecer no skeleton) */}
           <View style={S.topRightRow}>
+            <ShimmerBlock width={42} height={42} radius={21} active={active} />
             <ShimmerBlock width={42} height={42} radius={21} active={active} />
             <ShimmerBlock width={42} height={42} radius={21} active={active} />
           </View>
@@ -138,7 +140,7 @@ function HomeSkeletonBase({ active = true }: Props) {
               active={active}
             />
 
-            {/* Cards Produtos (4) */}
+            {/* Cards Produtos (2 visíveis no skeleton, como antes) */}
             <View style={S.productsRow}>
               <View style={S.productCard}>
                 <ShimmerBlock

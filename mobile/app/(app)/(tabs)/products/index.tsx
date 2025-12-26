@@ -10,6 +10,9 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Dimensions,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -65,6 +68,30 @@ type Product = {
   image: string;
   isOutOfStock: boolean;
   category: string | null;
+};
+
+type FeaturedApiProduct = {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  price: number;
+  basePrice?: number;
+  finalPrice?: number;
+  hasDiscount?: boolean;
+  badge?: ProductBadge;
+  unitName?: string;
+};
+
+type FeaturedProduct = {
+  id: string;
+  title: string;
+  image: string | null;
+  price: number;
+  basePrice?: number;
+  finalPrice?: number;
+  hasDiscount?: boolean;
+  badge?: ProductBadge;
+  unitName?: string;
 };
 
 type PendingReviewResponse = {
@@ -196,6 +223,286 @@ function levelChipColors(level: CustomerLevelKey) {
   }
 }
 
+type FeaturedCarouselProps = {
+  items: FeaturedProduct[];
+  loading: boolean;
+  onOpen: (id: string) => void;
+};
+
+const FeaturedCarousel = memo(function FeaturedCarousel({
+  items,
+  loading,
+  onOpen,
+}: FeaturedCarouselProps) {
+  const listRef = useRef<FlatList<FeaturedProduct> | null>(null);
+  const intervalRef = useRef<any>(null);
+
+  const screenW = Dimensions.get("window").width;
+  const gap = 12;
+  const cardWidth = Math.max(280, screenW - UI.spacing.screenX * 2);
+  const snap = cardWidth + gap;
+
+  const count = items.length;
+
+  // ✅ 3 blocos pra loop invisível
+  const loopData = useMemo(() => {
+    if (count < 2) return items;
+    return ([] as FeaturedProduct[]).concat(items, items, items);
+  }, [count, items]);
+
+  // Começa no “meio”
+  const startIndex = useMemo(() => (count < 2 ? 0 : count), [count]);
+  const currentIndexRef = useRef(startIndex);
+
+  const setListRef = useCallback((r: FlatList<FeaturedProduct> | null) => {
+    listRef.current = r;
+  }, []);
+
+  const stopAuto = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+  }, []);
+
+  const scrollToIndexNoAnim = useCallback(
+    (idx: number) => {
+      try {
+        listRef.current?.scrollToOffset({
+          offset: idx * snap,
+          animated: false,
+        });
+      } catch {}
+    },
+    [snap],
+  );
+
+  const startAuto = useCallback(() => {
+    stopAuto();
+    if (count < 2) return;
+
+    intervalRef.current = setInterval(() => {
+      const next = currentIndexRef.current + 1;
+      currentIndexRef.current = next;
+
+      try {
+        listRef.current?.scrollToOffset({
+          offset: next * snap,
+          animated: true,
+        });
+      } catch {}
+    }, 5000);
+  }, [count, snap, stopAuto]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (count >= 2) {
+        currentIndexRef.current = startIndex;
+        // garante que já nasce no meio sem “salto”
+        requestAnimationFrame(() => scrollToIndexNoAnim(startIndex));
+      }
+      startAuto();
+      return () => stopAuto();
+    }, [count, scrollToIndexNoAnim, startAuto, stopAuto, startIndex]),
+  );
+
+  const normalizeLoopIndex = useCallback(
+    (idx: number) => {
+      if (count < 2) return idx;
+
+      // Se caiu no 1º bloco, empurra pro bloco do meio (mesmo item)
+      if (idx < count) return idx + count;
+
+      // Se caiu no 3º bloco, puxa pro bloco do meio (mesmo item)
+      if (idx >= count * 2) return idx - count;
+
+      return idx; // já tá no bloco do meio
+    },
+    [count],
+  );
+
+  const onScrollEnd = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (count < 2) return;
+
+      const x = e.nativeEvent.contentOffset.x;
+      const idx = Math.round(x / snap);
+
+      // registra onde parou
+      currentIndexRef.current = idx;
+
+      // ✅ reset invisível pro bloco do meio
+      const normalized = normalizeLoopIndex(idx);
+      if (normalized !== idx) {
+        currentIndexRef.current = normalized;
+
+        // importante: faz o reset no próximo frame pra não “piscar”
+        requestAnimationFrame(() => scrollToIndexNoAnim(normalized));
+      }
+
+      // reinicia o timer “sem brigar com o dedo”
+      startAuto();
+    },
+    [count, normalizeLoopIndex, scrollToIndexNoAnim, snap, startAuto],
+  );
+
+  const renderFeatured = useCallback(
+    ({ item }: ListRenderItemInfo<FeaturedProduct>) => {
+      const base = safeNumber(item.basePrice, NaN);
+      const final = safeNumber(item.finalPrice, NaN);
+
+      const pricing = (() => {
+        if (Number.isFinite(base) && Number.isFinite(final)) {
+          const hasDiscount = !!item.hasDiscount && final < base;
+          return { base, final, hasDiscount };
+        }
+        const p = safeNumber(item.price, 0);
+        return { base: p, final: p, hasDiscount: false };
+      })();
+
+      const baseLabel = formatMoneySmartBRL(pricing.base);
+      const finalLabel = formatMoneySmartBRL(pricing.final);
+
+      return (
+        <Pressable
+          onPress={() => onOpen(item.id)}
+          style={[S.featureCard, { width: cardWidth }]}
+        >
+          <View style={S.featureRow}>
+            <View style={S.featureLeft}>
+              <View style={S.featureTopLine}>
+                <Text style={S.featureKicker}>Destaques</Text>
+
+                {/* ✅ ANIVERSÁRIO NÃO APARECE AQUI (só no topo) */}
+                {item.badge?.label ? (
+                  <View style={[S.featureBadge]}>
+                    <Text style={S.featureBadgeText} numberOfLines={1}>
+                      {item.badge.label}
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
+
+              <Text style={S.featureTitle} numberOfLines={2}>
+                {item.title}
+              </Text>
+
+              {pricing.hasDiscount ? (
+                <View style={{ marginTop: 8 }}>
+                  <Text style={S.featureOldPrice} numberOfLines={1}>
+                    {baseLabel}
+                  </Text>
+                  <Text style={S.featurePrice} numberOfLines={1}>
+                    {finalLabel}
+                  </Text>
+                </View>
+              ) : (
+                <Text
+                  style={[S.featurePrice, { marginTop: 10 }]}
+                  numberOfLines={1}
+                >
+                  {finalLabel}
+                </Text>
+              )}
+
+              {item.unitName ? (
+                <Text style={S.featureUnit} numberOfLines={1}>
+                  {item.unitName}
+                </Text>
+              ) : null}
+
+              <View style={S.featureBtn}>
+                <Text style={S.featureBtnText}>Ver produto</Text>
+                <FontAwesome
+                  name="arrow-right"
+                  size={14}
+                  color={UI.colors.white}
+                />
+              </View>
+            </View>
+
+            <View style={S.featureThumb}>
+              {item.image ? (
+                <Image
+                  source={{ uri: item.image }}
+                  style={S.featureThumbImg}
+                  fadeDuration={0}
+                />
+              ) : (
+                <View style={S.featureThumbFallback}>
+                  <FontAwesome
+                    name="shopping-bag"
+                    size={26}
+                    color={UI.colors.white}
+                  />
+                </View>
+              )}
+            </View>
+          </View>
+        </Pressable>
+      );
+    },
+    [cardWidth, onOpen],
+  );
+
+  if (!loading && count === 0) return null;
+
+  if (loading) {
+    return (
+      <View style={[S.featureCard, S.featureCardLoading]}>
+        <View style={S.featureRow}>
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <View style={S.skelLineSmall} />
+            <View style={S.skelLineBig} />
+            <View style={S.skelLineMid} />
+            <View style={S.skelBtn} />
+          </View>
+          <View style={S.skelThumb} />
+        </View>
+      </View>
+    );
+  }
+
+  if (count === 1) {
+    return (
+      <View style={{ marginTop: 14 }}>
+        {renderFeatured({ item: items[0], index: 0, separators: null as any })}
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ marginTop: 14 }}>
+      <FlatList
+        ref={setListRef}
+        data={loopData}
+        // ✅ key por índice virtual: estável pro bloco (não “sentinela”)
+        keyExtractor={(_, idx) => `featured_loop_${idx}`}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        renderItem={renderFeatured}
+        contentContainerStyle={S.featureListContent}
+        snapToInterval={snap}
+        decelerationRate="fast"
+        pagingEnabled={false}
+        disableIntervalMomentum={false}
+        onMomentumScrollEnd={onScrollEnd}
+        getItemLayout={(_, index) => ({
+          length: snap,
+          offset: snap * index,
+          index,
+        })}
+        initialScrollIndex={startIndex}
+        // ✅ IMPORTANTÍSSIMO: isso aqui costuma causar o “pisca”
+        removeClippedSubviews={false}
+        initialNumToRender={5}
+        maxToRenderPerBatch={6}
+        windowSize={7}
+      />
+    </View>
+  );
+});
+
 type ProductsHeaderProps = {
   topBounceHeight: number;
   topOffset: number;
@@ -206,6 +513,10 @@ type ProductsHeaderProps = {
   onChangeSearch: (v: string) => void;
   loading: boolean;
   totalCount: number;
+
+  featured: FeaturedProduct[];
+  featuredLoading: boolean;
+  onOpenFeatured: (id: string) => void;
 };
 
 const CategoryChip = memo(function CategoryChip({
@@ -250,28 +561,25 @@ const ProductTile = memo(function ProductTile({
     return { base: p, final: p, hasDiscount: false };
   }, [item.basePrice, item.finalPrice, item.hasDiscount, item.price]);
 
-  const baseLabel = useMemo(
-    () => formatMoneySmartBRL(pricing.base),
-    [pricing.base],
-  );
+  const baseLabel = useMemo(() => formatMoneySmartBRL(pricing.base), [pricing]);
   const finalLabel = useMemo(
     () => formatMoneySmartBRL(pricing.final),
-    [pricing.final],
+    [pricing],
   );
 
   return (
     <Pressable style={S.productCard} onPress={() => onOpen(item.id)}>
       <View style={S.productImgWrap}>
-        <Image source={{ uri: item.image }} style={S.productImage} />
+        <Image
+          source={{ uri: item.image }}
+          style={S.productImage}
+          // ✅ também ajuda a não “piscarem” imagens na grid quando recicla célula
+          fadeDuration={0}
+        />
 
-        {/* 🎂 / ⭐ */}
+        {/* ✅ ANIVERSÁRIO NÃO APARECE AQUI (só no topo). Mantém LEVEL se vier */}
         {item.badge?.label ? (
-          <View
-            style={[
-              S.badgePill,
-              item.badge.type === "BIRTHDAY" ? S.badgePillBirthday : null,
-            ]}
-          >
+          <View style={[S.badgePill]}>
             <Text style={S.badgePillText} numberOfLines={1}>
               {item.badge.label}
             </Text>
@@ -289,7 +597,6 @@ const ProductTile = memo(function ProductTile({
         {item.name}
       </Text>
 
-      {/* ✅ regra do preço */}
       {pricing.hasDiscount ? (
         <View style={S.priceStack}>
           <Text style={S.productOldPriceBig} numberOfLines={1}>
@@ -355,6 +662,10 @@ const ProductsHeader = memo(function ProductsHeader({
   onChangeSearch,
   loading,
   totalCount,
+
+  featured,
+  featuredLoading,
+  onOpenFeatured,
 }: ProductsHeaderProps) {
   return (
     <View>
@@ -411,34 +722,11 @@ const ProductsHeader = memo(function ProductsHeader({
             />
           </View>
 
-          <View style={S.heroCard}>
-            <View style={S.heroRow}>
-              <View style={S.heroLeft}>
-                <Text style={S.heroKicker}>Destaque da semana</Text>
-                <Text style={S.heroTitle}>Kit Barba Completo</Text>
-                <Text style={S.heroSub}>
-                  Óleo + balm + pente. Tudo no jeito pra ficar alinhado.
-                </Text>
-
-                <Pressable style={S.heroBtn}>
-                  <Text style={S.heroBtnText}>Ver kit</Text>
-                  <FontAwesome
-                    name="arrow-right"
-                    size={14}
-                    color={UI.colors.white}
-                  />
-                </Pressable>
-              </View>
-
-              <View style={S.heroThumb}>
-                <FontAwesome
-                  name="shopping-bag"
-                  size={26}
-                  color={UI.colors.white}
-                />
-              </View>
-            </View>
-          </View>
+          <FeaturedCarousel
+            items={featured}
+            loading={featuredLoading}
+            onOpen={onOpenFeatured}
+          />
         </View>
       </View>
 
@@ -496,7 +784,6 @@ export default function Products() {
     [user?.image],
   );
 
-  // ✅ nível do cliente (label curta)
   const userLevelLabel = useMemo(() => {
     const raw =
       (user as any)?.level?.label ??
@@ -533,12 +820,8 @@ export default function Products() {
         backgroundColor: c.bg,
         borderColor: c.border,
       },
-      text: {
-        color: c.text,
-      },
-      icon: {
-        color: c.text,
-      },
+      text: { color: c.text },
+      icon: { color: c.text },
     } as const;
   }, [userLevelKey]);
 
@@ -546,6 +829,9 @@ export default function Products() {
   const [activeCategory, setActiveCategory] = useState<string>("all");
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [featured, setFeatured] = useState<FeaturedProduct[]>([]);
+  const [featuredLoading, setFeaturedLoading] = useState(true);
 
   const [reservingId, setReservingId] = useState<string | null>(null);
 
@@ -559,9 +845,15 @@ export default function Products() {
   >(null);
   const [pendingReviewCount, setPendingReviewCount] = useState<number>(0);
 
+  // ✅ aniversário (apenas 1x no topo)
+  const [birthdayBadgeLabel, setBirthdayBadgeLabel] = useState<string | null>(
+    null,
+  );
+
   const fetchingRef = useRef(false);
   const cartFetchingRef = useRef(false);
   const reviewFetchingRef = useRef(false);
+  const featuredFetchingRef = useRef(false);
 
   const didProductsRef = useRef(false);
   const didCartRef = useRef(false);
@@ -766,6 +1058,18 @@ export default function Products() {
         if (all.length >= MAX) break;
       }
 
+      // ✅ pega 1 label de aniversário (se vier), mas NÃO mostra nos cards
+      const birthdayFromApi = all.find(
+        (p: any) =>
+          p?.badge?.type === "BIRTHDAY" && String(p?.badge?.label ?? ""),
+      ) as any;
+
+      const birthdayLabel = birthdayFromApi?.badge?.label
+        ? String(birthdayFromApi.badge.label).trim()
+        : null;
+
+      setBirthdayBadgeLabel(birthdayLabel || null);
+
       const mapped: Product[] = all
         .map((p) => {
           const image: string =
@@ -781,7 +1085,7 @@ export default function Products() {
             Number.isFinite(finalPrice) &&
             finalPrice < basePrice;
 
-          const badge: ProductBadge =
+          const rawBadge: ProductBadge =
             (p as any)?.badge && typeof (p as any).badge === "object"
               ? {
                   type:
@@ -789,6 +1093,10 @@ export default function Products() {
                   label: String((p as any).badge.label ?? "").trim(),
                 }
               : null;
+
+          // ✅ regra: BIRTHDAY não vai pro card
+          const badge: ProductBadge =
+            rawBadge?.type === "BIRTHDAY" ? null : rawBadge;
 
           const final = Number.isFinite(finalPrice)
             ? finalPrice
@@ -829,6 +1137,7 @@ export default function Products() {
         "Não foi possível carregar os produtos.";
       Alert.alert("Erro", String(msg));
       setProducts([]);
+      setBirthdayBadgeLabel(null);
     } finally {
       setLoading(false);
       fetchingRef.current = false;
@@ -838,12 +1147,90 @@ export default function Products() {
     }
   }, [activeCategory, recomputeReady]);
 
+  const fetchFeaturedProducts = useCallback(async () => {
+    if (featuredFetchingRef.current) return;
+    featuredFetchingRef.current = true;
+
+    try {
+      setFeaturedLoading(true);
+
+      const res = (await api.get("/api/mobile/products/featured")) as {
+        items?: FeaturedApiProduct[];
+      };
+
+      const list: FeaturedApiProduct[] = Array.isArray(res?.items)
+        ? res.items
+        : [];
+
+      const mapped: FeaturedProduct[] = list
+        .map((p) => {
+          const basePrice = safeNumber((p as any)?.basePrice, NaN);
+          const finalPrice = safeNumber((p as any)?.finalPrice, NaN);
+
+          const hasDiscount =
+            !!(p as any)?.hasDiscount &&
+            Number.isFinite(basePrice) &&
+            Number.isFinite(finalPrice) &&
+            finalPrice < basePrice;
+
+          const rawBadge: ProductBadge =
+            (p as any)?.badge && typeof (p as any).badge === "object"
+              ? {
+                  type:
+                    (p as any).badge.type === "BIRTHDAY" ? "BIRTHDAY" : "LEVEL",
+                  label: String((p as any).badge.label ?? "").trim(),
+                }
+              : null;
+
+          // ✅ regra: BIRTHDAY não vai pro carrossel
+          const badge: ProductBadge =
+            rawBadge?.type === "BIRTHDAY" ? null : rawBadge;
+
+          const final = Number.isFinite(finalPrice)
+            ? finalPrice
+            : safeNumber(p.price, 0);
+
+          return {
+            id: String(p.id),
+            title: String(p.name ?? "Produto"),
+            image: p.imageUrl ? String(p.imageUrl) : null,
+
+            price: final,
+            basePrice: Number.isFinite(basePrice) ? basePrice : undefined,
+            finalPrice: Number.isFinite(finalPrice) ? finalPrice : undefined,
+            hasDiscount,
+            badge: badge?.label ? badge : null,
+
+            unitName: p.unitName ? String(p.unitName) : undefined,
+          };
+        })
+        .filter((p) => !!p.id);
+
+      setFeatured(mapped);
+    } catch (err: any) {
+      console.log(
+        "[products] fetchFeatured error:",
+        err?.data ?? err?.message ?? err,
+      );
+      setFeatured([]);
+    } finally {
+      setFeaturedLoading(false);
+      featuredFetchingRef.current = false;
+    }
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
       fetchAllProducts();
       fetchPendingCart();
       fetchPendingReview();
-    }, [fetchAllProducts, fetchPendingCart, fetchPendingReview]),
+      fetchFeaturedProducts();
+    }, [
+      fetchAllProducts,
+      fetchPendingCart,
+      fetchPendingReview,
+      fetchFeaturedProducts,
+    ]),
   );
 
   const categories = useMemo<Category[]>(() => {
@@ -914,6 +1301,9 @@ export default function Products() {
         onChangeSearch={setSearch}
         loading={loading}
         totalCount={filteredProducts.length}
+        featured={featured}
+        featuredLoading={featuredLoading}
+        onOpenFeatured={openProduct}
       />
     ),
     [
@@ -925,8 +1315,18 @@ export default function Products() {
       topBounceHeight,
       activeCategory,
       onSelectCategory,
+      featured,
+      featuredLoading,
+      openProduct,
     ],
   );
+
+  const onPressBirthday = useCallback(() => {
+    if (!birthdayBadgeLabel) return;
+    Alert.alert(
+      "Parabéns pra você! 🎂 \nAproveite os descontos especiais para aniversariantes.",
+    );
+  }, [birthdayBadgeLabel]);
 
   return (
     <ScreenGate dataReady={dataReady} skeleton={<ProductsSkeleton />}>
@@ -947,7 +1347,25 @@ export default function Products() {
             </View>
 
             <View style={S.topRightRow}>
-              {/* ⭐ Nível do cliente (à esquerda do carrinho) */}
+              {/* ✅ ANIVERSÁRIO: aparece só aqui, à esquerda do nível (padrão iconBtn42 + bolinha) */}
+              {birthdayBadgeLabel ? (
+                <Pressable
+                  style={styles.iconBtn42}
+                  onPress={onPressBirthday}
+                  hitSlop={8}
+                >
+                  <FontAwesome
+                    name="birthday-cake"
+                    size={18}
+                    color={UI.colors.white}
+                  />
+
+                  <View style={S.birthdayDot}>
+                    <Text style={S.birthdayDotText}>!</Text>
+                  </View>
+                </Pressable>
+              ) : null}
+
               {userLevelLabel ? (
                 <Pressable
                   style={[
@@ -1062,7 +1480,6 @@ const S = StyleSheet.create({
 
   topRightRow: { flexDirection: "row", gap: 10, alignItems: "center" },
 
-  // ⭐ botão de nível (mesma base do iconBtn42, só adiciona mini label)
   levelBtn: {
     paddingTop: 7,
   },
@@ -1093,6 +1510,29 @@ const S = StyleSheet.create({
 
   badgeText: {
     color: UI.colors.white,
+    fontSize: 11,
+    fontWeight: "900",
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
+
+  // ✅ bolinha do aniversário (bem sutil, mesmo padrão dos outros botões)
+  birthdayDot: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(124,108,255,0.95)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: UI.colors.bg,
+  },
+  birthdayDotText: {
+    color: "#FFFFFF",
     fontSize: 11,
     fontWeight: "900",
     includeFontPadding: false,
@@ -1170,33 +1610,120 @@ const S = StyleSheet.create({
   },
   chipTextActive: { color: UI.colors.white },
 
-  heroCard: {
-    marginTop: 14,
-    backgroundColor: "rgba(124,108,255,0.22)",
-    borderRadius: UI.radius.card,
-    padding: UI.spacing.cardPad,
-    borderWidth: 1,
-    borderColor: "rgba(124,108,255,0.35)",
-  },
-  heroRow: { flexDirection: "row", justifyContent: "space-between" },
-  heroLeft: { flex: 1, paddingRight: 12 },
+  whiteArea: { backgroundColor: UI.colors.white },
+  whiteContent: { paddingHorizontal: UI.spacing.screenX, paddingTop: 18 },
 
-  heroKicker: {
-    color: "rgba(255,255,255,0.75)",
+  sectionRow: {
+    marginBottom: 12,
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: UI.brand.primaryText,
+  },
+  sectionMeta: {
+    color: UI.colors.black45,
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "600",
   },
-  heroTitle: {
-    color: UI.colors.text,
-    fontSize: 20,
+
+  gridRow: {
+    paddingHorizontal: UI.spacing.screenX,
+    justifyContent: "space-between",
+  },
+
+  productCard: {
+    width: "48.2%",
+    marginBottom: 14,
+    borderRadius: UI.radius.card,
+    backgroundColor: UI.colors.white,
+    borderWidth: 1,
+    borderColor: UI.colors.black08,
+    padding: 12,
+  },
+
+  productImgWrap: {
+    borderRadius: 14,
+    overflow: "hidden",
+    backgroundColor: UI.colors.black05,
+    position: "relative",
+  },
+  productImage: { height: 124, width: "100%" },
+
+  badgePill: {
+    position: "absolute",
+    left: 10,
+    top: 10,
+    maxWidth: 190,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "rgba(20,20,20,0.92)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
+    zIndex: 2,
+  },
+  badgePillText: {
+    color: "#FFFFFF",
+    fontSize: 12,
     fontWeight: "800",
-    marginTop: 6,
+    letterSpacing: 0.2,
   },
-  heroSub: {
-    color: "rgba(255,255,255,0.80)",
-    fontSize: 13,
-    marginTop: 6,
+
+  outOfStockPill: {
+    position: "absolute",
+    right: 10,
+    top: 10,
+    backgroundColor: UI.brand.primary,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.35)",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    zIndex: 3,
+  },
+  outOfStockText: {
+    color: UI.colors.white,
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 0.4,
+  },
+
+  productName: {
+    marginTop: 10,
+    fontSize: 14,
+    fontWeight: "700",
+    color: UI.brand.primaryText,
     lineHeight: 18,
+    minHeight: 36,
+  },
+
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 8,
+  },
+
+  priceStack: {
+    marginTop: 8,
+    gap: 2,
+  },
+
+  productPrice: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: UI.brand.primaryText,
+  },
+
+  productOldPriceBig: {
+    textDecorationLine: "line-through",
+    color: UI.colors.black45,
+    fontWeight: "800",
+    fontSize: 12,
   },
 
   tileFooter: {
@@ -1246,155 +1773,6 @@ const S = StyleSheet.create({
     opacity: 0.75,
   },
 
-  heroBtn: {
-    marginTop: 14,
-    alignSelf: "flex-start",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: UI.radius.pill,
-    backgroundColor: UI.colors.overlay08,
-    borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  heroBtnText: { color: UI.colors.text, fontSize: 14, fontWeight: "700" },
-
-  heroThumb: {
-    width: 64,
-    height: 64,
-    borderRadius: UI.radius.card,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: UI.colors.overlay08,
-    borderWidth: 1,
-    borderColor: UI.colors.cardBorder,
-  },
-
-  whiteArea: { backgroundColor: UI.colors.white },
-  whiteContent: { paddingHorizontal: UI.spacing.screenX, paddingTop: 18 },
-
-  sectionRow: {
-    marginBottom: 12,
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: UI.brand.primaryText,
-  },
-  sectionMeta: {
-    color: UI.colors.black45,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-
-  gridRow: {
-    paddingHorizontal: UI.spacing.screenX,
-    justifyContent: "space-between",
-  },
-
-  productCard: {
-    width: "48.2%",
-    marginBottom: 14,
-    borderRadius: UI.radius.card,
-    backgroundColor: UI.colors.white,
-    borderWidth: 1,
-    borderColor: UI.colors.black08,
-    padding: 12,
-  },
-
-  productImgWrap: {
-    borderRadius: 14,
-    overflow: "hidden",
-    backgroundColor: UI.colors.black05,
-    position: "relative",
-  },
-  productImage: { height: 124, width: "100%" },
-
-  // 🎂 / ⭐
-  badgePill: {
-    position: "absolute",
-    left: 10,
-    top: 10,
-    maxWidth: 190,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: "rgba(20,20,20,0.92)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.22)",
-    zIndex: 2,
-  },
-  badgePillBirthday: {
-    backgroundColor: "rgba(124,108,255,0.95)",
-    borderColor: "rgba(255,255,255,0.30)",
-  },
-  badgePillText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 0.2,
-  },
-
-  outOfStockPill: {
-    position: "absolute",
-    right: 10,
-    top: 10,
-    backgroundColor: UI.brand.primary,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.35)",
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    zIndex: 3,
-  },
-  outOfStockText: {
-    color: UI.colors.white,
-    fontSize: 11,
-    fontWeight: "800",
-    letterSpacing: 0.4,
-  },
-
-  productName: {
-    marginTop: 10,
-    fontSize: 14,
-    fontWeight: "700",
-    color: UI.brand.primaryText,
-    lineHeight: 18,
-    minHeight: 36,
-  },
-
-  priceRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    marginTop: 8,
-  },
-
-  // ✅ quando tem desconto, vira stack
-  priceStack: {
-    marginTop: 8,
-    gap: 2,
-  },
-
-  productPrice: {
-    fontSize: 16,
-    fontWeight: "800",
-    color: UI.brand.primaryText,
-  },
-
-  // base riscado (mais “leve”)
-  productOldPriceBig: {
-    textDecorationLine: "line-through",
-    color: UI.colors.black45,
-    fontWeight: "800",
-    fontSize: 12,
-  },
-
   footerWrap: {
     paddingHorizontal: UI.spacing.screenX,
     paddingTop: 8,
@@ -1416,5 +1794,161 @@ const S = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "700",
+  },
+
+  // =========================
+  // ⭐ Destaques (carrossel)
+  // =========================
+  featureListContent: {
+    paddingRight: UI.spacing.screenX,
+  },
+
+  featureCard: {
+    backgroundColor: "rgba(124,108,255,0.22)",
+    borderRadius: UI.radius.card,
+    padding: UI.spacing.cardPad,
+    borderWidth: 1,
+    borderColor: "rgba(124,108,255,0.35)",
+    marginRight: 12,
+  },
+
+  featureCardLoading: {
+    marginTop: 14,
+  },
+
+  featureRow: { flexDirection: "row", justifyContent: "space-between" },
+
+  featureLeft: { flex: 1, paddingRight: 12 },
+
+  featureTopLine: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+
+  featureKicker: {
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  featureTitle: {
+    color: UI.colors.text,
+    fontSize: 20,
+    fontWeight: "900",
+    marginTop: 8,
+  },
+
+  featurePrice: {
+    color: UI.colors.text,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  featureOldPrice: {
+    textDecorationLine: "line-through",
+    color: "rgba(255,255,255,0.75)",
+    fontWeight: "900",
+    fontSize: 12,
+    marginBottom: 2,
+  },
+
+  featureUnit: {
+    marginTop: 8,
+    color: "rgba(255,255,255,0.70)",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  featureBtn: {
+    marginTop: 14,
+    alignSelf: "flex-start",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: UI.radius.pill,
+    backgroundColor: "rgba(20,20,20,0.35)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.20)",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  featureBtnText: { color: UI.colors.white, fontSize: 14, fontWeight: "800" },
+
+  featureThumb: {
+    width: 78,
+    height: 78,
+    borderRadius: UI.radius.card,
+    overflow: "hidden",
+    backgroundColor: UI.colors.overlay08,
+    borderWidth: 1,
+    borderColor: UI.colors.cardBorder,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  featureThumbImg: { width: "100%", height: "100%" },
+
+  featureThumbFallback: {
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  featureBadge: {
+    maxWidth: 150,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: "rgba(20,20,20,0.70)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.22)",
+  },
+  featureBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 0.2,
+  },
+
+  // skeletonzinho rápido
+  skelLineSmall: {
+    height: 10,
+    width: "45%",
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  skelLineBig: {
+    marginTop: 10,
+    height: 18,
+    width: "85%",
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  skelLineMid: {
+    marginTop: 10,
+    height: 14,
+    width: "60%",
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.18)",
+  },
+  skelBtn: {
+    marginTop: 14,
+    height: 38,
+    width: 140,
+    borderRadius: 999,
+    backgroundColor: "rgba(20,20,20,0.25)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+  skelThumb: {
+    width: 78,
+    height: 78,
+    borderRadius: UI.radius.card,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
   },
 });

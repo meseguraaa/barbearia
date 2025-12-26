@@ -665,6 +665,9 @@ model Product {
   category         String
   isActive         Boolean @default(true)
 
+  // ✅ NOVO: produto em destaque (carrossel no app)
+  isFeatured Boolean @default(false)
+
   // ⭐ ESTOQUE
   stockQuantity Int @default(0)
 
@@ -688,6 +691,7 @@ model Product {
   updatedAt DateTime @default(now())
 
   @@index([unitId])
+  @@index([isFeatured])
 }
 
 // ✅ NOVO: PREÇO DO PRODUTO POR NÍVEL

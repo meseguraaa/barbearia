@@ -13,7 +13,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { UploadImageField } from "@/components/upload-image-field/upload-image-field";
-import { updateProductAction } from "@/app/admin/products/actions";
+import {
+  getProductPricing,
+  updateProductAction,
+} from "@/app/admin/products/actions";
 
 import {
   Select,
@@ -45,6 +48,8 @@ export type ProductForRow = {
   levelPrices?: Partial<
     Record<"BRONZE" | "PRATA" | "OURO" | "DIAMANTE", number>
   >;
+
+  isFeatured?: boolean;
 };
 
 type ProductEditDialogProps = {
@@ -183,17 +188,28 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
     (product.birthdayPriceLevel as CustomerLevel) || "DIAMANTE",
   );
 
+  const [isFeatured, setIsFeatured] = useState<boolean>(
+    Boolean(product.isFeatured),
+  );
+
+  const birthdayConfigInvalid = birthdayEnabled && !birthdayLevel;
+
   useEffect(() => {
     if (!open) return;
 
+    let cancelled = false;
+
+    // base price sempre vem do row
     setBasePrice(String(product.priceAsNumber ?? ""));
 
-    const lp = product.levelPrices ?? {};
+    // fallback instantâneo (caso a request demore)
+    const lpFallback = product.levelPrices ?? {};
     setLevelPrices({
-      BRONZE: lp.BRONZE !== undefined ? String(lp.BRONZE) : "",
-      PRATA: lp.PRATA !== undefined ? String(lp.PRATA) : "",
-      OURO: lp.OURO !== undefined ? String(lp.OURO) : "",
-      DIAMANTE: lp.DIAMANTE !== undefined ? String(lp.DIAMANTE) : "",
+      BRONZE: lpFallback.BRONZE !== undefined ? String(lpFallback.BRONZE) : "",
+      PRATA: lpFallback.PRATA !== undefined ? String(lpFallback.PRATA) : "",
+      OURO: lpFallback.OURO !== undefined ? String(lpFallback.OURO) : "",
+      DIAMANTE:
+        lpFallback.DIAMANTE !== undefined ? String(lpFallback.DIAMANTE) : "",
     });
 
     setBirthdayEnabled(Boolean(product.birthdayBenefitEnabled));
@@ -201,9 +217,37 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
       ((product.birthdayPriceLevel as CustomerLevel) ||
         "DIAMANTE") as CustomerLevel,
     );
-  }, [open, product]);
+    setIsFeatured(Boolean(product.isFeatured));
 
-  const birthdayConfigInvalid = birthdayEnabled && !birthdayLevel;
+    // ✅ Fonte real: busca pricing completo no server
+    (async () => {
+      try {
+        const pricing = await getProductPricing(product.id);
+        if (cancelled) return;
+
+        const lp = pricing.levelPrices ?? {};
+        setLevelPrices({
+          BRONZE: lp.BRONZE !== undefined ? String(lp.BRONZE) : "",
+          PRATA: lp.PRATA !== undefined ? String(lp.PRATA) : "",
+          OURO: lp.OURO !== undefined ? String(lp.OURO) : "",
+          DIAMANTE: lp.DIAMANTE !== undefined ? String(lp.DIAMANTE) : "",
+        });
+
+        setBirthdayEnabled(Boolean(pricing.birthdayBenefitEnabled));
+        setBirthdayLevel(
+          (pricing.birthdayPriceLevel || "DIAMANTE") as CustomerLevel,
+        );
+
+        setIsFeatured(Boolean(pricing.isFeatured));
+      } catch {
+        // se falhar, mantém fallback do row sem quebrar a UX
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, product]);
 
   function handleUpdate(formData: FormData) {
     formData.set("birthdayBenefitEnabled", birthdayEnabled ? "true" : "false");
@@ -261,6 +305,37 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
             </p>
           </div>
 
+          {/* ✅ DESTAQUE */}
+          <div className="space-y-2 rounded-xl border border-border-primary bg-background-tertiary p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-content-primary">
+                  ⭐ Destaque no app
+                </p>
+                <p className="text-xs text-content-secondary">
+                  Quando ativo, este produto aparece no carrossel de Destaques
+                  no app.
+                </p>
+              </div>
+
+              <label className="inline-flex items-center gap-2 text-xs text-content-secondary">
+                <input
+                  type="checkbox"
+                  checked={isFeatured}
+                  onChange={(e) => setIsFeatured(e.target.checked)}
+                  className="h-4 w-4 accent-current"
+                />
+                Ativar
+              </label>
+            </div>
+
+            <input
+              type="hidden"
+              name="isFeatured"
+              value={isFeatured ? "true" : "false"}
+            />
+          </div>
+
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
               Nome do produto <span className="text-red-500">*</span>
@@ -294,7 +369,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
             />
           </div>
 
-          {/* ✅ FIX AQUI: sem defaultValue, só controlado */}
+          {/* preço controlado */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
               Valor (R$) <span className="text-red-500">*</span>

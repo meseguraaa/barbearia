@@ -258,16 +258,12 @@ const ProductCard = memo(function ProductCard({
               "https://picsum.photos/seed/product-placeholder/400/300",
           }}
           style={S.productImage}
+          fadeDuration={0}
         />
 
-        {/* 🎯 badge (aniversário / nível) */}
+        {/* ✅ badge: ANIVERSÁRIO NÃO APARECE AQUI (só no topo). Mantém LEVEL */}
         {item.badge?.label ? (
-          <View
-            style={[
-              S.badgePill,
-              item.badge.type === "BIRTHDAY" ? S.badgePillBirthday : null,
-            ]}
-          >
+          <View style={[S.badgePill]}>
             <Text style={S.badgePillText} numberOfLines={1}>
               {item.badge.label}
             </Text>
@@ -434,6 +430,11 @@ export default function Home() {
   const [pendingReviewCount, setPendingReviewCount] = useState<number>(0);
   const reviewFetchingRef = useRef(false);
 
+  // ✅ aniversário (apenas 1x no topo)
+  const [birthdayBadgeLabel, setBirthdayBadgeLabel] = useState<string | null>(
+    null,
+  );
+
   const fetchingRef = useRef(false);
   const fetchingHistoryRef = useRef(false);
   const fetchingProductsRef = useRef(false);
@@ -518,6 +519,18 @@ export default function Home() {
         (Array.isArray(res?.products) ? res.products : null) ??
         [];
 
+      // ✅ pega 1 label de aniversário (se vier), mas NÃO mostra nos cards
+      const birthdayFromApi = rawList.find(
+        (p: any) =>
+          p?.badge?.type === "BIRTHDAY" && String(p?.badge?.label ?? ""),
+      ) as any;
+
+      const birthdayLabel = birthdayFromApi?.badge?.label
+        ? String(birthdayFromApi.badge.label).trim()
+        : null;
+
+      setBirthdayBadgeLabel(birthdayLabel || null);
+
       const mapped: Product[] = rawList
         .slice(0, 4)
         .map((p: any) => {
@@ -529,13 +542,17 @@ export default function Home() {
             Number.isFinite(finalPrice) &&
             finalPrice < basePrice;
 
-          const badge: ProductBadge =
+          const rawBadge: ProductBadge =
             p?.badge && typeof p.badge === "object"
               ? {
                   type: p.badge.type === "BIRTHDAY" ? "BIRTHDAY" : "LEVEL",
                   label: String(p.badge.label ?? "").trim(),
                 }
               : null;
+
+          // ✅ regra: BIRTHDAY não vai pro card
+          const badge: ProductBadge =
+            rawBadge?.type === "BIRTHDAY" ? null : rawBadge;
 
           const final = Number.isFinite(finalPrice)
             ? finalPrice
@@ -559,6 +576,7 @@ export default function Home() {
       setProducts(mapped);
     } catch (err: any) {
       setProducts([]);
+      setBirthdayBadgeLabel(null);
     } finally {
       fetchingProductsRef.current = false;
 
@@ -974,6 +992,13 @@ export default function Home() {
     topBounceHeight,
   ]);
 
+  const onPressBirthday = useCallback(() => {
+    if (!birthdayBadgeLabel) return;
+    Alert.alert(
+      "Parabéns pra você! 🎂 \nAproveite os descontos especiais para aniversariantes.",
+    );
+  }, [birthdayBadgeLabel]);
+
   return (
     <ScreenGate dataReady={dataReady} skeleton={<HomeSkeleton />}>
       <View style={S.page}>
@@ -995,6 +1020,24 @@ export default function Home() {
             </View>
 
             <View style={S.topRightRow}>
+              {/* ✅ aniversário: só aqui, à esquerda do nível (padrão dos ícones) */}
+              {birthdayBadgeLabel ? (
+                <Pressable
+                  style={S.iconBtn}
+                  onPress={onPressBirthday}
+                  hitSlop={8}
+                >
+                  <FontAwesome
+                    name="birthday-cake"
+                    size={18}
+                    color={UI.colors.white}
+                  />
+                  <View style={S.birthdayDot}>
+                    <Text style={S.birthdayDotText}>!</Text>
+                  </View>
+                </Pressable>
+              ) : null}
+
               {/* ⭐ Nível do cliente (à esquerda da sacolinha) */}
               {userLevelLabel ? (
                 <Pressable
@@ -1149,6 +1192,29 @@ const S = StyleSheet.create({
     textAlignVertical: "center",
   },
 
+  // ✅ bolinha do aniversário (sutil, mesma pegada do badge)
+  birthdayDot: {
+    position: "absolute",
+    top: -6,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 5,
+    borderRadius: 999,
+    backgroundColor: "rgba(124,108,255,0.95)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: UI.colors.bg,
+  },
+  birthdayDotText: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    fontWeight: "900",
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
+
   list: { flex: 1, backgroundColor: UI.colors.white },
   listContent: { paddingBottom: 24 },
 
@@ -1285,7 +1351,7 @@ const S = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.05)",
   },
 
-  // 🎂 / ⭐
+  // ⭐ (LEVEL only)
   badgePill: {
     position: "absolute",
     left: 10,
@@ -1297,11 +1363,6 @@ const S = StyleSheet.create({
     backgroundColor: "rgba(20,20,20,0.92)",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.22)",
-  },
-
-  badgePillBirthday: {
-    backgroundColor: "rgba(124,108,255,0.95)",
-    borderColor: "rgba(255,255,255,0.30)",
   },
 
   badgePillText: {

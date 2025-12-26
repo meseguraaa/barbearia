@@ -1,3 +1,4 @@
+// src/app/admin/products/actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
@@ -58,6 +59,14 @@ function parseBoolFromForm(formData: FormData, key: string): boolean {
 
 const customerLevelSchema = z.enum(["BRONZE", "PRATA", "OURO", "DIAMANTE"]);
 
+// ✅ aceita "", null, undefined e transforma em undefined (não valida enum)
+const optionalCustomerLevelSchema = z.preprocess((val) => {
+  if (val === null || val === undefined) return undefined;
+  const s = String(val).trim();
+  if (!s) return undefined;
+  return s;
+}, customerLevelSchema.optional());
+
 const baseProductSchema = z.object({
   name: z.string().min(3, "Nome obrigatório"),
   imageUrl: imageStringSchema,
@@ -97,9 +106,13 @@ const baseProductSchema = z.object({
         "Prazo para retirada deve ser um número inteiro entre 1 e 30 dias",
     }),
 
-  // ✅ NOVO: benefício de aniversário
+  // ✅ benefício de aniversário
   birthdayBenefitEnabled: z.boolean().optional(),
-  birthdayPriceLevel: customerLevelSchema.optional(),
+  // ✅ aqui está o fix do erro: "" vira undefined e não quebra enum
+  birthdayPriceLevel: optionalCustomerLevelSchema,
+
+  // ✅ destaque no app
+  isFeatured: z.boolean().optional(),
 });
 
 const createProductSchema = baseProductSchema.superRefine((data, ctx) => {
@@ -206,42 +219,67 @@ async function upsertProductPricesByLevel(args: {
   );
 }
 
-// ✅ NOVO: buscar pricing completo pra preencher modal de edição
+/**
+ * 🔒 Compat: só inclui isFeatured no payload se o Prisma Client reconhecer o campo.
+ */
+function withFeaturedField<T extends Record<string, any>>(
+  data: T,
+  isFeatured: boolean,
+): T {
+  const anyPrisma: any = prisma as any;
+  const model = anyPrisma?._dmmf?.modelMap?.Product;
+  const fields: Array<{ name: string }> = model?.fields ?? [];
+
+  const hasIsFeatured = fields.some((f) => f?.name === "isFeatured");
+  if (!hasIsFeatured) return data;
+
+  return { ...data, isFeatured } as T;
+}
+
+// ✅ buscar pricing completo pra preencher modal de edição
 export async function getProductPricing(productId: string) {
+  const anyPrisma: any = prisma as any;
+  const model = anyPrisma?._dmmf?.modelMap?.Product;
+  const fields: Array<{ name: string }> = model?.fields ?? [];
+  const hasIsFeatured = fields.some((f) => f?.name === "isFeatured");
+
   const p = await prisma.product.findUnique({
     where: { id: productId },
     select: {
       id: true,
       birthdayBenefitEnabled: true,
       birthdayPriceLevel: true,
-      prices: {
-        select: { level: true, price: true },
-      },
-    },
+      ...(hasIsFeatured ? { isFeatured: true } : {}),
+      prices: { select: { level: true, price: true } },
+    } as any,
   });
 
   if (!p) throw new Error("Produto não encontrado");
 
   const levelPrices: Partial<Record<CustomerLevel, number>> = {};
-  for (const row of p.prices) {
-    levelPrices[row.level] = Number(row.price);
+  for (const row of (p as any).prices ?? []) {
+    levelPrices[row.level as CustomerLevel] = Number(row.price);
   }
 
   return {
-    productId: p.id,
-    birthdayBenefitEnabled: Boolean(p.birthdayBenefitEnabled),
-    birthdayPriceLevel: (p.birthdayPriceLevel ?? null) as CustomerLevel | null,
+    productId: (p as any).id,
+    birthdayBenefitEnabled: Boolean((p as any).birthdayBenefitEnabled),
+    birthdayPriceLevel: ((p as any).birthdayPriceLevel ??
+      null) as CustomerLevel | null,
+    isFeatured: Boolean((p as any).isFeatured ?? false),
     levelPrices,
   };
 }
 
-// ===== Funções base (trabalham com prisma + revalidate) =====
+// ===== Funções base (prisma + revalidate) =====
 
 export async function createProduct(formData: FormData) {
   const birthdayBenefitEnabled = parseBoolFromForm(
     formData,
     "birthdayBenefitEnabled",
   );
+
+  const isFeatured = parseBoolFromForm(formData, "isFeatured");
 
   const parsed = createProductSchema.safeParse({
     name: formData.get("name"),
@@ -254,7 +292,10 @@ export async function createProduct(formData: FormData) {
     pickupDeadlineDays: formData.get("pickupDeadlineDays"),
 
     birthdayBenefitEnabled,
+    // ✅ pode vir "", null, etc. o preprocess resolve
     birthdayPriceLevel: formData.get("birthdayPriceLevel"),
+
+    isFeatured,
   });
 
   if (!parsed.success) {
@@ -274,34 +315,35 @@ export async function createProduct(formData: FormData) {
     stockQuantity,
     pickupDeadlineDays,
     birthdayPriceLevel,
+    isFeatured: isFeaturedParsed,
   } = parsed.data;
 
   const normalizedPrice = normalizePriceToDecimalString(price);
   const unitId = await getUnitIdFromFormOrDefault(formData);
 
   const levelPrices = readLevelPricesFromForm(formData);
-  if (!levelPrices.BRONZE) {
-    levelPrices.BRONZE = normalizedPrice;
-  }
+  if (!levelPrices.BRONZE) levelPrices.BRONZE = normalizedPrice;
+
+  const baseData = {
+    name,
+    imageUrl,
+    description,
+    price: new Prisma.Decimal(normalizedPrice),
+    barberPercentage,
+    category,
+    stockQuantity,
+    pickupDeadlineDays,
+
+    birthdayBenefitEnabled,
+    birthdayPriceLevel: birthdayBenefitEnabled
+      ? (birthdayPriceLevel as CustomerLevel)
+      : null,
+
+    unit: { connect: { id: unitId } },
+  };
 
   const created = await prisma.product.create({
-    data: {
-      name,
-      imageUrl,
-      description,
-      price: new Prisma.Decimal(normalizedPrice),
-      barberPercentage,
-      category,
-      stockQuantity,
-      pickupDeadlineDays,
-
-      birthdayBenefitEnabled,
-      birthdayPriceLevel: birthdayBenefitEnabled
-        ? (birthdayPriceLevel as CustomerLevel)
-        : null,
-
-      unit: { connect: { id: unitId } },
-    },
+    data: withFeaturedField(baseData, Boolean(isFeaturedParsed)) as any,
     select: { id: true },
   });
 
@@ -319,6 +361,8 @@ export async function updateProduct(productId: string, formData: FormData) {
     "birthdayBenefitEnabled",
   );
 
+  const isFeatured = parseBoolFromForm(formData, "isFeatured");
+
   const parsed = updateProductSchema.safeParse({
     name: formData.get("name"),
     imageUrl: formData.get("imageUrl"),
@@ -330,7 +374,10 @@ export async function updateProduct(productId: string, formData: FormData) {
     pickupDeadlineDays: formData.get("pickupDeadlineDays"),
 
     birthdayBenefitEnabled,
+    // ✅ pode vir "" quando usuário mexe no form: preprocess evita crash
     birthdayPriceLevel: formData.get("birthdayPriceLevel"),
+
+    isFeatured,
   });
 
   if (!parsed.success) {
@@ -350,29 +397,31 @@ export async function updateProduct(productId: string, formData: FormData) {
     stockQuantity,
     pickupDeadlineDays,
     birthdayPriceLevel,
+    isFeatured: isFeaturedParsed,
   } = parsed.data;
 
   const normalizedPrice = normalizePriceToDecimalString(price);
-
   const levelPrices = readLevelPricesFromForm(formData);
+
+  const baseData = {
+    name,
+    imageUrl,
+    description,
+    price: new Prisma.Decimal(normalizedPrice),
+    barberPercentage,
+    category,
+    stockQuantity,
+    pickupDeadlineDays,
+
+    birthdayBenefitEnabled,
+    birthdayPriceLevel: birthdayBenefitEnabled
+      ? (birthdayPriceLevel as CustomerLevel)
+      : null,
+  };
 
   await prisma.product.update({
     where: { id: productId },
-    data: {
-      name,
-      imageUrl,
-      description,
-      price: new Prisma.Decimal(normalizedPrice),
-      barberPercentage,
-      category,
-      stockQuantity,
-      pickupDeadlineDays,
-
-      birthdayBenefitEnabled,
-      birthdayPriceLevel: birthdayBenefitEnabled
-        ? (birthdayPriceLevel as CustomerLevel)
-        : null,
-    },
+    data: withFeaturedField(baseData, Boolean(isFeaturedParsed)) as any,
   });
 
   if (Object.keys(levelPrices).length > 0 && !levelPrices.BRONZE) {
@@ -393,15 +442,39 @@ export async function toggleProductStatus(productId: string) {
     select: { isActive: true },
   });
 
-  if (!product) {
-    throw new Error("Produto não encontrado");
-  }
+  if (!product) throw new Error("Produto não encontrado");
 
   await prisma.product.update({
     where: { id: productId },
-    data: {
-      isActive: !product.isActive,
-    },
+    data: { isActive: !product.isActive },
+  });
+
+  revalidatePath("/admin/products");
+}
+
+// ✅ toggle do destaque (compat)
+export async function toggleProductFeatured(productId: string) {
+  const anyPrisma: any = prisma as any;
+  const model = anyPrisma?._dmmf?.modelMap?.Product;
+  const fields: Array<{ name: string }> = model?.fields ?? [];
+  const hasIsFeatured = fields.some((f) => f?.name === "isFeatured");
+
+  if (!hasIsFeatured) {
+    throw new Error(
+      "Campo isFeatured não existe no Prisma Client atual. Rode migration + prisma generate.",
+    );
+  }
+
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { isFeatured: true },
+  });
+
+  if (!product) throw new Error("Produto não encontrado");
+
+  await prisma.product.update({
+    where: { id: productId },
+    data: { isFeatured: !product.isFeatured },
   });
 
   revalidatePath("/admin/products");
@@ -430,5 +503,12 @@ export async function toggleProductStatusAction(
 ) {
   "use server";
   await toggleProductStatus(productId);
-  // só revalida; sem redirect
+}
+
+export async function toggleProductFeaturedAction(
+  productId: string,
+  _formData: FormData,
+) {
+  "use server";
+  await toggleProductFeatured(productId);
 }

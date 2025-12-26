@@ -28,16 +28,16 @@ export type ProductForRow = {
   stockQuantity: number;
   isActive: boolean;
 
-  // ✅ novo: prazo para retirada (dias)
   pickupDeadlineDays: number;
 
-  // ✅ novo: unidade do produto (estoque por unidade)
   unitId: string;
   unitName: string;
 
-  // ✅ NOVO: sinais de configuração (UX no admin)
   birthdayBenefitEnabled: boolean;
   hasLevelPrices: boolean;
+
+  // (não mostramos na tabela; fica apenas nos modais New/Edit)
+  isFeatured: boolean;
 };
 
 /**
@@ -60,16 +60,13 @@ async function resolveUnitScope(admin: {
 }
 
 export default async function ProductsPage() {
-  // 🔐 Permissão: precisa ter acesso a Produtos (ou ser Dono)
   const admin = (await requireAdminPermission("canAccessProducts")) as any;
 
-  // ✅ Unidade ativa para TODAS as queries desta página
   const activeUnitId = await resolveUnitScope({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
   });
 
-  // ✅ lista de unidades para o modal (dono vê todas, admin de unidade vê só a dele)
   const units = await prisma.unit.findMany({
     where: activeUnitId ? { id: activeUnitId } : {},
     orderBy: { name: "asc" },
@@ -78,31 +75,19 @@ export default async function ProductsPage() {
 
   const productsPrisma = await prisma.product.findMany({
     where: activeUnitId ? { unitId: activeUnitId } : {},
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     include: {
-      unit: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-
-      // ✅ NOVO: conta preços por nível (para badge "💎 Níveis")
-      _count: {
-        select: {
-          prices: true, // ProductPriceByLevel[]
-        },
-      },
+      unit: { select: { id: true, name: true } },
+      _count: { select: { prices: true } },
     },
   });
 
-  // 🔧 aqui a gente tira Decimal e deixa tudo como number/string
   const products: ProductForRow[] = productsPrisma.map((p) => ({
     id: p.id,
     name: p.name,
     imageUrl: p.imageUrl,
     description: p.description,
-    price: Number(p.price), // Decimal -> number
+    price: Number(p.price),
     barberPercentage:
       p.barberPercentage !== null && p.barberPercentage !== undefined
         ? Number(p.barberPercentage)
@@ -113,6 +98,7 @@ export default async function ProductsPage() {
 
     pickupDeadlineDays:
       typeof (p as any).pickupDeadlineDays === "number" &&
+      Number.isFinite((p as any).pickupDeadlineDays) &&
       (p as any).pickupDeadlineDays > 0
         ? (p as any).pickupDeadlineDays
         : 2,
@@ -120,14 +106,14 @@ export default async function ProductsPage() {
     unitId: p.unit?.id ?? p.unitId,
     unitName: p.unit?.name ?? "—",
 
-    // ✅ NOVO: flags pro ProductRow (sem quebrar)
     birthdayBenefitEnabled: Boolean((p as any).birthdayBenefitEnabled),
-    hasLevelPrices: (p as any)._count?.prices > 0,
+    hasLevelPrices: ((p as any)?._count?.prices ?? 0) > 0,
+
+    isFeatured: Boolean((p as any).isFeatured),
   }));
 
   return (
-    <div className="space-y-6 max-w-7xl">
-      {/* HEADER */}
+    <div className="max-w-7xl space-y-6">
       <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-title text-content-primary">Produtos</h1>
@@ -136,7 +122,6 @@ export default async function ProductsPage() {
           </p>
         </div>
 
-        {/* ✅ Agora o modal já sabe a unidade do estoque */}
         <ProductNewDialog
           units={units}
           defaultUnitId={activeUnitId}
@@ -144,20 +129,29 @@ export default async function ProductsPage() {
         />
       </header>
 
-      {/* TABELA */}
       <section className="overflow-x-auto rounded-xl border border-border-primary bg-background-tertiary">
-        <table className="min-w-full text-sm">
+        <table className="w-full table-fixed border-collapse text-sm">
+          {/* ✅ grade fixa (colunas fixas, não dança) */}
+          <colgroup>
+            <col className="w-[380px]" />
+            <col className="w-[220px]" />
+            <col className="w-[110px]" />
+            <col className="w-[110px]" />
+            <col className="w-[110px]" />
+            <col className="w-[110px]" />
+            <col className="w-[110px]" />
+            <col className="w-[110px]" />
+            <col className="w-60" />
+          </colgroup>
+
           <thead>
             <tr className="border-b border-border-primary bg-background-secondary">
               <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
                 Produto
               </th>
-
-              {/* ✅ nova coluna */}
               <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
                 Unidade
               </th>
-
               <th className="px-4 py-3 text-left text-xs font-medium text-content-secondary">
                 Preço
               </th>
@@ -182,9 +176,9 @@ export default async function ProductsPage() {
             </tr>
           </thead>
 
-          <tbody>
+          <tbody className="[&>tr>td]:align-middle">
             {products.length === 0 ? (
-              <tr>
+              <tr className="border-t border-border-primary">
                 <td
                   colSpan={9}
                   className="px-4 py-6 text-center text-paragraph-small text-content-secondary"

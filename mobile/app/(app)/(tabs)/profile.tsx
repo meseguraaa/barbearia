@@ -416,7 +416,7 @@ export default function Profile() {
               <View style={S.darkInner}>
                 {/* ✅ Card igual ao heroCard da Home */}
                 <View style={S.heroCard}>
-                  // 1) NO JSX: move o pill pra depois do heroTextCol
+                  {/* 1) NO JSX: move o pill pra depois do heroTextCol */}
                   <View style={S.profileHeroRow}>
                     <View style={S.avatarWrap}>
                       <Image source={{ uri: avatar }} style={S.avatarBig} />
@@ -603,7 +603,7 @@ const S = StyleSheet.create({
     alignItems: "center",
   },
 
-  // ⭐ pill de nível (canto esquerdo do card)
+  // ⭐ pill de nível (canto direito do card)
   levelPill: {
     height: 56,
     minWidth: 64,
@@ -721,7 +721,6 @@ const S = StyleSheet.create({
     paddingVertical: 0,
   },
 
-  // mesmo padrão do "Ver todos os produtos"
   saveBtn: {
     marginTop: 16,
     height: 44,
@@ -750,11 +749,11 @@ const S = StyleSheet.create({
   },
 
   heroTextCol: {
-    flex: 1, // ✅ empurra o pill pra direita
+    flex: 1,
     paddingVertical: 4,
   },
 
   levelPillRight: {
-    marginLeft: "auto", // ✅ gruda no canto direito
+    marginLeft: "auto",
   },
 });

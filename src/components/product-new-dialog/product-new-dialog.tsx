@@ -145,11 +145,11 @@ export function ProductNewDialog({
 
   const [selectedUnitId, setSelectedUnitId] = useState<string>(initialUnitId);
 
-  // ✅ NOVO: estado do benefício de aniversário (por produto)
+  // ✅ benefício de aniversário
   const [birthdayEnabled, setBirthdayEnabled] = useState(false);
   const [birthdayLevel, setBirthdayLevel] = useState<CustomerLevel>("DIAMANTE");
 
-  // ✅ NOVO: estado de preços por nível (opcional)
+  // ✅ preços por nível (opcional)
   const [basePrice, setBasePrice] = useState("");
   const [levelPrices, setLevelPrices] = useState<Record<CustomerLevel, string>>(
     {
@@ -160,8 +160,11 @@ export function ProductNewDialog({
     },
   );
 
+  // ✅ destaque
+  const [isFeatured, setIsFeatured] = useState(false);
+
   function handleCreate(formData: FormData) {
-    // ✅ garante que unitId vai junto (estoque por unidade)
+    // ✅ unitId (garante)
     formData.set("unitId", selectedUnitId);
 
     // ✅ benefício de aniversário
@@ -172,14 +175,15 @@ export function ProductNewDialog({
       formData.delete("birthdayPriceLevel");
     }
 
-    // ✅ preços por nível (só manda os que o admin digitou)
-    // (server action já garante BRONZE com base no price normal se ficar vazio)
+    // ✅ preços por nível
     if (levelPrices.BRONZE.trim())
       formData.set("priceBronze", levelPrices.BRONZE);
     if (levelPrices.PRATA.trim()) formData.set("pricePrata", levelPrices.PRATA);
     if (levelPrices.OURO.trim()) formData.set("priceOuro", levelPrices.OURO);
     if (levelPrices.DIAMANTE.trim())
       formData.set("priceDiamante", levelPrices.DIAMANTE);
+
+    // ✅ isFeatured vai pelo input hidden (fonte única da verdade)
 
     startTransition(async () => {
       await createProductAction(formData);
@@ -190,6 +194,7 @@ export function ProductNewDialog({
       setBirthdayLevel("DIAMANTE");
       setBasePrice("");
       setLevelPrices({ BRONZE: "", PRATA: "", OURO: "", DIAMANTE: "" });
+      setIsFeatured(false);
     });
   }
 
@@ -264,7 +269,6 @@ export function ProductNewDialog({
                   </SelectContent>
                 </Select>
 
-                {/* redundância pro server action (e também ajuda no autofill) */}
                 <input type="hidden" name="unitId" value={selectedUnitId} />
 
                 <p className="text-xs text-content-secondary">
@@ -273,6 +277,38 @@ export function ProductNewDialog({
                 </p>
               </>
             )}
+          </div>
+
+          {/* ✅ DESTAQUE */}
+          <div className="space-y-2 rounded-xl border border-border-primary bg-background-tertiary p-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-content-primary">
+                  ⭐ Destaque no app
+                </p>
+                <p className="text-xs text-content-secondary">
+                  Quando ativo, este produto aparece no carrossel de Destaques
+                  no app.
+                </p>
+              </div>
+
+              <label className="inline-flex items-center gap-2 text-xs text-content-secondary">
+                <input
+                  type="checkbox"
+                  checked={isFeatured}
+                  onChange={(e) => setIsFeatured(e.target.checked)}
+                  className="h-4 w-4 accent-current"
+                />
+                Ativar
+              </label>
+            </div>
+
+            {/* ✅ fonte única da verdade pro server action */}
+            <input
+              type="hidden"
+              name="isFeatured"
+              value={isFeatured ? "true" : "false"}
+            />
           </div>
 
           {/* NOME */}
@@ -287,7 +323,7 @@ export function ProductNewDialog({
             />
           </div>
 
-          {/* FOTO (UPLOAD) */}
+          {/* FOTO */}
           <UploadImageField
             name="imageUrl"
             label="Foto do produto *"
@@ -328,7 +364,6 @@ export function ProductNewDialog({
             </p>
           </div>
 
-          {/* ✅ NOVO: PREÇOS POR NÍVEL */}
           <PriceLevelGrid
             basePrice={basePrice}
             values={levelPrices}
@@ -337,7 +372,7 @@ export function ProductNewDialog({
             }
           />
 
-          {/* ✅ NOVO: BENEFÍCIO DE ANIVERSÁRIO (por produto) */}
+          {/* BENEFÍCIO DE ANIVERSÁRIO */}
           <div className="space-y-2 rounded-xl border border-border-primary bg-background-tertiary p-3">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -396,7 +431,6 @@ export function ProductNewDialog({
                   </p>
                 )}
 
-                {/* inputs hidden (pra garantir submit mesmo se shadcn Select não gerar input nativo) */}
                 <input
                   type="hidden"
                   name="birthdayBenefitEnabled"
@@ -409,17 +443,15 @@ export function ProductNewDialog({
                 />
               </div>
             ) : (
-              <>
-                <input
-                  type="hidden"
-                  name="birthdayBenefitEnabled"
-                  value="false"
-                />
-              </>
+              <input
+                type="hidden"
+                name="birthdayBenefitEnabled"
+                value="false"
+              />
             )}
           </div>
 
-          {/* PORCENTAGEM DO BARBEIRO */}
+          {/* PORCENTAGEM */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
               Porcentagem do barbeiro (%){" "}
@@ -451,7 +483,7 @@ export function ProductNewDialog({
             />
           </div>
 
-          {/* CATEGORIA / FINALIDADE */}
+          {/* CATEGORIA */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
               Categoria / Finalidade <span className="text-red-500">*</span>
@@ -464,7 +496,7 @@ export function ProductNewDialog({
             />
           </div>
 
-          {/* ✅ PRAZO DE RETIRADA */}
+          {/* PRAZO */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
               Prazo para retirada (dias) <span className="text-red-500">*</span>
