@@ -1,41 +1,96 @@
 // src/lib/api.ts
 import * as SecureStore from "expo-secure-store";
+import { AUTH_TOKEN_KEY } from "../services/api";
 
-const API_BASE_URL = "https://vagarious-gravely-filiberto.ngrok-free.dev";
 const AUTH_STORAGE_KEY = "auth_session";
 
+/**
+ * ✅ Mesma regra do src/services/api.ts
+ * Evita autenticar num host e chamar APIs em outro.
+ */
+const API_URL =
+  process.env.EXPO_PUBLIC_API_URL?.trim() ||
+  (__DEV__ ? "http://localhost:3000" : "");
+
+if (!API_URL) {
+  throw new Error(
+    "[apiFetch] EXPO_PUBLIC_API_URL é obrigatório em produção. Defina no .env do app.",
+  );
+}
+
 type StoredSession = {
-  appToken: string;
-  user?: any;
+  appToken?: string;
+  token?: string;
+  accessToken?: string;
+  app_token?: string;
+  session?: any;
+  data?: any;
 };
+
+function pickToken(obj: any): string | null {
+  const candidates = [
+    obj?.appToken,
+    obj?.token,
+    obj?.accessToken,
+    obj?.app_token,
+    obj?.session?.appToken,
+    obj?.session?.token,
+    obj?.session?.accessToken,
+    obj?.data?.appToken,
+    obj?.data?.token,
+    obj?.data?.accessToken,
+  ];
+
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return null;
+}
+
+async function getAppToken(): Promise<string | null> {
+  const direct = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+  if (direct && direct.trim()) return direct.trim();
+
+  const sessionJson = await SecureStore.getItemAsync(AUTH_STORAGE_KEY);
+  if (!sessionJson) return null;
+
+  try {
+    const parsed = JSON.parse(sessionJson) as StoredSession;
+    return pickToken(parsed);
+  } catch {
+    return null;
+  }
+}
+
+function joinUrl(base: string, path: string) {
+  const b = base.endsWith("/") ? base.slice(0, -1) : base;
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `${b}${p}`;
+}
 
 export async function apiFetch<T = any>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const sessionJson = await SecureStore.getItemAsync(AUTH_STORAGE_KEY);
+  const appToken = await getAppToken();
 
-  let appToken: string | null = null;
+  // Monta headers sem sobrescrever Authorization se já veio manualmente
+  const mergedHeaders: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(options.headers as any),
+  };
 
-  if (sessionJson) {
-    try {
-      const parsed = JSON.parse(sessionJson) as StoredSession;
-      if (parsed && typeof parsed.appToken === "string") {
-        appToken = parsed.appToken;
-      }
-    } catch {
-      // se o storage estiver corrompido, só ignora e segue sem auth
-      appToken = null;
-    }
+  const hasAuthHeader =
+    typeof mergedHeaders.Authorization === "string" &&
+    mergedHeaders.Authorization.trim().length > 0;
+
+  if (appToken && !hasAuthHeader) {
+    mergedHeaders.Authorization = `Bearer ${appToken}`;
   }
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
+  const res = await fetch(joinUrl(API_URL, path), {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(appToken ? { Authorization: `Bearer ${appToken}` } : {}),
-      ...(options.headers || {}),
-    },
+    headers: mergedHeaders,
   });
 
   const text = await res.text();
@@ -57,5 +112,3 @@ function safeJson(text: string) {
     return text;
   }
 }
-
-export * from "./api";

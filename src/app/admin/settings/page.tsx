@@ -75,6 +75,7 @@ type AdminRow = {
     canAccessReviews: boolean;
     canAccessProducts: boolean;
     canAccessClients: boolean;
+    canAccessClientLevels: boolean;
     canAccessFinance: boolean;
   };
 };
@@ -129,6 +130,9 @@ export default async function SettingsPage() {
         canAccessReviews: admin.adminAccess?.canAccessReviews ?? false,
         canAccessProducts: admin.adminAccess?.canAccessProducts ?? false,
         canAccessClients: admin.adminAccess?.canAccessClients ?? false,
+        // ✅ pode ainda não existir no schema: lê via any sem quebrar
+        canAccessClientLevels:
+          (admin.adminAccess as any)?.canAccessClientLevels ?? false,
         canAccessFinance: admin.adminAccess?.canAccessFinance ?? false,
       },
     };
@@ -304,7 +308,6 @@ export default async function SettingsPage() {
                             </p>
                           </div>
 
-                          {/* Badge aqui já tá ok no seu código (verde) */}
                           <div className="hidden md:flex items-center gap-2">
                             <span
                               className={
@@ -459,7 +462,6 @@ export default async function SettingsPage() {
             </p>
           </div>
 
-          {/* ✅ passa units */}
           <AdminNewAdminDialog units={unitsForAdminDialog} />
         </div>
 
@@ -472,7 +474,6 @@ export default async function SettingsPage() {
               Crie um admin para delegar acessos do painel.
             </p>
             <div className="mt-4">
-              {/* ✅ passa units */}
               <AdminNewAdminDialog units={unitsForAdminDialog} />
             </div>
           </div>

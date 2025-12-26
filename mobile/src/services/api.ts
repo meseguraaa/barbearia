@@ -6,19 +6,12 @@ const AUTH_SESSION_KEY = "auth_session";
 /**
  * Base URL do backend
  *
- * ✅ Regra: sem EXPO_PUBLIC_API_URL, usamos localhost como fallback (DEV),
- * para evitar cair num ngrok antigo e gerar 403 misterioso.
+ * ✅ Regra: EXPO_PUBLIC_API_URL define o backend em DEV/PROD.
+ * Em DEV, se não houver EXPO_PUBLIC_API_URL, usa localhost.
  */
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL?.trim() ||
   (__DEV__ ? "http://localhost:3000" : "");
-
-if (!process.env.EXPO_PUBLIC_API_URL) {
-  console.warn(
-    "[api] EXPO_PUBLIC_API_URL não definido. Usando fallback:",
-    API_URL,
-  );
-}
 
 // Em produção, não aceitamos base vazia.
 if (!API_URL) {
@@ -58,12 +51,32 @@ async function safeReadBody(res: Response) {
   }
 }
 
+function pickToken(obj: any): string | null {
+  const candidates = [
+    obj?.appToken,
+    obj?.token,
+    obj?.accessToken,
+    obj?.app_token,
+    obj?.session?.appToken,
+    obj?.session?.token,
+    obj?.session?.accessToken,
+    obj?.data?.appToken,
+    obj?.data?.token,
+    obj?.data?.accessToken,
+  ];
+
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return null;
+}
+
 function tryExtractTokenFromSession(sessionJson: string | null): string | null {
   if (!sessionJson) return null;
   try {
     const parsed = JSON.parse(sessionJson);
-    const t = parsed?.appToken;
-    return typeof t === "string" && t.length > 10 ? t : null;
+    const t = pickToken(parsed);
+    return typeof t === "string" && t.length >= 10 ? t : null;
   } catch {
     return null;
   }
@@ -72,9 +85,9 @@ function tryExtractTokenFromSession(sessionJson: string | null): string | null {
 async function getAuthToken(): Promise<string | null> {
   // 1) fonte principal: auth_token
   const direct = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
-  if (direct) return direct;
+  if (direct && direct.trim()) return direct.trim();
 
-  // 2) fallback: auth_session.appToken
+  // 2) fallback: auth_session.*
   const sessionJson = await SecureStore.getItemAsync(AUTH_SESSION_KEY);
   const fromSession = tryExtractTokenFromSession(sessionJson);
   if (fromSession) {
@@ -99,17 +112,15 @@ async function request<T = any>(
   const token = await getAuthToken();
   const extraHeaders = normalizeHeaders(options.headers);
 
-  if (__DEV__) {
-    console.log("[api]", options.method ?? "GET", path);
-    console.log("[api] base:", API_URL);
-    console.log("[api] token:", token ? `len=${token.length}` : "NONE");
-  }
+  const hasAuthHeader =
+    typeof (extraHeaders as any)?.Authorization === "string" &&
+    String((extraHeaders as any).Authorization).trim().length > 0;
 
   const res = await fetch(joinUrl(API_URL, path), {
     method: options.method ?? "GET",
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token && !hasAuthHeader ? { Authorization: `Bearer ${token}` } : {}),
       ...extraHeaders,
     },
     body: options.body ? JSON.stringify(options.body) : undefined,
@@ -123,8 +134,6 @@ async function request<T = any>(
     );
     error.status = res.status;
     error.data = data;
-
-    if (__DEV__) console.log("[api] ❌ error:", error);
     throw error;
   }
 

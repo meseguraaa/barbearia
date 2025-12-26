@@ -45,6 +45,7 @@ const permissionsSchema = z.object({
   canAccessReviews: z.coerce.boolean().optional(),
   canAccessProducts: z.coerce.boolean().optional(),
   canAccessClients: z.coerce.boolean().optional(),
+  canAccessClientLevels: z.coerce.boolean().optional(),
   canAccessFinance: z.coerce.boolean().optional(),
 });
 
@@ -192,6 +193,7 @@ export async function createAdminAction(
         canAccessReviews: false,
         canAccessProducts: false,
         canAccessClients: false,
+        canAccessClientLevels: false,
         canAccessFinance: false,
       };
 
@@ -316,6 +318,7 @@ export async function updateAdminPermissions(
     canAccessReviews: formData.get("canAccessReviews"),
     canAccessProducts: formData.get("canAccessProducts"),
     canAccessClients: formData.get("canAccessClients"),
+    canAccessClientLevels: formData.get("canAccessClientLevels"),
     canAccessFinance: formData.get("canAccessFinance"),
   });
 
@@ -330,33 +333,69 @@ export async function updateAdminPermissions(
   const p = parsed.data;
 
   try {
-    await prisma.adminAccess.upsert({
-      where: { userId: p.userId },
-      update: {
-        canAccessDashboard: !!p.canAccessDashboard,
-        canAccessCheckout: !!p.canAccessCheckout,
-        canAccessAppointments: !!p.canAccessAppointments,
-        canAccessProfessionals: !!p.canAccessProfessionals,
-        canAccessServices: !!p.canAccessServices,
-        canAccessReviews: !!p.canAccessReviews,
-        canAccessProducts: !!p.canAccessProducts,
-        canAccessClients: !!p.canAccessClients,
-        canAccessFinance: !!p.canAccessFinance,
-      },
-      create: {
-        userId: p.userId,
-        canAccessDashboard: !!p.canAccessDashboard,
-        canAccessCheckout: !!p.canAccessCheckout,
-        canAccessAppointments: !!p.canAccessAppointments,
-        canAccessProfessionals: !!p.canAccessProfessionals,
-        canAccessServices: !!p.canAccessServices,
-        canAccessReviews: !!p.canAccessReviews,
-        canAccessProducts: !!p.canAccessProducts,
-        canAccessClients: !!p.canAccessClients,
-        canAccessFinance: !!p.canAccessFinance,
-      },
-      select: { id: true },
-    });
+    // ✅ tenta gravar canAccessClientLevels junto (se o schema já tiver)
+    try {
+      await prisma.adminAccess.upsert({
+        where: { userId: p.userId },
+        update: {
+          canAccessDashboard: !!p.canAccessDashboard,
+          canAccessCheckout: !!p.canAccessCheckout,
+          canAccessAppointments: !!p.canAccessAppointments,
+          canAccessProfessionals: !!p.canAccessProfessionals,
+          canAccessServices: !!p.canAccessServices,
+          canAccessReviews: !!p.canAccessReviews,
+          canAccessProducts: !!p.canAccessProducts,
+          canAccessClients: !!p.canAccessClients,
+          canAccessClientLevels: !!p.canAccessClientLevels,
+          canAccessFinance: !!p.canAccessFinance,
+        } as any,
+        create: {
+          userId: p.userId,
+          canAccessDashboard: !!p.canAccessDashboard,
+          canAccessCheckout: !!p.canAccessCheckout,
+          canAccessAppointments: !!p.canAccessAppointments,
+          canAccessProfessionals: !!p.canAccessProfessionals,
+          canAccessServices: !!p.canAccessServices,
+          canAccessReviews: !!p.canAccessReviews,
+          canAccessProducts: !!p.canAccessProducts,
+          canAccessClients: !!p.canAccessClients,
+          canAccessClientLevels: !!p.canAccessClientLevels,
+          canAccessFinance: !!p.canAccessFinance,
+        } as any,
+        select: { id: true },
+      });
+    } catch (err) {
+      // fallback: se o schema ainda não tem canAccessClientLevels, salva o resto sem quebrar
+      if (!looksLikeUnknownFieldError(err, "canAccessClientLevels")) throw err;
+
+      await prisma.adminAccess.upsert({
+        where: { userId: p.userId },
+        update: {
+          canAccessDashboard: !!p.canAccessDashboard,
+          canAccessCheckout: !!p.canAccessCheckout,
+          canAccessAppointments: !!p.canAccessAppointments,
+          canAccessProfessionals: !!p.canAccessProfessionals,
+          canAccessServices: !!p.canAccessServices,
+          canAccessReviews: !!p.canAccessReviews,
+          canAccessProducts: !!p.canAccessProducts,
+          canAccessClients: !!p.canAccessClients,
+          canAccessFinance: !!p.canAccessFinance,
+        },
+        create: {
+          userId: p.userId,
+          canAccessDashboard: !!p.canAccessDashboard,
+          canAccessCheckout: !!p.canAccessCheckout,
+          canAccessAppointments: !!p.canAccessAppointments,
+          canAccessProfessionals: !!p.canAccessProfessionals,
+          canAccessServices: !!p.canAccessServices,
+          canAccessReviews: !!p.canAccessReviews,
+          canAccessProducts: !!p.canAccessProducts,
+          canAccessClients: !!p.canAccessClients,
+          canAccessFinance: !!p.canAccessFinance,
+        },
+        select: { id: true },
+      });
+    }
 
     revalidatePath("/admin/settings");
     return { ok: true };

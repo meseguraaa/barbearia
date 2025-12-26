@@ -18,10 +18,18 @@ const providers: NextAuthOptions["providers"] = [
   GoogleProvider({
     clientId: requiredEnv("GOOGLE_CLIENT_ID"),
     clientSecret: requiredEnv("GOOGLE_CLIENT_SECRET"),
+
+    /**
+     * ✅ Resolve "Try signing in with a different account." (OAuthAccountNotLinked)
+     * Permite vincular conta por email quando já existe usuário no banco.
+     * Use com cuidado: assume que o provedor (Google/Facebook) validou o email.
+     */
+    allowDangerousEmailAccountLinking: true,
   }),
   FacebookProvider({
     clientId: requiredEnv("FACEBOOK_CLIENT_ID"),
     clientSecret: requiredEnv("FACEBOOK_CLIENT_SECRET"),
+    allowDangerousEmailAccountLinking: true,
   }),
 ];
 
@@ -33,6 +41,7 @@ if (hasAppleEnv) {
     AppleProvider({
       clientId: requiredEnv("APPLE_CLIENT_ID"),
       clientSecret: requiredEnv("APPLE_CLIENT_SECRET"),
+      allowDangerousEmailAccountLinking: true,
     }),
   );
 }
@@ -114,11 +123,35 @@ export const nextAuthOptions: NextAuthOptions = {
       return session;
     },
 
-    async signIn() {
-      // aqui você poderia colocar alguma regra extra
-      // (ex: bloquear login de user inativo),
-      // por enquanto mantive do jeito que já estava
-      return true;
+    /**
+     * ✅ Regrinha extra: bloqueia usuário inativo já no login do NextAuth
+     * (evita até chegar no auth-redirect).
+     */
+    async signIn({ user }) {
+      try {
+        const id = (user as any)?.id as string | undefined;
+        const email = (user as any)?.email as string | undefined;
+
+        if (!id && !email) return false;
+
+        const dbUser = id
+          ? await prisma.user.findUnique({
+              where: { id },
+              select: { isActive: true },
+            })
+          : await prisma.user.findUnique({
+              where: { email: email as string },
+              select: { isActive: true },
+            });
+
+        if (!dbUser) return true; // deixa seguir, o adapter pode criar
+        if (dbUser.isActive === false) return false;
+
+        return true;
+      } catch {
+        // em caso de erro inesperado, não travar login
+        return true;
+      }
     },
   },
 };

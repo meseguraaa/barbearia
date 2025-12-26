@@ -9,6 +9,7 @@ export type AdminModule =
   | "APPOINTMENTS"
   | "CHECKOUT"
   | "CLIENTS"
+  | "CLIENT_LEVELS"
   | "PROFESSIONALS"
   | "SERVICES"
   | "REVIEWS"
@@ -35,6 +36,7 @@ export const ALL_ADMIN_MODULES: AdminModule[] = [
   "APPOINTMENTS",
   "CHECKOUT",
   "CLIENTS",
+  "CLIENT_LEVELS",
   "PROFESSIONALS",
   "SERVICES",
   "REVIEWS",
@@ -49,6 +51,7 @@ export type AdminPermissionKey =
   | "canAccessAppointments"
   | "canAccessCheckout"
   | "canAccessClients"
+  | "canAccessClientLevels"
   | "canAccessProfessionals"
   | "canAccessServices"
   | "canAccessReviews"
@@ -64,6 +67,7 @@ type AdminAccess = {
   canAccessAppointments?: boolean;
   canAccessCheckout?: boolean;
   canAccessClients?: boolean;
+  canAccessClientLevels?: boolean;
   canAccessProfessionals?: boolean;
   canAccessServices?: boolean;
   canAccessFinance?: boolean;
@@ -71,6 +75,9 @@ type AdminAccess = {
   // (no seu schema atual existem também:)
   canAccessReviews?: boolean;
   canAccessProducts?: boolean;
+
+  // ⚠️ se existir no schema, beleza. Se não existir ainda, vamos criar depois.
+  canAccessSettings?: boolean;
 };
 
 /**
@@ -87,13 +94,15 @@ function deriveModulesFromAdminAccess(
   if (access.canAccessAppointments) modules.push("APPOINTMENTS");
   if (access.canAccessCheckout) modules.push("CHECKOUT");
   if (access.canAccessClients) modules.push("CLIENTS");
+  if (access.canAccessClientLevels) modules.push("CLIENT_LEVELS");
   if (access.canAccessProfessionals) modules.push("PROFESSIONALS");
   if (access.canAccessServices) modules.push("SERVICES");
   if (access.canAccessReviews) modules.push("REVIEWS");
   if (access.canAccessProducts) modules.push("PRODUCTS");
   if (access.canAccessFinance) modules.push("FINANCE");
-  // SETTINGS é regra “de sistema” (geralmente só dono ou admin especial)
-  // Se você quiser SETTINGS por permissão, aí a gente adiciona no schema depois.
+
+  // ✅ SETTINGS por permissão (quando existir no schema)
+  if (access.canAccessSettings) modules.push("SETTINGS");
 
   return modules;
 }
@@ -237,12 +246,12 @@ export function getAdminDefaultPath(admin: AdminWithPermissions): string {
     { module: "APPOINTMENTS", path: "/admin/appointments" },
     { module: "CHECKOUT", path: "/admin/checkout" },
     { module: "CLIENTS", path: "/admin/clients" },
+    { module: "CLIENT_LEVELS", path: "/admin/client-levels" },
     { module: "PROFESSIONALS", path: "/admin/professionals" },
     { module: "SERVICES", path: "/admin/services" },
     { module: "REVIEWS", path: "/admin/reviews" },
     { module: "PRODUCTS", path: "/admin/products" },
     { module: "FINANCE", path: "/admin/finance" },
-
     { module: "SETTINGS", path: "/admin/settings" },
   ];
 
@@ -275,6 +284,7 @@ export async function requireAdminPermission(permissionKey: string) {
     canAccessAppointments: "APPOINTMENTS",
     canAccessCheckout: "CHECKOUT",
     canAccessClients: "CLIENTS",
+    canAccessClientLevels: "CLIENT_LEVELS",
     canAccessProfessionals: "PROFESSIONALS",
     canAccessServices: "SERVICES",
     canAccessReviews: "REVIEWS",

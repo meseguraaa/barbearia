@@ -108,18 +108,9 @@ export default async function ClientLevelsConfigPage({
             </h1>
             <p className="text-paragraph-medium text-content-secondary">
               Defina os mínimos mensais para cada nível: atendimentos{" "}
-              <span className="font-semibold">DONE</span> e pedidos{" "}
-              <span className="font-semibold">COMPLETED</span>.
+              <span className="font-semibold">concluídos</span> e pedidos{" "}
+              <span className="font-semibold">retirados</span>.
             </p>
-
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className="border-border-primary">
-                Unidade: {unit?.name ?? activeUnitId}
-              </Badge>
-              <Badge variant="outline" className="border-border-primary">
-                Salva com upsert
-              </Badge>
-            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -228,11 +219,11 @@ export default async function ClientLevelsConfigPage({
             })}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             <Button type="submit" size="sm" variant="edit2">
               Salvar configurações
             </Button>
-            <Button asChild type="button" size="sm" variant="outline">
+            <Button asChild type="button" size="sm" variant="destructive">
               <Link href="/admin/client-levels">Cancelar</Link>
             </Button>
           </div>

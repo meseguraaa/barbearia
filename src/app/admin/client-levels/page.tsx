@@ -93,21 +93,9 @@ export default async function ClientLevelsPage() {
               Nível de Cliente
             </h1>
             <p className="text-paragraph-medium text-content-secondary">
-              Configure por unidade os requisitos de cada nível (mês atual) e as
-              regras especiais.
+              Configure por unidade os requisitos de cada nível e regras
+              especiais para clientes com planos.
             </p>
-
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Badge variant="outline" className="border-border-primary">
-                Baseado no mês calendário
-              </Badge>
-              <Badge variant="outline" className="border-border-primary">
-                DONE (agendamentos) + COMPLETED (pedidos)
-              </Badge>
-              <Badge variant="outline" className="border-border-primary">
-                Conquista em M, usa em M+1
-              </Badge>
-            </div>
           </div>
         </div>
       </header>
@@ -181,25 +169,18 @@ export default async function ClientLevelsPage() {
                         </Badge>
                       )}
                     </div>
-
-                    <p className="text-xs text-content-secondary">
-                      Unidade:{" "}
-                      <span className="text-content-primary font-medium">
-                        {u.id}
-                      </span>
-                    </p>
                   </div>
 
                   <div className="flex items-center gap-2">
                     {/* Rotas futuras (Arquivo 4) */}
                     <Button asChild size="sm" variant="edit2">
                       <Link href={`/admin/client-levels/config?unitId=${u.id}`}>
-                        Editar configs
+                        Configuração por nível
                       </Link>
                     </Button>
                     <Button asChild size="sm" variant="edit2">
                       <Link href={`/admin/client-levels/rules?unitId=${u.id}`}>
-                        Editar regras
+                        Nível para planos
                       </Link>
                     </Button>
                   </div>
@@ -282,10 +263,7 @@ export default async function ClientLevelsPage() {
                 <div className="rounded-xl border border-border-primary bg-background-secondary p-4 space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     <p className="text-label-small text-content-primary">
-                      Regras especiais
-                    </p>
-                    <p className="text-[11px] text-content-secondary">
-                      Ex: plano ativo força nível Diamante
+                      Nível para planos
                     </p>
                   </div>
 

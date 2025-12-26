@@ -17,19 +17,24 @@ import { FontAwesome5, AntDesign, FontAwesome } from "@expo/vector-icons";
 import { UI, styles } from "../../src/theme/client-theme";
 import { useAuth } from "../../src/auth/auth-context";
 
-import { apiFetch } from "../../src/lib/api";
-
 WebBrowser.maybeCompleteAuthSession();
 
-const API_BASE_URL = "https://vagarious-gravely-filiberto.ngrok-free.dev";
+const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL?.trim() ||
+  (__DEV__ ? "http://localhost:3000" : "");
 
 const redirectUri = AuthSession.makeRedirectUri({
   scheme: "agendaplay",
   path: "auth",
 });
 
-function devLog(...args: any[]) {
-  if (__DEV__) console.log("[login]", ...args);
+function parseSessionParam(value: string): any | null {
+  try {
+    const decoded = decodeURIComponent(value);
+    return JSON.parse(decoded);
+  } catch {
+    return null;
+  }
 }
 
 export default function Login() {
@@ -40,8 +45,6 @@ export default function Login() {
   async function handleProviderLogin(provider: "google" | "facebook") {
     try {
       setLoading(true);
-
-      devLog("redirectUri gerado:", redirectUri);
 
       const callbackUrl = `${API_BASE_URL}/api/mobile/auth-redirect?redirect_uri=${encodeURIComponent(
         redirectUri,
@@ -56,29 +59,45 @@ export default function Login() {
         redirectUri,
       );
 
-      if (result.type !== "success" || !result.url) {
-        devLog("Login cancelado:", result.type);
-        return;
-      }
+      if (result.type !== "success" || !result.url) return;
 
-      const u = new URL(result.url);
-      const error = u.searchParams.get("error");
-      const token = u.searchParams.get("token");
+      const url = new URL(result.url);
+
+      const error = url.searchParams.get("error");
+      const message = url.searchParams.get("message");
 
       if (error) {
-        devLog("Erro OAuth:", error);
+        Alert.alert(
+          "Login",
+          message || "Não foi possível autenticar. Tente novamente.",
+        );
         return;
       }
 
-      if (!token) {
-        devLog("Token não retornou");
+      const payloadParam =
+        url.searchParams.get("token") || url.searchParams.get("session");
+
+      if (!payloadParam) {
+        Alert.alert(
+          "Login",
+          "Não recebemos a sessão do login. Tente novamente.",
+        );
         return;
       }
 
-      const parsed = JSON.parse(decodeURIComponent(token));
-      await signIn(JSON.stringify(parsed));
-    } catch (e) {
-      devLog("Erro inesperado no login:", e);
+      const session = parseSessionParam(payloadParam);
+
+      if (!session) {
+        Alert.alert(
+          "Login",
+          "Sessão inválida retornada pelo login. Tente novamente.",
+        );
+        return;
+      }
+
+      await signIn(JSON.stringify(session));
+    } catch {
+      Alert.alert("Login", "Erro inesperado ao autenticar.");
     } finally {
       setLoading(false);
     }
@@ -92,7 +111,7 @@ export default function Login() {
     <View style={styles.screen}>
       <StatusBar style="light" backgroundColor={UI.brand.primary} />
 
-      {/* Safe-area roxa */}
+      {/* Safe-area */}
       <View
         pointerEvents="none"
         style={{
@@ -102,11 +121,11 @@ export default function Login() {
           right: 0,
           height: insets.top + 2,
           backgroundColor: UI.brand.primary,
-          zIndex: 999,
+          zIndex: 10,
         }}
       />
 
-      {/* 🟣 CABEÇALHO */}
+      {/* Header */}
       <View
         style={[
           styles.header,
@@ -115,7 +134,6 @@ export default function Login() {
             paddingTop: insets.top,
             borderBottomLeftRadius: 14,
             borderBottomRightRadius: 14,
-            zIndex: 1,
           },
         ]}
       >
@@ -125,21 +143,20 @@ export default function Login() {
         </View>
       </View>
 
-      {/* 📸 FUNDO */}
+      {/* Background */}
       <ImageBackground
         source={require("../../assets/images/home.png")}
         resizeMode="cover"
         style={{ flex: 1 }}
       >
         <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.55)" }}>
-          {/* ⬇️ BODY empurra o card pra baixo */}
           <View
             style={[
               styles.body,
               {
                 flex: 1,
                 justifyContent: "flex-end",
-                paddingBottom: "25%", // 🎯 AQUI está o ajuste
+                paddingBottom: "25%",
               },
             ]}
           >
@@ -166,10 +183,7 @@ export default function Login() {
                 <Pressable
                   onPress={() => handleProviderLogin("google")}
                   disabled={loading}
-                  style={[
-                    styles.providerBtnFull,
-                    loading ? { opacity: 0.85 } : null,
-                  ]}
+                  style={[styles.providerBtnFull, loading && { opacity: 0.85 }]}
                 >
                   <View
                     style={{
@@ -193,10 +207,7 @@ export default function Login() {
                 <Pressable
                   onPress={() => handleProviderLogin("facebook")}
                   disabled={loading}
-                  style={[
-                    styles.providerBtnFull,
-                    loading ? { opacity: 0.85 } : null,
-                  ]}
+                  style={[styles.providerBtnFull, loading && { opacity: 0.85 }]}
                 >
                   <View
                     style={{
@@ -218,7 +229,7 @@ export default function Login() {
                   disabled={loading || Platform.OS !== "ios"}
                   style={[
                     styles.providerBtnFull,
-                    loading || Platform.OS !== "ios" ? { opacity: 0.7 } : null,
+                    (loading || Platform.OS !== "ios") && { opacity: 0.7 },
                   ]}
                 >
                   <View

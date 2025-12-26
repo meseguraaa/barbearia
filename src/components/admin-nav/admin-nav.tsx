@@ -17,6 +17,7 @@ import {
   Tag,
   Settings,
   Building2,
+  Medal,
 } from "lucide-react";
 import type { AdminModule } from "@/lib/admin-permissions";
 
@@ -63,7 +64,8 @@ const adminLinks: AdminLink[] = [
     module: "CHECKOUT",
   },
   {
-    href: "/admin/professional",
+    // ✅ FIX: rota correta (plural) pra bater com o resto do projeto
+    href: "/admin/professionals",
     label: "Profissionais",
     icon: Scissors,
     module: "PROFESSIONALS",
@@ -75,14 +77,18 @@ const adminLinks: AdminLink[] = [
     module: "SERVICES",
   },
   {
+    // ✅ agora respeita permissão
     href: "/admin/review-tags",
     label: "Avaliação",
     icon: Tag,
+    module: "REVIEWS",
   },
   {
+    // ✅ agora respeita permissão
     href: "/admin/products",
     label: "Produtos",
     icon: Package,
+    module: "PRODUCTS",
   },
   {
     href: "/admin/clients",
@@ -90,12 +96,11 @@ const adminLinks: AdminLink[] = [
     icon: Users,
     module: "CLIENTS",
   },
-  // ✅ NOVO: Nível de Cliente (logo abaixo de Clientes)
   {
     href: "/admin/client-levels",
     label: "Nível de Cliente",
-    icon: Tag,
-    // sem module por enquanto: feature nova e ainda vamos criar permissão/CRUD
+    icon: Medal,
+    module: "CLIENT_LEVELS",
   },
   {
     href: "/admin/finance",
@@ -184,8 +189,9 @@ export function AdminNav({
       if (!fromCookie) return UNIT_ALL_VALUE;
 
       if (fromCookie === UNIT_ALL_VALUE) return UNIT_ALL_VALUE;
-      if (allowedIds.size > 0 && !allowedIds.has(fromCookie))
+      if (allowedIds.size > 0 && !allowedIds.has(fromCookie)) {
         return UNIT_ALL_VALUE;
+      }
 
       return fromCookie;
     }

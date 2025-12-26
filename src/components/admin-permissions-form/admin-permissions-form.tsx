@@ -15,6 +15,7 @@ type Permissions = {
   canAccessReviews: boolean;
   canAccessProducts: boolean;
   canAccessClients: boolean;
+  canAccessClientLevels: boolean;
   canAccessFinance: boolean;
 };
 
@@ -72,6 +73,9 @@ export function AdminPermissionsForm({
       }
       if (permissions.canAccessClients) {
         formData.append("canAccessClients", "on");
+      }
+      if (permissions.canAccessClientLevels) {
+        formData.append("canAccessClientLevels", "on");
       }
       if (permissions.canAccessFinance) {
         formData.append("canAccessFinance", "on");
@@ -189,7 +193,19 @@ export function AdminPermissionsForm({
           <span>Clientes</span>
         </label>
 
-        {/* 9. FINANCEIRO */}
+        {/* 9. NÍVEL DE CLIENTE */}
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="canAccessClientLevels"
+            checked={permissions.canAccessClientLevels}
+            onChange={() => handleToggle("canAccessClientLevels")}
+            className="h-4 w-4 rounded border-border-primary bg-background-primary accent-brand-primary"
+          />
+          <span>Nível de Cliente</span>
+        </label>
+
+        {/* 10. FINANCEIRO */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"

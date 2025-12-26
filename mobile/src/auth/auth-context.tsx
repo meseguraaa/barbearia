@@ -10,8 +10,7 @@ import * as SecureStore from "expo-secure-store";
 import { Image } from "react-native";
 import { router, useSegments } from "expo-router";
 
-import { api } from "../services/api"; // ✅ usa o MESMO client do app
-import { AUTH_TOKEN_KEY } from "../services/api"; // ✅ chave única do token
+import { api, AUTH_TOKEN_KEY } from "../services/api";
 
 const AUTH_STORAGE_KEY = "auth_session";
 
@@ -20,7 +19,7 @@ type Role = "CLIENT" | "BARBER" | "ADMIN";
 type CustomerLevel = {
   id?: string | null;
   label: string;
-  icon?: string | null; // ex: "star", "trophy", "crown" (FontAwesome name)
+  icon?: string | null;
 };
 
 type AuthUser = {
@@ -32,13 +31,11 @@ type AuthUser = {
   phone?: string | null;
   isOwner?: boolean;
   adminAccess?: any | null;
-
-  // ✅ NOVO: nível do cliente (padronizado)
   customerLevel?: CustomerLevel | null;
 };
 
 type StoredSession = {
-  appToken: string; // ✅ Bearer token do app
+  appToken: string;
   user: AuthUser;
 };
 
@@ -49,42 +46,59 @@ type AuthContextValue = {
 
   isBooting: boolean;
   meLoading: boolean;
-
-  // ✅ NOVO: controla quando o avatar está pronto (prefetch OK ou fallback)
   avatarReady: boolean;
 
   refreshMe: () => Promise<void>;
-
   signIn: (sessionJson: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function devLog(...args: any[]) {
-  if (__DEV__) console.log("[auth]", ...args);
+function pickToken(obj: any): string | null {
+  const candidates = [
+    obj?.appToken,
+    obj?.token,
+    obj?.accessToken,
+    obj?.app_token,
+    obj?.session?.appToken,
+    obj?.session?.token,
+    obj?.session?.accessToken,
+    obj?.data?.appToken,
+    obj?.data?.token,
+    obj?.data?.accessToken,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return null;
 }
 
 function parseSession(sessionJson: string): StoredSession | null {
   try {
     const parsed = JSON.parse(sessionJson);
+    if (!parsed || typeof parsed !== "object") return null;
+
+    const appToken = pickToken(parsed);
+    const user =
+      parsed?.user && typeof parsed.user === "object"
+        ? parsed.user
+        : parsed?.session?.user && typeof parsed.session.user === "object"
+          ? parsed.session.user
+          : parsed?.data?.user && typeof parsed.data.user === "object"
+            ? parsed.data.user
+            : null;
 
     if (
-      parsed &&
-      typeof parsed === "object" &&
-      typeof parsed.appToken === "string" &&
-      parsed.user &&
-      typeof parsed.user === "object" &&
-      typeof parsed.user.id === "string" &&
-      typeof parsed.user.email === "string" &&
-      typeof parsed.user.role === "string"
+      typeof appToken === "string" &&
+      appToken.length > 0 &&
+      user &&
+      typeof user.id === "string" &&
+      typeof user.email === "string" &&
+      typeof user.role === "string"
     ) {
-      return {
-        appToken: parsed.appToken,
-        user: parsed.user,
-      };
+      return { appToken, user };
     }
-
     return null;
   } catch {
     return null;
@@ -92,7 +106,7 @@ function parseSession(sessionJson: string): StoredSession | null {
 }
 
 function isAuthInvalidError(e: any) {
-  const msg = String(e?.message || "");
+  const msg = String(e?.message || "").toLowerCase();
   const status = Number(e?.status || e?.response?.status || 0);
 
   return (
@@ -100,9 +114,9 @@ function isAuthInvalidError(e: any) {
     msg.includes("missing_token") ||
     msg.includes("invalid_token") ||
     msg.includes("user_not_found") ||
-    msg.includes("HTTP 401") ||
-    msg.includes("401") ||
-    msg.toLowerCase().includes("não autorizado")
+    msg.includes("não autorizado") ||
+    msg.includes("token ausente") ||
+    msg.includes("http 401")
   );
 }
 
@@ -129,7 +143,6 @@ async function prefetchWithTimeout(url: string, timeoutMs: number) {
   return result;
 }
 
-// ✅ Normaliza qualquer shape do backend para CustomerLevel
 function normalizeCustomerLevel(u: any): CustomerLevel | null {
   const fromObj =
     u?.customerLevel && typeof u.customerLevel === "object"
@@ -145,11 +158,9 @@ function normalizeCustomerLevel(u: any): CustomerLevel | null {
     u?.levelLabel != null ? String(u.levelLabel).trim() : "";
 
   const label = labelFromObj || labelFromFlat;
-
   if (!label) return null;
 
   const iconFromObj = fromObj?.icon != null ? String(fromObj.icon).trim() : "";
-
   const iconFromFlat = u?.levelIcon != null ? String(u.levelIcon).trim() : "";
 
   const id =
@@ -161,11 +172,7 @@ function normalizeCustomerLevel(u: any): CustomerLevel | null {
 
   const icon = (iconFromObj || iconFromFlat || "").trim();
 
-  return {
-    id,
-    label,
-    icon: icon || null,
-  };
+  return { id, label, icon: icon || null };
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -174,71 +181,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [appToken, setAppToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [sessionJson, setSessionJson] = useState<string | null>(null);
+
   const [isBooting, setIsBooting] = useState(true);
   const [meLoading, setMeLoading] = useState(false);
 
-  // ✅ NOVO
   const [avatarReady, setAvatarReady] = useState(false);
 
   const fetchedMeForTokenRef = useRef<string | null>(null);
-
-  // ✅ controla prefetch para não ficar repetindo sem necessidade
   const lastAvatarUrlRef = useRef<string | null>(null);
   const avatarPrefetchInFlightRef = useRef<Promise<void> | null>(null);
-
-  // ✅ evita setState de prefetch antigo após trocar de sessão/URL
   const avatarRunIdRef = useRef(0);
-
-  const signOut = async () => {
-    await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
-    await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY); // ✅ apaga token “real” também
-
-    setAppToken(null);
-    setUser(null);
-    setSessionJson(null);
-    fetchedMeForTokenRef.current = null;
-
-    // ✅ reset do estado do avatar
-    setAvatarReady(false);
-    lastAvatarUrlRef.current = null;
-    avatarPrefetchInFlightRef.current = null;
-
-    // ✅ invalida qualquer prefetch antigo
-    avatarRunIdRef.current += 1;
-
-    devLog("signOut OK");
-  };
 
   const ensureAvatarReady = async (maybeUrl?: string | null): Promise<void> => {
     const runId = avatarRunIdRef.current;
 
-    // Sem avatar -> libera imediatamente
     const url = normalizeAvatarUrl(maybeUrl);
     if (!url) {
       lastAvatarUrlRef.current = null;
-      // só aplica se ainda for o mesmo run
       if (avatarRunIdRef.current === runId) setAvatarReady(true);
       return;
     }
 
-    // Se já carregamos essa URL e já está pronto, não faz nada.
     if (lastAvatarUrlRef.current === url && avatarReady) return;
 
-    // Se já está em andamento para a mesma URL, aguarda.
     if (lastAvatarUrlRef.current === url && avatarPrefetchInFlightRef.current) {
       await avatarPrefetchInFlightRef.current;
       return;
     }
 
-    // Nova URL: trava o gate (avatarReady=false) e tenta prefetch com timeout.
     lastAvatarUrlRef.current = url;
     if (avatarRunIdRef.current === runId) setAvatarReady(false);
 
     const job = (async () => {
-      const result = await prefetchWithTimeout(url, 3000);
-      devLog("avatar prefetch result:", result);
-
-      // Tanto sucesso quanto erro/timeout liberam (placeholder se falhar)
+      await prefetchWithTimeout(url, 3000);
       if (avatarRunIdRef.current === runId) setAvatarReady(true);
     })();
 
@@ -251,6 +226,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         avatarPrefetchInFlightRef.current = null;
       }
     }
+  };
+
+  const signOut = async () => {
+    await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+    await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+
+    setAppToken(null);
+    setUser(null);
+    setSessionJson(null);
+    fetchedMeForTokenRef.current = null;
+
+    setAvatarReady(false);
+    lastAvatarUrlRef.current = null;
+    avatarPrefetchInFlightRef.current = null;
+    avatarRunIdRef.current += 1;
   };
 
   const refreshMe = async (): Promise<void> => {
@@ -268,6 +258,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!prev) return prev;
         return {
           ...prev,
+          id: (u?.id ?? prev.id) as any,
           name: (u?.name ?? prev.name) as any,
           email: (u?.email ?? prev.email) as any,
           image: (u?.image ?? prev.image) as any,
@@ -275,20 +266,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           role: (u?.role ?? prev.role) as any,
           isOwner: (u?.isOwner ?? prev.isOwner) as any,
           adminAccess: (u?.adminAccess ?? prev.adminAccess) as any,
-          id: (u?.id ?? prev.id) as any,
-
-          // ✅ nível
           customerLevel: normalizedLevel ?? prev.customerLevel ?? null,
         };
       });
 
-      // ✅ GATE: avatar (timeout 3s + fallback)
       await ensureAvatarReady(u?.image ?? null);
-
-      devLog("me refreshed OK");
     } catch (e: any) {
-      devLog("me refresh error:", e?.message || e);
-
       if (isAuthInvalidError(e)) {
         try {
           await signOut();
@@ -296,7 +279,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           router.replace("/(auth)/login");
         }
       } else {
-        // Em erro genérico, não trava a app por causa de avatar.
         setAvatarReady(true);
       }
     } finally {
@@ -304,14 +286,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // 1) Boot: lê sessão do SecureStore
+  // Boot: lê sessão
   useEffect(() => {
     let alive = true;
 
     (async () => {
       try {
         const stored = await SecureStore.getItemAsync(AUTH_STORAGE_KEY);
-        devLog("boot session:", stored ? "FOUND" : "NONE");
 
         if (!stored) {
           if (!alive) return;
@@ -324,7 +305,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const s = parseSession(stored);
         if (!s) {
-          devLog("boot: invalid session shape -> clearing");
           await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
           await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
 
@@ -343,11 +323,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(s.user);
         setSessionJson(stored);
 
-        // ✅ tenta prefetch do avatar salvo na sessão (se existir)
         await ensureAvatarReady(s.user?.image ?? null);
-      } catch (e) {
-        devLog("boot read error:", e);
-
+      } catch {
         if (!alive) return;
         setAppToken(null);
         setUser(null);
@@ -361,18 +338,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 2) Guard de rotas
+  // Guard de rotas
   useEffect(() => {
     if (isBooting) return;
 
-    const group = segments[0]; // "(auth)" | "(app)" | undefined
+    const group = segments[0];
     const inAuth = group === "(auth)";
     const inApp = group === "(app)";
-
-    devLog("route guard:", { group, hasToken: !!appToken });
 
     if (!appToken && inApp) {
       router.replace("/(auth)/login");
@@ -385,7 +359,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [appToken, isBooting, segments]);
 
-  // 3) Boot-refresh do /me quando token mudar
+  // Boot-refresh do /me quando token mudar
   useEffect(() => {
     if (isBooting) return;
     if (!appToken) return;
@@ -409,6 +383,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (!prev) return prev;
           return {
             ...prev,
+            id: (u?.id ?? prev.id) as any,
             name: (u?.name ?? prev.name) as any,
             email: (u?.email ?? prev.email) as any,
             image: (u?.image ?? prev.image) as any,
@@ -416,20 +391,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             role: (u?.role ?? prev.role) as any,
             isOwner: (u?.isOwner ?? prev.isOwner) as any,
             adminAccess: (u?.adminAccess ?? prev.adminAccess) as any,
-            id: (u?.id ?? prev.id) as any,
-
-            // ✅ nível
             customerLevel: normalizedLevel ?? prev.customerLevel ?? null,
           };
         });
 
-        // ✅ garante avatar pronto após boot-refresh
         await ensureAvatarReady(u?.image ?? null);
-
-        devLog("me boot-refresh OK");
       } catch (e: any) {
-        devLog("me boot-refresh error:", e?.message || e);
-
         if (isAuthInvalidError(e)) {
           try {
             await signOut();
@@ -447,10 +414,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appToken, isBooting]);
 
-  // ✅ Se o user.image mudar, garante prefetch (timeout + fallback)
+  // Se o user.image mudar, tenta prefetch
   useEffect(() => {
     if (isBooting) return;
     if (!appToken) return;
@@ -465,7 +431,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (lastAvatarUrlRef.current !== url) {
       ensureAvatarReady(url).catch(() => setAvatarReady(true));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.image, appToken, isBooting]);
 
   const value = useMemo<AuthContextValue>(
@@ -480,8 +445,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       signIn: async (newSessionJson: string) => {
         const s = parseSession(newSessionJson);
+
         if (!s) {
-          devLog("signIn: invalid session payload");
           await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
           await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
 
@@ -495,7 +460,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           avatarPrefetchInFlightRef.current = null;
 
           avatarRunIdRef.current += 1;
-
           return;
         }
 
@@ -508,11 +472,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         fetchedMeForTokenRef.current = null;
 
-        // ✅ novo ciclo de avatar
         avatarRunIdRef.current += 1;
         await ensureAvatarReady(s.user?.image ?? null);
-
-        devLog("signIn OK");
       },
 
       signOut,

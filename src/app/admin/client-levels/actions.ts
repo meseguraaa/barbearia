@@ -40,11 +40,11 @@ function parseNonNegativeInt(value: unknown, fallback = 0): number {
   return Math.max(0, n);
 }
 
-function parseBoolFromForm(formData: FormData, key: string): boolean {
-  const v = formData.get(key);
-  if (v === null || v === undefined) return false;
-  const s = String(v).toLowerCase();
-  return s === "true" || s === "1" || s === "on" || s === "yes";
+// revalida as duas telas envolvidas (painel e edição)
+function revalidateClientLevels() {
+  revalidatePath("/admin/client-levels");
+  revalidatePath("/admin/client-levels/rules");
+  revalidatePath("/admin/client-levels/config");
 }
 
 // ======================
@@ -65,12 +65,13 @@ const upsertConfigsSchema = z.object({
   rows: z.array(configRowSchema).min(1),
 });
 
+// ✅ Agora o admin NÃO controla prioridade nem enabled.
+// Regra é sempre criada "ativa" (se você ainda tiver a coluna no banco, vamos setar true)
+// e prioridade fica default interna.
 const createRuleSchema = z.object({
   unitId: z.string().min(1),
   type: ruleTypeSchema,
   targetLevel: customerLevelSchema,
-  priority: z.coerce.number().int().min(0).max(100000).default(100),
-  isEnabled: z.coerce.boolean().default(true),
 });
 
 const updateRuleSchema = z.object({
@@ -78,8 +79,6 @@ const updateRuleSchema = z.object({
   ruleId: z.string().min(1),
   type: ruleTypeSchema,
   targetLevel: customerLevelSchema,
-  priority: z.coerce.number().int().min(0).max(100000).default(100),
-  isEnabled: z.coerce.boolean().default(true),
 });
 
 // ======================
@@ -101,6 +100,7 @@ export async function getCustomerLevelData(unitId?: string | null) {
     }),
     prisma.customerLevelRule.findMany({
       where: where ?? {},
+      // prioridade ainda existe internamente, então mantém ordenação segura
       orderBy: [{ unitId: "asc" }, { priority: "desc" }, { createdAt: "asc" }],
     }),
   ]);
@@ -112,15 +112,9 @@ export async function getCustomerLevelData(unitId?: string | null) {
 // CustomerLevelConfig
 // ======================
 
-/**
- * Upsert das configs para os 4 níveis.
- * A UI pode mandar 4 linhas; se mandar menos, o que vier é atualizado/criado.
- */
 export async function upsertCustomerLevelConfigs(formData: FormData) {
   const unitId = await getUnitIdFromFormOrDefault(formData);
 
-  // lê 4 níveis do form. Aceita nomes flexíveis:
-  // minAppointmentsDone_BRONZE, minOrdersCompleted_BRONZE, etc.
   const levels: CustomerLevel[] = ["BRONZE", "PRATA", "OURO", "DIAMANTE"];
 
   const rows = levels.map((lvl) => {
@@ -164,23 +158,22 @@ export async function upsertCustomerLevelConfigs(formData: FormData) {
     ),
   );
 
-  revalidatePath("/admin/client-levels");
+  revalidateClientLevels();
 }
 
-/**
- * action direta pra form
- */
 export async function upsertCustomerLevelConfigsAction(formData: FormData) {
   "use server";
+  const unitId = await getUnitIdFromFormOrDefault(formData);
   await upsertCustomerLevelConfigs(formData);
 
-  // volta para a listagem
-  redirect("/admin/client-levels");
+  redirect(`/admin/client-levels?unitId=${unitId}`);
 }
 
 // ======================
 // CustomerLevelRule
 // ======================
+
+const DEFAULT_RULE_PRIORITY = 100;
 
 export async function createCustomerLevelRule(formData: FormData) {
   const unitId = await getUnitIdFromFormOrDefault(formData);
@@ -189,8 +182,6 @@ export async function createCustomerLevelRule(formData: FormData) {
     unitId,
     type: formData.get("type"),
     targetLevel: formData.get("targetLevel"),
-    priority: formData.get("priority"),
-    isEnabled: parseBoolFromForm(formData, "isEnabled"),
   });
 
   if (!parsed.success) {
@@ -198,23 +189,41 @@ export async function createCustomerLevelRule(formData: FormData) {
     throw new Error(parsed.error.issues[0]?.message ?? "Regra inválida");
   }
 
+  // Regra de negócio: 1 regra por unidade
+  const exists = await prisma.customerLevelRule.findFirst({
+    where: { unitId: parsed.data.unitId },
+    select: { id: true },
+  });
+
+  if (exists) {
+    throw new Error("Esta unidade já possui uma regra. Edite a existente.");
+  }
+
   await prisma.customerLevelRule.create({
     data: {
       unitId: parsed.data.unitId,
       type: parsed.data.type as CustomerLevelRuleType,
       targetLevel: parsed.data.targetLevel as CustomerLevel,
-      priority: parsed.data.priority,
-      isEnabled: parsed.data.isEnabled,
+
+      // ✅ internos
+      priority: DEFAULT_RULE_PRIORITY,
+
+      // ✅ se sua coluna ainda existe no banco, mantém verdadeiro sempre.
+      // Se você remover a coluna do schema futuramente, é só tirar essa linha.
+      isEnabled: true,
     },
   });
 
-  revalidatePath("/admin/client-levels");
+  revalidateClientLevels();
 }
 
 export async function createCustomerLevelRuleAction(formData: FormData) {
   "use server";
+  const unitId = await getUnitIdFromFormOrDefault(formData);
   await createCustomerLevelRule(formData);
-  redirect("/admin/client-levels");
+
+  // volta sem create=1 pra sumir bloco "Nova regra" e botão "Criar"
+  redirect(`/admin/client-levels/rules?unitId=${unitId}`);
 }
 
 export async function updateCustomerLevelRule(formData: FormData) {
@@ -225,8 +234,6 @@ export async function updateCustomerLevelRule(formData: FormData) {
     ruleId: formData.get("ruleId"),
     type: formData.get("type"),
     targetLevel: formData.get("targetLevel"),
-    priority: formData.get("priority"),
-    isEnabled: parseBoolFromForm(formData, "isEnabled"),
   });
 
   if (!parsed.success) {
@@ -237,58 +244,36 @@ export async function updateCustomerLevelRule(formData: FormData) {
   await prisma.customerLevelRule.update({
     where: { id: parsed.data.ruleId },
     data: {
-      // unitId não muda
       type: parsed.data.type as CustomerLevelRuleType,
       targetLevel: parsed.data.targetLevel as CustomerLevel,
-      priority: parsed.data.priority,
-      isEnabled: parsed.data.isEnabled,
+
+      // ✅ admin não altera isso
+      // priority: (mantém como está)
+      // isEnabled: (mantém true sempre; sem toggle)
     },
   });
 
-  revalidatePath("/admin/client-levels");
+  revalidateClientLevels();
 }
 
 export async function updateCustomerLevelRuleAction(formData: FormData) {
   "use server";
+  const unitId = await getUnitIdFromFormOrDefault(formData);
   await updateCustomerLevelRule(formData);
-  redirect("/admin/client-levels");
-}
-
-export async function toggleCustomerLevelRule(ruleId: string) {
-  const rule = await prisma.customerLevelRule.findUnique({
-    where: { id: ruleId },
-    select: { isEnabled: true },
-  });
-
-  if (!rule) throw new Error("Regra não encontrada");
-
-  await prisma.customerLevelRule.update({
-    where: { id: ruleId },
-    data: { isEnabled: !rule.isEnabled },
-  });
-
-  revalidatePath("/admin/client-levels");
-}
-
-export async function toggleCustomerLevelRuleAction(
-  ruleId: string,
-  _formData: FormData,
-) {
-  "use server";
-  await toggleCustomerLevelRule(ruleId);
-  // sem redirect: só revalida
+  redirect(`/admin/client-levels/rules?unitId=${unitId}`);
 }
 
 export async function deleteCustomerLevelRule(ruleId: string) {
   await prisma.customerLevelRule.delete({ where: { id: ruleId } });
-  revalidatePath("/admin/client-levels");
+  revalidateClientLevels();
 }
 
 export async function deleteCustomerLevelRuleAction(
   ruleId: string,
-  _formData: FormData,
+  formData: FormData,
 ) {
   "use server";
+  const unitId = await getUnitIdFromFormOrDefault(formData);
   await deleteCustomerLevelRule(ruleId);
-  // sem redirect: só revalida
+  redirect(`/admin/client-levels/rules?unitId=${unitId}`);
 }
