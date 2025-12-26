@@ -55,6 +55,25 @@ function parseBirthday(input: unknown): Date | null {
   return null;
 }
 
+function computeProfileStatus(user: {
+  phone: string | null;
+  birthday: Date | null;
+}) {
+  const missingFields: Array<"phone" | "birthday"> = [];
+  const phoneOk =
+    typeof user.phone === "string" && user.phone.trim().length > 0;
+  const birthdayOk =
+    user.birthday instanceof Date && !Number.isNaN(user.birthday.getTime());
+
+  if (!phoneOk) missingFields.push("phone");
+  if (!birthdayOk) missingFields.push("birthday");
+
+  return {
+    profileComplete: missingFields.length === 0,
+    missingFields,
+  };
+}
+
 type CustomerLevelDTO = {
   level: "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
   label: string;
@@ -122,11 +141,23 @@ export async function GET(req: Request) {
 
     const { customerLevel } = await getUserLevel(userId);
 
+    // ✅ fonte da verdade: banco (phone + birthday)
+    const { profileComplete, missingFields } = computeProfileStatus({
+      phone: user.phone ?? null,
+      birthday: user.birthday ?? null,
+    });
+
     return NextResponse.json({
       user: {
         ...user,
         customerLevel, // ✅ agora o app tem label + icon + level
+
+        // ✅ novo: onboarding gate
+        profileComplete,
+        missingFields,
       },
+      // opcional: expõe também no topo (facilita debug/telemetria)
+      profileComplete,
     });
   } catch (err) {
     console.error("[api/mobile/me] GET error:", err);
@@ -202,11 +233,21 @@ export async function PATCH(req: Request) {
 
     const { customerLevel } = await getUserLevel(userId);
 
+    const { profileComplete, missingFields } = computeProfileStatus({
+      phone: user.phone ?? null,
+      birthday: user.birthday ?? null,
+    });
+
     return NextResponse.json({
       user: {
         ...user,
         customerLevel,
+
+        // ✅ novo: onboarding gate
+        profileComplete,
+        missingFields,
       },
+      profileComplete,
     });
   } catch (err) {
     console.error("[api/mobile/me] PATCH error:", err);

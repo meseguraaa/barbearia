@@ -22,6 +22,16 @@ function mapOauthError(code: string) {
   return "Não foi possível autenticar. Tente novamente.";
 }
 
+function computeProfileComplete(u: {
+  phone: string | null;
+  birthday: Date | null;
+}) {
+  const phoneOk = typeof u.phone === "string" && u.phone.trim().length > 0;
+  const birthdayOk =
+    u.birthday instanceof Date && !Number.isNaN(u.birthday.getTime());
+  return phoneOk && birthdayOk;
+}
+
 /**
  * Ponte OAuth (NextAuth Web -> Mobile deep link)
  *
@@ -32,7 +42,7 @@ function mapOauthError(code: string) {
  * Aqui:
  * - Lemos o token do NextAuth (cookie)
  * - Validamos usuário no banco (isActive)
- * - Geramos JWT próprio do app (Bearer)
+ * - Geramos JWT próprio do app (Bearer) com claim profile_complete
  * - Voltamos pro app via redirect_uri com ?token=<json>
  */
 export async function GET(req: Request) {
@@ -85,6 +95,7 @@ export async function GET(req: Request) {
         role: true,
         image: true,
         phone: true,
+        birthday: true, // ✅ novo (pra calcular profileComplete)
         isOwner: true,
         isActive: true,
         adminAccess: true,
@@ -99,9 +110,15 @@ export async function GET(req: Request) {
       return NextResponse.redirect(`${redirectUri}?error=user_inactive`);
     }
 
+    const profileComplete = computeProfileComplete({
+      phone: dbUser.phone ?? null,
+      birthday: (dbUser as any).birthday ?? null,
+    });
+
     const appToken = await signAppJwt({
       sub: dbUser.id,
       role: dbUser.role,
+      profile_complete: profileComplete, // ✅ claim no JWT
     });
 
     const payload = {
@@ -115,6 +132,9 @@ export async function GET(req: Request) {
         phone: dbUser.phone,
         isOwner: dbUser.isOwner,
         adminAccess: dbUser.adminAccess,
+
+        // ✅ novo: ajuda o app a decidir instantaneamente
+        profileComplete,
       },
     };
 

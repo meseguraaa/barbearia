@@ -28,7 +28,15 @@ type AuthUser = {
   email: string;
   role: Role;
   image?: string | null;
+
   phone?: string | null;
+
+  // 🎂 vindo do backend (ou /me)
+  birthday?: string | null;
+
+  // ✅ claim/flag vindo do backend (JWT ou /me)
+  profileComplete?: boolean | null;
+
   isOwner?: boolean;
   adminAccess?: any | null;
   customerLevel?: CustomerLevel | null;
@@ -175,6 +183,19 @@ function normalizeCustomerLevel(u: any): CustomerLevel | null {
   return { id, label, icon: icon || null };
 }
 
+function computeProfileComplete(u: AuthUser | null): boolean {
+  if (!u) return true;
+
+  // ✅ se backend já mandou o status, confia nele
+  if (typeof u.profileComplete === "boolean") return u.profileComplete;
+
+  // fallback: phone + birthday
+  const phoneOk = typeof u.phone === "string" && u.phone.trim().length > 0;
+  const bdayOk = typeof u.birthday === "string" && u.birthday.trim().length > 0;
+
+  return phoneOk && bdayOk;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const segments = useSegments();
 
@@ -256,18 +277,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       setUser((prev) => {
         if (!prev) return prev;
-        return {
+
+        const next: AuthUser = {
           ...prev,
           id: (u?.id ?? prev.id) as any,
           name: (u?.name ?? prev.name) as any,
           email: (u?.email ?? prev.email) as any,
           image: (u?.image ?? prev.image) as any,
           phone: (u?.phone ?? prev.phone) as any,
+          birthday: (u?.birthday ?? prev.birthday) as any,
+          profileComplete: (u?.profileComplete ?? prev.profileComplete) as any,
           role: (u?.role ?? prev.role) as any,
           isOwner: (u?.isOwner ?? prev.isOwner) as any,
           adminAccess: (u?.adminAccess ?? prev.adminAccess) as any,
           customerLevel: normalizedLevel ?? prev.customerLevel ?? null,
         };
+
+        return next;
       });
 
       await ensureAvatarReady(u?.image ?? null);
@@ -340,13 +366,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Guard de rotas
+  // Guard de rotas (auth + profile gate)
   useEffect(() => {
     if (isBooting) return;
 
     const group = segments[0];
     const inAuth = group === "(auth)";
     const inApp = group === "(app)";
+
+    // rota específica do profile (pra evitar loop)
+    const inProfile = segments.join("/").includes("(tabs)/profile");
 
     if (!appToken && inApp) {
       router.replace("/(auth)/login");
@@ -357,7 +386,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       router.replace("/(app)/(tabs)/home");
       return;
     }
-  }, [appToken, isBooting, segments]);
+
+    // ✅ novo: se logado e perfil incompleto, força profile
+    if (appToken && inApp) {
+      const ok = computeProfileComplete(user);
+      if (!ok && !inProfile) {
+        router.replace("/(app)/(tabs)/profile");
+        return;
+      }
+    }
+  }, [appToken, isBooting, segments, user]);
 
   // Boot-refresh do /me quando token mudar
   useEffect(() => {
@@ -381,18 +419,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         setUser((prev) => {
           if (!prev) return prev;
-          return {
+
+          const next: AuthUser = {
             ...prev,
             id: (u?.id ?? prev.id) as any,
             name: (u?.name ?? prev.name) as any,
             email: (u?.email ?? prev.email) as any,
             image: (u?.image ?? prev.image) as any,
             phone: (u?.phone ?? prev.phone) as any,
+            birthday: (u?.birthday ?? prev.birthday) as any,
+            profileComplete: (u?.profileComplete ??
+              prev.profileComplete) as any,
             role: (u?.role ?? prev.role) as any,
             isOwner: (u?.isOwner ?? prev.isOwner) as any,
             adminAccess: (u?.adminAccess ?? prev.adminAccess) as any,
             customerLevel: normalizedLevel ?? prev.customerLevel ?? null,
           };
+
+          return next;
         });
 
         await ensureAvatarReady(u?.image ?? null);

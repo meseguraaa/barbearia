@@ -84,6 +84,37 @@ function formatBirthdayBR(input: unknown): string {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+function digitsOnly(s: string) {
+  return (s || "").replace(/\D/g, "");
+}
+
+function isValidBirthBR(b: string) {
+  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(b)) return false;
+
+  const [ddS, mmS, yyyyS] = b.split("/");
+  const dd = Number(ddS);
+  const mm = Number(mmS);
+  const yyyy = Number(yyyyS);
+
+  if (!Number.isFinite(dd) || !Number.isFinite(mm) || !Number.isFinite(yyyy))
+    return false;
+  if (yyyy < 1900 || yyyy > 2100) return false;
+  if (mm < 1 || mm > 12) return false;
+  if (dd < 1 || dd > 31) return false;
+
+  // valida data real
+  const d = new Date(Date.UTC(yyyy, mm - 1, dd));
+  if (Number.isNaN(d.getTime())) return false;
+  if (
+    d.getUTCFullYear() !== yyyy ||
+    d.getUTCMonth() !== mm - 1 ||
+    d.getUTCDate() !== dd
+  )
+    return false;
+
+  return true;
+}
+
 type MeApiUser = {
   id: string;
   name: string | null;
@@ -91,6 +122,10 @@ type MeApiUser = {
   image: string | null;
   phone: string | null;
   birthday: string | Date | null;
+
+  // ✅ novo (backend /me)
+  profileComplete?: boolean;
+  missingFields?: Array<"phone" | "birthday">;
 };
 
 // =======================
@@ -216,7 +251,7 @@ const Field = memo(function Field({
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { signOut, user } = useAuth();
+  const { signOut } = useAuth();
 
   const [loadingMe, setLoadingMe] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -227,6 +262,12 @@ export default function Profile() {
 
   const [phone, setPhone] = useState("");
   const [birth, setBirth] = useState("");
+
+  // ✅ onboarding gate
+  const [profileComplete, setProfileComplete] = useState<boolean>(true);
+  const [missingFields, setMissingFields] = useState<
+    Array<"phone" | "birthday">
+  >([]);
 
   const didMeRef = useRef(false);
   const [dataReady, setDataReady] = useState(false);
@@ -245,6 +286,8 @@ export default function Profile() {
   );
 
   // ✅ nível (label curta) + cores do Admin
+  const { user } = useAuth();
+
   const userLevelLabel = useMemo(() => {
     const raw =
       (user as any)?.level?.label ??
@@ -290,6 +333,33 @@ export default function Profile() {
     } as const;
   }, [userLevelKey]);
 
+  const needsOnboarding = useMemo(() => !profileComplete, [profileComplete]);
+
+  const onboardingTitle = useMemo(() => {
+    const fields = missingFields || [];
+    const hasPhone = fields.includes("phone");
+    const hasBirth = fields.includes("birthday");
+
+    if (hasPhone && hasBirth) return "Complete seu cadastro";
+    if (hasPhone) return "Falta seu telefone";
+    if (hasBirth) return "Falta sua data de nascimento";
+    return "Complete seu cadastro";
+  }, [missingFields]);
+
+  const onboardingText = useMemo(() => {
+    const fields = missingFields || [];
+    const parts: string[] = [];
+
+    if (fields.includes("phone")) parts.push("telefone");
+    if (fields.includes("birthday")) parts.push("data de nascimento");
+
+    if (parts.length === 0) {
+      return "Para continuar usando o app, complete seu cadastro.";
+    }
+
+    return `Para continuar usando o app, informe ${parts.join(" e ")}.`;
+  }, [missingFields]);
+
   async function forceLogoutToLogin() {
     try {
       await signOut();
@@ -305,7 +375,10 @@ export default function Profile() {
       try {
         setLoadingMe(true);
 
-        const res = await apiFetch<{ user: MeApiUser }>("/api/mobile/me");
+        const res = await apiFetch<{
+          user: MeApiUser;
+          profileComplete?: boolean;
+        }>("/api/mobile/me");
         if (!alive) return;
 
         const u = res.user;
@@ -316,6 +389,17 @@ export default function Profile() {
 
         setPhone(u.phone ? maskPhone(u.phone) : "");
         setBirth(maskDate(formatBirthdayBR(u.birthday)));
+
+        // ✅ gate
+        const pc =
+          typeof u.profileComplete === "boolean"
+            ? u.profileComplete
+            : typeof (res as any)?.profileComplete === "boolean"
+              ? Boolean((res as any).profileComplete)
+              : true;
+
+        setProfileComplete(pc);
+        setMissingFields(Array.isArray(u.missingFields) ? u.missingFields : []);
       } catch {
         Alert.alert("Erro", "Não foi possível carregar seus dados.");
         setAvatar(AVATAR_PLACEHOLDER);
@@ -342,25 +426,83 @@ export default function Profile() {
     ]);
   }
 
+  function validateRequiredForOnboarding() {
+    const pDigits = digitsOnly(phone);
+    const b = birth.trim();
+
+    // telefone: mínimo razoável pra BR (DDD + 8/9 dígitos)
+    if (!pDigits || pDigits.length < 10) {
+      Alert.alert(
+        "Telefone obrigatório",
+        "Informe um telefone válido para continuar.",
+      );
+      return false;
+    }
+
+    if (!b || !isValidBirthBR(b)) {
+      Alert.alert(
+        "Data de nascimento obrigatória",
+        "Informe sua data no formato dd/mm/aaaa para continuar.",
+      );
+      return false;
+    }
+
+    return true;
+  }
+
   async function handleSave() {
     if (saving) return;
 
     const b = birth.trim();
-    if (b.length > 0 && !/^\d{2}\/\d{2}\/\d{4}$/.test(b)) {
-      Alert.alert("Data inválida", "Use o formato 00/00/0000.");
-      return;
+
+    // Se está em onboarding, vira obrigatório.
+    if (needsOnboarding) {
+      if (!validateRequiredForOnboarding()) return;
+    } else {
+      // Fora onboarding, só valida se preencheu algo
+      if (b.length > 0 && !/^\d{2}\/\d{2}\/\d{4}$/.test(b)) {
+        Alert.alert("Data inválida", "Use o formato 00/00/0000.");
+        return;
+      }
+      if (b.length > 0 && !isValidBirthBR(b)) {
+        Alert.alert("Data inválida", "Verifique o dia/mês/ano.");
+        return;
+      }
     }
 
     try {
       setSaving(true);
 
-      await apiFetch("/api/mobile/me", {
-        method: "PATCH",
-        body: JSON.stringify({
-          phone: phone.trim() || null,
-          birthday: b || null,
-        }),
-      });
+      const res = await apiFetch<{ user: any; profileComplete?: boolean }>(
+        "/api/mobile/me",
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            phone: phone.trim() || null,
+            birthday: b || null,
+          }),
+        },
+      );
+
+      const u = (res as any)?.user ?? null;
+
+      const pc =
+        typeof u?.profileComplete === "boolean"
+          ? u.profileComplete
+          : typeof (res as any)?.profileComplete === "boolean"
+            ? Boolean((res as any).profileComplete)
+            : true;
+
+      setProfileComplete(pc);
+      setMissingFields(Array.isArray(u?.missingFields) ? u.missingFields : []);
+
+      if (!pc) {
+        Alert.alert(
+          "Cadastro incompleto",
+          "Preencha telefone e data de nascimento para continuar.",
+        );
+        return;
+      }
 
       router.replace("/(app)/(tabs)/home");
     } catch (e: any) {
@@ -416,7 +558,6 @@ export default function Profile() {
               <View style={S.darkInner}>
                 {/* ✅ Card igual ao heroCard da Home */}
                 <View style={S.heroCard}>
-                  {/* 1) NO JSX: move o pill pra depois do heroTextCol */}
                   <View style={S.profileHeroRow}>
                     <View style={S.avatarWrap}>
                       <Image source={{ uri: avatar }} style={S.avatarBig} />
@@ -470,6 +611,22 @@ export default function Profile() {
             {/* ÁREA BRANCA */}
             <View style={S.whiteArea}>
               <View style={S.whiteContent}>
+                {needsOnboarding ? (
+                  <View style={S.onboardingCard}>
+                    <View style={S.onboardingIcon}>
+                      <FontAwesome
+                        name="exclamation"
+                        size={14}
+                        color={UI.brand.primaryText}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={S.onboardingTitle}>{onboardingTitle}</Text>
+                      <Text style={S.onboardingText}>{onboardingText}</Text>
+                    </View>
+                  </View>
+                ) : null}
+
                 <Text style={S.sectionTitle}>Informações</Text>
 
                 <View style={S.formCard}>
@@ -513,6 +670,7 @@ export default function Profile() {
                 <Pressable
                   style={[
                     S.saveBtn,
+                    needsOnboarding ? S.saveBtnOnboarding : null,
                     saving || loadingMe ? { opacity: 0.85 } : null,
                   ]}
                   onPress={handleSave}
@@ -521,7 +679,11 @@ export default function Profile() {
                   {saving ? (
                     <ActivityIndicator color="#FFFFFF" />
                   ) : (
-                    <Text style={S.saveBtnText}>Salvar alterações</Text>
+                    <Text style={S.saveBtnText}>
+                      {needsOnboarding
+                        ? "Completar cadastro"
+                        : "Salvar alterações"}
+                    </Text>
                   )}
                 </Pressable>
 
@@ -668,6 +830,39 @@ const S = StyleSheet.create({
     paddingTop: 18,
   },
 
+  onboardingCard: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "flex-start",
+    backgroundColor: "rgba(245, 158, 11, 0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(245, 158, 11, 0.25)",
+    borderRadius: UI.radius.card,
+    padding: 12,
+    marginBottom: 14,
+  },
+  onboardingIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: "rgba(245, 158, 11, 0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  onboardingTitle: {
+    color: UI.brand.primaryText,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  onboardingText: {
+    marginTop: 4,
+    color: UI.colors.black45,
+    fontSize: 12,
+    fontWeight: "600",
+    lineHeight: 16,
+  },
+
   sectionTitle: {
     fontSize: 18,
     fontWeight: "600",
@@ -729,6 +924,9 @@ const S = StyleSheet.create({
     backgroundColor: "#141414",
     alignItems: "center",
     justifyContent: "center",
+  },
+  saveBtnOnboarding: {
+    backgroundColor: "#141414",
   },
   saveBtnText: {
     color: "#FFFFFF",
