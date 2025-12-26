@@ -107,7 +107,7 @@ async function resolveProductUnitPrice(args: {
         unitId: true,
         birthdayBenefitEnabled: true,
         birthdayPriceLevel: true,
-        prices: { select: { level: true, price: true } },
+        // ✅ REMOVIDO: prices (não existe no Prisma Client atual)
       },
     }),
     args.clientId
@@ -120,30 +120,21 @@ async function resolveProductUnitPrice(args: {
 
   if (!product) throw new Error("Produto não encontrado.");
 
-  const rows = Array.isArray((product as any).prices)
-    ? (product as any).prices
-    : [];
-
-  const priceByLevel = new Map<CustomerLevel, number>();
-  for (const row of rows as any[]) {
-    priceByLevel.set(row.level as CustomerLevel, Number(row.price));
-  }
-
-  const baseBronze = priceByLevel.get("BRONZE") ?? Number(product.price);
+  // ✅ Sem tabela de preços por nível no schema atual:
+  // BRONZE = product.price e o resto cai no fallback
+  const baseBronze = Number(product.price);
 
   function pickPrice(level: CustomerLevel) {
-    for (const l of LEVEL_FALLBACK[level]) {
-      const found = priceByLevel.get(l);
-      if (typeof found === "number" && Number.isFinite(found)) {
-        return { level: l, price: found };
-      }
+    // Mantém a estrutura do motor, mas sem resolver nível por falta de price table
+    for (const _l of LEVEL_FALLBACK[level]) {
+      // sem-op
     }
     return { level: "BRONZE" as CustomerLevel, price: baseBronze };
   }
 
   let inBirthdayWindow = false;
 
-  if (client?.birthday && (product as any).birthdayBenefitEnabled) {
+  if (client?.birthday && product.birthdayBenefitEnabled) {
     const nowParts = getDatePartsInTz(now, timeZone);
     const b = getDatePartsInTz(client.birthday, timeZone);
 
@@ -159,9 +150,8 @@ async function resolveProductUnitPrice(args: {
     inBirthdayWindow = isWithinInclusive(todayAnchor, start, end);
   }
 
-  if (inBirthdayWindow && (product as any).birthdayBenefitEnabled) {
-    const chosen = (((product as any)
-      .birthdayPriceLevel as CustomerLevel | null) ??
+  if (inBirthdayWindow && product.birthdayBenefitEnabled) {
+    const chosen = ((product.birthdayPriceLevel as CustomerLevel | null) ??
       "DIAMANTE") as CustomerLevel;
 
     const picked = pickPrice(chosen);
@@ -519,8 +509,10 @@ export async function GET(req: Request) {
               Number.isFinite(finalPrice) &&
               finalPrice < basePrice;
 
-            const badge =
-              pricing.appliedBecause === "BIRTHDAY"
+            // ✅ Badge só se houver desconto de verdade
+            const badge = !hasDiscount
+              ? null
+              : pricing.appliedBecause === "BIRTHDAY"
                 ? { type: "BIRTHDAY" as const, label: "🎂 Aniversário" }
                 : pricing.appliedBecause === "LEVEL"
                   ? { type: "LEVEL" as const, label: "⭐ Oferta do seu nível" }
