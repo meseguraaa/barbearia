@@ -1,4 +1,4 @@
-// app/admin/settings/page.tsx
+// app/admin/settings/units/page.tsx
 import { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
@@ -225,6 +225,7 @@ type AdminRow = {
     canAccessReviews: boolean;
     canAccessProducts: boolean;
     canAccessClients: boolean;
+    canAccessClientLevels: boolean; // ✅ ADD
     canAccessFinance: boolean;
   };
 };
@@ -276,6 +277,8 @@ export default async function SettingsPage() {
         canAccessReviews: admin.adminAccess?.canAccessReviews ?? false,
         canAccessProducts: admin.adminAccess?.canAccessProducts ?? false,
         canAccessClients: admin.adminAccess?.canAccessClients ?? false,
+        canAccessClientLevels:
+          (admin.adminAccess as any)?.canAccessClientLevels ?? false, // ✅ ADD (safe)
         canAccessFinance: admin.adminAccess?.canAccessFinance ?? false,
       },
     };
