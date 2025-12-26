@@ -98,14 +98,9 @@ async function getAppointments(
   dateParam: string | undefined,
   unitId: string | null,
 ) {
-  let baseDate: Date;
-
-  if (dateParam) {
-    const parsed = parseDateParam(dateParam);
-    baseDate = parsed ?? getSaoPauloToday();
-  } else {
-    baseDate = getSaoPauloToday();
-  }
+  const baseDate = dateParam
+    ? (parseDateParam(dateParam) ?? getSaoPauloToday())
+    : getSaoPauloToday();
 
   const start = startOfDay(baseDate);
   const end = endOfDay(baseDate);
@@ -136,6 +131,12 @@ async function getAppointments(
           plan: true,
         },
       },
+
+      // ✅ auditoria de ator (pra mostrar "Cancelado/Concluído por Nome")
+      concludedByUser: true,
+      concludedByBarber: true,
+      cancelledByUser: true,
+      cancelledByBarber: true,
     },
   });
 

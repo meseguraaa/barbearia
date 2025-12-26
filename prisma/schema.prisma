@@ -1,3 +1,4 @@
+// prisma/schema.prisma
 // =======================
 // GENERATOR & DATASOURCE
 // =======================
@@ -101,7 +102,14 @@ model User {
 
   isActive Boolean @default(true)
 
+  // ✅ agendamentos como CLIENTE
   appointmentsAsClient Appointment[] @relation("ClientAppointments")
+
+  // ✅ auditoria: agendamentos CONCLUÍDOS por este usuário (ADMIN/BARBER logado via User)
+  appointmentsConcluded Appointment[] @relation("AppointmentConcludedByUser")
+
+  // ✅ auditoria: agendamentos CANCELADOS por este usuário (ADMIN/BARBER logado via User)
+  appointmentsCancelled Appointment[] @relation("AppointmentCancelledByUser")
 
   clientPlans ClientPlan[]
 
@@ -125,6 +133,9 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // 🚫 REMOVIDO: appointments Appointment[]
+  // Esse campo estava "solto" e quebrava o Prisma (sem relação inversa no Appointment).
 }
 
 // =======================
@@ -266,8 +277,6 @@ model CustomerLevelRule {
 }
 
 // ✅ NOVO: ESTADO DO NÍVEL VIGENTE (por unidade + cliente)
-// Regra de negócio: conquista no mês M, usa no mês M+1.
-// Logo, esse registro guarda o nível vigente (current) e o último earned fechado.
 model CustomerLevelState {
   id String @id @default(cuid())
 
@@ -277,14 +286,9 @@ model CustomerLevelState {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // Nível vigente (benefícios/preços) no mês atual
-  levelCurrent CustomerLevel @default(BRONZE)
-
-  // Nível conquistado no último período fechado (mês anterior)
+  levelCurrent          CustomerLevel @default(BRONZE)
   levelEarnedLastPeriod CustomerLevel @default(BRONZE)
-
-  // Data (início do mês) a partir da qual o levelCurrent é válido
-  levelEffectiveFrom DateTime?
+  levelEffectiveFrom    DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -296,7 +300,6 @@ model CustomerLevelState {
 }
 
 // ✅ NOVO: HISTÓRICO POR PERÍODO (por unidade + cliente + mês)
-// periodKey: "YYYY-MM" (ex.: "2025-12")
 model CustomerLevelPeriod {
   id String @id @default(cuid())
 
@@ -432,6 +435,12 @@ model Barber {
 
   appointments Appointment[]
 
+  // ✅ auditoria: agendamentos CONCLUÍDOS por este barbeiro
+  appointmentsConcluded Appointment[] @relation("AppointmentConcludedByBarber")
+
+  // ✅ auditoria: agendamentos CANCELADOS por este barbeiro
+  appointmentsCancelled Appointment[] @relation("AppointmentCancelledByBarber")
+
   weeklyAvailabilities BarberWeeklyAvailability[]
   dailyAvailabilities  BarberDailyAvailability[]
 
@@ -472,7 +481,6 @@ model Service {
   planServices PlanService[]
   orderItems   OrderItem[]
 
-  // 🔹 Profissionais que fazem este serviço
   professionals ServiceProfessional[]
 
   createdAt DateTime @default(now())
@@ -594,19 +602,29 @@ model Appointment {
   cancelledByRole  Role?
   concludedByRole  Role?
 
+  // ✅ NOVO: auditoria - quem CONCLUIU (nome/ator real)
+  concludedByUserId String?
+  concludedByUser   User?   @relation("AppointmentConcludedByUser", fields: [concludedByUserId], references: [id], onDelete: SetNull)
+
+  concludedByBarberId String?
+  concludedByBarber   Barber? @relation("AppointmentConcludedByBarber", fields: [concludedByBarberId], references: [id], onDelete: SetNull)
+
+  // ✅ NOVO: auditoria - quem CANCELOU (nome/ator real)
+  cancelledByUserId String?
+  cancelledByUser   User?   @relation("AppointmentCancelledByUser", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
+
+  cancelledByBarberId String?
+  cancelledByBarber   Barber? @relation("AppointmentCancelledByBarber", fields: [cancelledByBarberId], references: [id], onDelete: SetNull)
+
   clientPlanId String?
   clientPlan   ClientPlan? @relation(fields: [clientPlanId], references: [id])
 
   // ⭐ PEDIDO VINCULADO A ESSE ATENDIMENTO (opcional)
   order Order? @relation("AppointmentOrder")
 
-  // ⭐ CONTROLE DO MODAL DE AVALIAÇÃO (já foi mostrado para esse atendimento?)
-  reviewModalShown Boolean @default(false)
+  reviewModalShown Boolean            @default(false)
+  review           AppointmentReview?
 
-  // ⭐ RELAÇÃO 1:1 COM A A AVALIAÇÃO, QUANDO EXISTIR
-  review AppointmentReview?
-
-  // ✅ NOVO: lançamento financeiro da multa (1:1)
   cancellationFee BarberCancellationFee?
 
   createdAt DateTime @default(now())
@@ -619,6 +637,10 @@ model Appointment {
   @@index([serviceId])
   @@index([clientPlanId])
   @@index([barberId, scheduleAt])
+  @@index([concludedByUserId])
+  @@index([concludedByBarberId])
+  @@index([cancelledByUserId])
+  @@index([cancelledByBarberId])
   @@map("appointments")
 }
 
@@ -629,7 +651,6 @@ model Appointment {
 model BarberCancellationFee {
   id String @id @default(cuid())
 
-  // ✅ Um agendamento só pode gerar uma multa (idempotência)
   appointmentId String      @unique
   appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
@@ -665,26 +686,17 @@ model Product {
   category         String
   isActive         Boolean @default(true)
 
-  // ✅ NOVO: produto em destaque (carrossel no app)
   isFeatured Boolean @default(false)
 
-  // ⭐ ESTOQUE
-  stockQuantity Int @default(0)
-
-  // ✅ PRAZO DE RETIRADA (em dias) para reservas feitas pelo cliente
+  stockQuantity      Int @default(0)
   pickupDeadlineDays Int @default(2)
 
-  // ✅ NOVO: desconto por nível (tabela)
   discounts ProductDiscountByLevel[]
 
-  // ✅ NOVO: benefício de aniversário por produto (janela 3 dias antes + dia + 3 dias depois)
   birthdayBenefitEnabled Boolean        @default(false)
   birthdayPriceLevel     CustomerLevel?
 
-  // ⭐ RELAÇÃO COM VENDAS
-  sales ProductSale[]
-
-  // ⭐ ITENS DE PEDIDO COM ESSE PRODUTO
+  sales      ProductSale[]
   orderItems OrderItem[]
 
   createdAt DateTime @default(now())
@@ -694,18 +706,14 @@ model Product {
   @@index([isFeatured])
 }
 
-// ✅ NOVO: DESCONTO DO PRODUTO POR NÍVEL
-// OBS: mantemos o @@map("product_prices_by_level") pra não precisar renomear tabela agora.
 model ProductDiscountByLevel {
   id String @id @default(cuid())
 
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  level CustomerLevel
-
-  // Percentual de desconto (0 a 100)
-  discountPct Int @default(0)
+  level       CustomerLevel
+  discountPct Int           @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -715,14 +723,9 @@ model ProductDiscountByLevel {
   @@map("product_prices_by_level")
 }
 
-// =======================
-// ⭐ REGISTRO DE VENDA DE PRODUTO
-// =======================
-
 model ProductSale {
   id String @id @default(cuid())
 
-  // ✅ multi-unidade (obrigatório)
   unitId String
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
@@ -756,28 +759,19 @@ model Order {
   unitId String
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
-  // CLIENTE (opcional – dá pra vender sem estar cadastrado)
   clientId String?
   client   User?   @relation(fields: [clientId], references: [id])
 
-  // ATENDIMENTO (opcional – pedido pode ser só de produto)
   appointmentId String?      @unique
   appointment   Appointment? @relation("AppointmentOrder", fields: [appointmentId], references: [id])
 
-  // BARBEIRO QUE REALIZOU A VENDA / ATENDIMENTO (opcional)
   barberId String?
   barber   Barber? @relation(fields: [barberId], references: [id])
 
-  // ⭐ Status do pedido (inclui PENDING_CHECKIN e COMPLETED)
   status OrderStatus @default(PENDING)
 
-  // ✅ Data limite para retirada quando o pedido for uma reserva (PENDING_CHECKIN)
-  reservedUntil DateTime?
-
-  // ✅ Quando a reserva foi expirada
-  expiredAt DateTime?
-
-  // ✅ Marca que qualquer "seguro" de estoque/contabilização foi revertido (idempotência)
+  reservedUntil       DateTime?
+  expiredAt           DateTime?
   inventoryRevertedAt DateTime?
 
   totalAmount Decimal @default(0) @db.Decimal(10, 2)
@@ -934,13 +928,11 @@ model AppointmentReview {
   rating  Int
   comment String?
 
-  // 🔹 se quiser, dá pra esconder o nome do cliente do profissional, mas admin sempre vê
   isAnonymousForProfessional Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // 🔹 tooltips escolhidos pelo cliente
   tags AppointmentReviewTag[]
 
   @@index([clientId])
@@ -949,17 +941,14 @@ model AppointmentReview {
 }
 
 model ReviewTag {
-  id       String  @id @default(cuid())
-  label    String
-  isActive Boolean @default(true)
-
-  // 🔹 se true, é um motivo negativo (usado em avaliações 1–2 estrelas)
+  id         String  @id @default(cuid())
+  label      String
+  isActive   Boolean @default(true)
   isNegative Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // 🔹 avaliações que usaram essa tag
   reviews AppointmentReviewTag[]
 
   @@unique([label])
@@ -993,12 +982,9 @@ model AdminAccess {
   userId String @unique
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  // ✅ NOVO: unidade do admin (admin de unidade)
-  // - pode ser null pro DONO (User.isOwner = true) ver todas
   unitId String?
   unit   Unit?   @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
-  // 🔹 Módulos principais do painel
   canAccessDashboard     Boolean @default(false)
   canAccessCheckout      Boolean @default(false)
   canAccessAppointments  Boolean @default(false)
@@ -1008,10 +994,8 @@ model AdminAccess {
   canAccessProducts      Boolean @default(false)
   canAccessClients       Boolean @default(false)
 
-  // ✅ NOVO: Nível de Cliente (gamificação / regras)
   canAccessClientLevels Boolean @default(false)
-
-  canAccessFinance Boolean @default(false)
+  canAccessFinance      Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

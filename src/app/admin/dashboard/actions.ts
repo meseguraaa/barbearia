@@ -80,6 +80,7 @@ function getJwtSecretKey() {
 async function getRoleFromPainelSession(): Promise<{
   role?: RoleForAction;
   userId?: string;
+  email?: string;
   source: "PAINEL" | "NEXTAUTH" | "NONE";
 }> {
   // 1) tenta cookie do painel
@@ -94,7 +95,12 @@ async function getRoleFromPainelSession(): Promise<{
       const data = payload as unknown as PainelSessionPayload;
 
       if (data?.role === "ADMIN" || data?.role === "BARBER") {
-        return { role: data.role, userId: data.sub, source: "PAINEL" };
+        return {
+          role: data.role,
+          userId: data.sub,
+          email: data.email,
+          source: "PAINEL",
+        };
       }
     }
   } catch (err) {
@@ -106,11 +112,13 @@ async function getRoleFromPainelSession(): Promise<{
     const session = await getServerSession(nextAuthOptions);
     const sessionUserId = (session?.user as any)?.id as string | undefined;
     const sessionRoleRaw = (session?.user as any)?.role as string | undefined;
+    const sessionEmail = (session?.user as any)?.email as string | undefined;
 
     if (sessionRoleRaw === "ADMIN" || sessionRoleRaw === "BARBER") {
       return {
         role: sessionRoleRaw as RoleForAction,
         userId: sessionUserId,
+        email: sessionEmail,
         source: "NEXTAUTH",
       };
     }
@@ -118,7 +126,7 @@ async function getRoleFromPainelSession(): Promise<{
     if (sessionUserId) {
       const dbUser = await prisma.user.findUnique({
         where: { id: sessionUserId },
-        select: { role: true, isActive: true },
+        select: { role: true, isActive: true, email: true },
       });
 
       if (
@@ -128,6 +136,7 @@ async function getRoleFromPainelSession(): Promise<{
         return {
           role: dbUser.role as RoleForAction,
           userId: sessionUserId,
+          email: dbUser.email,
           source: "NEXTAUTH",
         };
       }
@@ -137,6 +146,31 @@ async function getRoleFromPainelSession(): Promise<{
   }
 
   return { source: "NONE" };
+}
+
+/* ---------------------------------------------------------
+ * ✅ NOVO: resolver Barber.id quando o ator logado é BARBER
+ * (pra gravar auditoria em concludedByBarberId / cancelledByBarberId)
+ * ---------------------------------------------------------*/
+async function getBarberIdForActor(args: {
+  actorRole?: RoleForAction;
+  actorUserId?: string;
+  actorEmail?: string;
+}): Promise<string | null> {
+  if (args.actorRole !== "BARBER") return null;
+  if (!args.actorUserId && !args.actorEmail) return null;
+
+  const barber = await prisma.barber.findFirst({
+    where: {
+      OR: [
+        ...(args.actorUserId ? [{ userId: args.actorUserId }] : []),
+        ...(args.actorEmail ? [{ email: args.actorEmail }] : []),
+      ],
+    },
+    select: { id: true },
+  });
+
+  return barber?.id ?? null;
 }
 
 /* ---------------------------------------------------------
@@ -217,12 +251,6 @@ function validateNotInPast(scheduleAt: Date): string | null {
 
 /* ---------------------------------------------------------
  * ✅ REGRA 2 (NOVA): validar horário REAL da UNIDADE (daily/weekly)
- * - Exceções da unidade = sempre BLOQUEIO (fechado)
- * - Se UnitDailyAvailability.isClosed -> bloqueia
- * - Se UnitDailyAvailability tem intervals -> só permite dentro deles
- * - Senão -> usa UnitWeeklyAvailability (isActive + intervals)
- * - O serviço precisa caber por inteiro dentro de algum intervalo
- * - Não permite cruzar o dia (no fuso de São Paulo)
  * ---------------------------------------------------------*/
 async function getUnitAvailabilityWindowsOnDate(
   unitId: string,
@@ -251,7 +279,6 @@ async function getUnitAvailabilityWindowsOnDate(
     // daily existe mas sem intervalos e não fechada -> cai no weekly
   }
 
-  // ✅ weekday consistente com São Paulo
   const weekday = getSaoPauloWeekday(date);
 
   const weekly = await prisma.unitWeeklyAvailability.findFirst({
@@ -277,10 +304,8 @@ async function validateWithinUnitHours(
   durationMinutes: number,
 ): Promise<string | null> {
   const safeDuration = Math.max(0, durationMinutes || 0);
-
   const endAt = addMinutes(scheduleAt, safeDuration);
 
-  // Não deixa atravessar o dia no fuso de SP (evita “meia-noite fantasma”)
   const startKey = getSaoPauloDateKey(scheduleAt);
   const endKey = getSaoPauloDateKey(endAt);
   if (startKey !== endKey) {
@@ -367,7 +392,6 @@ async function ensureAvailability(
   const newStart = scheduleAt;
   const newEnd = addMinutes(scheduleAt, Math.max(0, durationMinutes || 0));
 
-  // Janela de busca para reduzir carga
   const windowStart = subMinutes(newStart, 12 * 60);
   const windowEnd = addMinutes(newEnd, 12 * 60);
 
@@ -481,7 +505,9 @@ async function withAppointmentMutation<T>(
     revalidatePath("/client/schedule");
     revalidatePath("/admin/dashboard");
     revalidatePath("/admin/checkout");
+    revalidatePath("/admin/appointments");
     revalidatePath("/barber");
+    revalidatePath("/barber/calendar");
     revalidatePath("/barber/earnings");
 
     return result;
@@ -493,7 +519,7 @@ async function withAppointmentMutation<T>(
 
 /* ---------------------------------------------------------
  * ✅ Concluir atendimento (ADMIN/BARBER)
- * (inalterado)
+ * ✅ AGORA: grava auditoria (concludedByUserId / concludedByBarberId)
  * ---------------------------------------------------------*/
 const concludeAppointmentSchema = z.object({
   concludedByRole: z.enum(["ADMIN", "BARBER"]).optional(),
@@ -528,11 +554,23 @@ export async function concludeAppointment(
   const concludedByRole: RoleForAction =
     (parsed.data.concludedByRole as RoleForAction | undefined) ?? auth.role;
 
+  // ✅ auditoria: ator real (quem clicou)
+  const actorUserId = auth.userId;
+  const actorBarberId = await getBarberIdForActor({
+    actorRole: auth.role,
+    actorUserId: auth.userId,
+    actorEmail: auth.email,
+  });
+
   console.log(
     "[concludeAppointment] allowed. concludedByRole:",
     concludedByRole,
     "appointmentId:",
     appointmentId,
+    "actorUserId:",
+    actorUserId,
+    "actorBarberId:",
+    actorBarberId,
   );
 
   const existing = await prisma.appointment.findUnique({
@@ -540,7 +578,6 @@ export async function concludeAppointment(
     select: {
       id: true,
       status: true,
-      concludedByRole: true,
     },
   });
 
@@ -554,60 +591,30 @@ export async function concludeAppointment(
   }
 
   return withAppointmentMutation(async () => {
-    const tryData: Record<string, any> = {
+    const updateData: Record<string, any> = {
+      status: "DONE",
       concludedByRole,
+
+      ...(auth.role === "ADMIN" && actorUserId
+        ? { concludedByUserId: actorUserId }
+        : {}),
+      ...(auth.role === "BARBER" && actorBarberId
+        ? { concludedByBarberId: actorBarberId }
+        : {}),
     };
 
-    let appt: {
-      id: string;
-      unitId: string;
-      clientId: string | null;
-      barberId: string | null;
-      serviceId: string | null;
-      servicePriceAtTheTime: Prisma.Decimal | null;
-    };
-
-    try {
-      appt = await prisma.appointment.update({
-        where: { id: appointmentId },
-        data: tryData as any,
-        select: {
-          id: true,
-          unitId: true,
-          clientId: true,
-          barberId: true,
-          serviceId: true,
-          servicePriceAtTheTime: true,
-        },
-      });
-    } catch (err: any) {
-      const msg = String(err?.message ?? "");
-      const looksLikeUnknownField =
-        msg.includes("Unknown arg `concludedAt`") ||
-        msg.includes("Unknown arg `concludedByRole`") ||
-        msg.includes("concludedAt") ||
-        msg.includes("concludedByRole");
-
-      if (!looksLikeUnknownField) throw err;
-
-      const apptFallback = await prisma.appointment.findUnique({
-        where: { id: appointmentId },
-        select: {
-          id: true,
-          unitId: true,
-          clientId: true,
-          barberId: true,
-          serviceId: true,
-          servicePriceAtTheTime: true,
-        },
-      });
-
-      if (!apptFallback) {
-        throw new Error("Agendamento não encontrado após fallback");
-      }
-
-      appt = apptFallback;
-    }
+    const appt = await prisma.appointment.update({
+      where: { id: appointmentId },
+      data: updateData as any,
+      select: {
+        id: true,
+        unitId: true,
+        clientId: true,
+        barberId: true,
+        serviceId: true,
+        servicePriceAtTheTime: true,
+      },
+    });
 
     await prisma.$transaction(async (tx) => {
       if (!appt.clientId) throw new Error("Appointment sem clientId");
@@ -683,7 +690,8 @@ export async function concludeAppointment(
 
 /* ---------------------------------------------------------
  * ✅ CANCELAR AGENDAMENTO (ADMIN/BARBER)
- * ✅ AGORA: cria lançamento BarberCancellationFee quando applyFee=true e taxa > 0
+ * ✅ AGORA: cria BarberCancellationFee quando applyFee=true e taxa > 0
+ * ✅ AGORA: grava auditoria (cancelledByUserId / cancelledByBarberId)
  * ---------------------------------------------------------*/
 const cancelAppointmentSchema = z.object({
   applyFee: z.boolean().optional(),
@@ -711,6 +719,14 @@ export async function cancelAppointment(
     (parsed.data.cancelledByRole as RoleForAction | undefined) ?? auth.role;
 
   const applyFeeRequested = !!parsed.data.applyFee;
+
+  // ✅ auditoria: ator real
+  const actorUserId = auth.userId;
+  const actorBarberId = await getBarberIdForActor({
+    actorRole: auth.role,
+    actorUserId: auth.userId,
+    actorEmail: auth.email,
+  });
 
   const existing = await prisma.appointment.findUnique({
     where: { id: appointmentId },
@@ -802,6 +818,13 @@ export async function cancelAppointment(
           cancelledByRole,
           cancelFeeValue,
           cancelFeeApplied,
+
+          ...(auth.role === "ADMIN" && actorUserId
+            ? { cancelledByUserId: actorUserId }
+            : {}),
+          ...(auth.role === "BARBER" && actorBarberId
+            ? { cancelledByBarberId: actorBarberId }
+            : {}),
         } as any,
       });
 
@@ -875,7 +898,6 @@ export async function createAppointment(data: AppointmentData) {
   if (!unit) return { error: "Unidade não encontrada" };
   if (unit.isActive === false) return { error: "Unidade inativa" };
 
-  // ✅ TRAVA SOBERANA: horário REAL da unidade (daily/weekly)
   const unitHoursError = await validateWithinUnitHours(
     unitId,
     scheduleAt,
@@ -1059,7 +1081,6 @@ export async function updateAppointment(id: string, data: AppointmentData) {
   if (!unit) return { error: "Unidade não encontrada" };
   if (unit.isActive === false) return { error: "Unidade inativa" };
 
-  // ✅ TRAVA SOBERANA: horário REAL da unidade (daily/weekly)
   const unitHoursError = await validateWithinUnitHours(
     unitId,
     scheduleAt,
@@ -1253,7 +1274,9 @@ export async function getAvailableBarbersForDateAndServiceAction(
     const windows = await getAvailabilityWindowsForBarberOnDate(
       barber.id,
       date,
-      { unitId },
+      {
+        unitId,
+      },
     );
 
     if (windows && windows.length > 0) {

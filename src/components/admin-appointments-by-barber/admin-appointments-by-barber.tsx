@@ -1,3 +1,4 @@
+// src/components/admin-appointments-by-barber.tsx
 import { AdminAppointmentRow } from "@/components/admin-appointment-row";
 import type { Appointment as AppointmentType } from "@/types/appointment";
 import type { Service } from "@/types/service";
@@ -50,8 +51,10 @@ export function AdminAppointmentsByBarber({
 }: AdminAppointmentsByBarberProps) {
   const safeUnits = units ?? [];
 
-  const avatarInitials = group.barberName
-    .split(" ")
+  const avatarInitials = String(group.barberName ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
     .map((n) => n[0])
     .join("")
     .slice(0, 2)
@@ -70,7 +73,7 @@ export function AdminAppointmentsByBarber({
                 className="h-full w-full object-cover"
               />
             ) : (
-              <span>{avatarInitials}</span>
+              <span>{avatarInitials || "?"}</span>
             )}
           </div>
 

@@ -1,3 +1,4 @@
+// src/components/admin-appointment-row.tsx
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -31,6 +32,43 @@ type AdminAppointmentRowProps = {
   planCreditIndex?: number | null;
   planTotalCredits?: number | null;
 };
+
+function pickDisplayName(entity: any): string | null {
+  if (!entity) return null;
+
+  const n = String(entity.name ?? "").trim();
+  if (n) return n;
+
+  const email = String(entity.email ?? "").trim();
+  if (email) return email;
+
+  return null;
+}
+
+/**
+ * Formata "quem" + "rótulo do papel" com base no role e nas relations.
+ * - ADMIN: usa User (concludedByUser/cancelledByUser)
+ * - BARBER: usa Barber (concludedByBarber/cancelledByBarber)
+ */
+function formatActorLabel(args: {
+  role: "ADMIN" | "BARBER" | null;
+  user?: any | null; // User
+  barber?: any | null; // Barber
+}): { who: string | null; roleLabel: string | null } {
+  const { role, user, barber } = args;
+
+  if (role === "ADMIN") {
+    const who = pickDisplayName(user);
+    return { who, roleLabel: "ADMIN" };
+  }
+
+  if (role === "BARBER") {
+    const who = pickDisplayName(barber);
+    return { who, roleLabel: "Barbeiro" };
+  }
+
+  return { who: null, roleLabel: null };
+}
 
 export function AdminAppointmentRow({
   appt,
@@ -82,35 +120,45 @@ export function AdminAppointmentRow({
   const clientImage = appt.client?.image ?? null;
   const clientInitial = appt.clientName?.[0]?.toUpperCase() ?? "?";
 
+  // ✅ Action log com NOME do ator (quando existir)
+  // Requer includes no Prisma:
+  // - concludedByUser / concludedByBarber / cancelledByUser / cancelledByBarber
   let actionLog = "—";
 
   if (appt.status === "DONE") {
-    if (appt.concludedByRole === "ADMIN") {
-      actionLog = "Concluído pelo ADMIN";
-    } else if (appt.concludedByRole === "BARBER") {
-      actionLog = "Concluído pelo Barbeiro";
+    const role = (appt.concludedByRole as "ADMIN" | "BARBER" | null) ?? null;
+
+    const { who, roleLabel } = formatActorLabel({
+      role,
+      user: appt.concludedByUser ?? null,
+      barber: appt.concludedByBarber ?? null,
+    });
+
+    if (who && roleLabel) {
+      actionLog = `Concluído por ${who} (${roleLabel})`;
+    } else if (roleLabel) {
+      actionLog = `Concluído pelo ${roleLabel}`;
     } else {
       actionLog = "Concluído";
     }
   } else if (appt.status === "CANCELED") {
-    const hasFee = appt.cancelFeeApplied;
-    const who =
-      appt.cancelledByRole === "ADMIN"
-        ? "ADMIN"
-        : appt.cancelledByRole === "BARBER"
-          ? "Barbeiro"
-          : null;
+    const hasFee = !!appt.cancelFeeApplied;
+    const role = (appt.cancelledByRole as "ADMIN" | "BARBER" | null) ?? null;
 
-    if (who === "ADMIN") {
-      actionLog = hasFee
-        ? "Cancelado pelo ADMIN - com taxa"
-        : "Cancelado pelo ADMIN - sem taxa";
-    } else if (who === "Barbeiro") {
-      actionLog = hasFee
-        ? "Cancelado pelo Barbeiro - com taxa"
-        : "Cancelado pelo Barbeiro - sem taxa";
+    const { who, roleLabel } = formatActorLabel({
+      role,
+      user: appt.cancelledByUser ?? null,
+      barber: appt.cancelledByBarber ?? null,
+    });
+
+    const feeSuffix = hasFee ? " - com taxa" : " - sem taxa";
+
+    if (who && roleLabel) {
+      actionLog = `Cancelado por ${who} (${roleLabel})${feeSuffix}`;
+    } else if (roleLabel) {
+      actionLog = `Cancelado pelo ${roleLabel}${feeSuffix}`;
     } else {
-      actionLog = hasFee ? "Cancelado - com taxa" : "Cancelado - sem taxa";
+      actionLog = `Cancelado${feeSuffix}`;
     }
   }
 
@@ -120,6 +168,7 @@ export function AdminAppointmentRow({
       <td className="px-4 py-2">
         <div className="flex items-center justify-center">
           {clientImage ? (
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={clientImage}
               alt={appt.clientName ?? "Cliente"}
@@ -159,7 +208,7 @@ export function AdminAppointmentRow({
               appointments={appointmentsForForm}
               barbers={barbersForForm}
               services={services}
-              units={units} // ✅ mantém unidades pra exibir corretamente
+              units={units}
               // 🚫 NÃO passar mode="admin" aqui (isso esconde campos no editar)
             />
 
