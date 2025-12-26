@@ -50,36 +50,26 @@ export function AdminPermissionsForm({
       const formData = new FormData();
       formData.append("userId", userId);
 
-      if (permissions.canAccessDashboard) {
+      if (permissions.canAccessDashboard)
         formData.append("canAccessDashboard", "on");
-      }
-      if (permissions.canAccessCheckout) {
+      if (permissions.canAccessCheckout)
         formData.append("canAccessCheckout", "on");
-      }
-      if (permissions.canAccessAppointments) {
+      if (permissions.canAccessAppointments)
         formData.append("canAccessAppointments", "on");
-      }
-      if (permissions.canAccessProfessionals) {
+      if (permissions.canAccessProfessionals)
         formData.append("canAccessProfessionals", "on");
-      }
-      if (permissions.canAccessServices) {
+      if (permissions.canAccessServices)
         formData.append("canAccessServices", "on");
-      }
-      if (permissions.canAccessReviews) {
+      if (permissions.canAccessReviews)
         formData.append("canAccessReviews", "on");
-      }
-      if (permissions.canAccessProducts) {
+      if (permissions.canAccessProducts)
         formData.append("canAccessProducts", "on");
-      }
-      if (permissions.canAccessClients) {
+      if (permissions.canAccessClients)
         formData.append("canAccessClients", "on");
-      }
-      if (permissions.canAccessClientLevels) {
+      if (permissions.canAccessClientLevels)
         formData.append("canAccessClientLevels", "on");
-      }
-      if (permissions.canAccessFinance) {
+      if (permissions.canAccessFinance)
         formData.append("canAccessFinance", "on");
-      }
 
       await updateAdminPermissions(formData);
 
@@ -95,9 +85,7 @@ export function AdminPermissionsForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      {/* 3 colunas no desktop, 1 no mobile */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-paragraph-small">
-        {/* 1. DASHBOARD */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -109,7 +97,6 @@ export function AdminPermissionsForm({
           <span>Dashboard</span>
         </label>
 
-        {/* 2. AGENDAMENTOS */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -121,7 +108,6 @@ export function AdminPermissionsForm({
           <span>Agendamentos</span>
         </label>
 
-        {/* 3. CHECKOUT */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -133,7 +119,6 @@ export function AdminPermissionsForm({
           <span>Checkout</span>
         </label>
 
-        {/* 4. PROFISSIONAIS */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -145,7 +130,6 @@ export function AdminPermissionsForm({
           <span>Profissionais</span>
         </label>
 
-        {/* 5. SERVIÇOS */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -157,7 +141,6 @@ export function AdminPermissionsForm({
           <span>Serviços</span>
         </label>
 
-        {/* 6. AVALIAÇÃO */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -169,7 +152,6 @@ export function AdminPermissionsForm({
           <span>Avaliação</span>
         </label>
 
-        {/* 7. PRODUTOS */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -181,7 +163,6 @@ export function AdminPermissionsForm({
           <span>Produtos</span>
         </label>
 
-        {/* 8. CLIENTES */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -193,7 +174,6 @@ export function AdminPermissionsForm({
           <span>Clientes</span>
         </label>
 
-        {/* 9. NÍVEL DE CLIENTE */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
@@ -205,7 +185,6 @@ export function AdminPermissionsForm({
           <span>Nível de Cliente</span>
         </label>
 
-        {/* 10. FINANCEIRO */}
         <label className="flex items-center gap-2">
           <input
             type="checkbox"
