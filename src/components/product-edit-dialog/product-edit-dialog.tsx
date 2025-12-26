@@ -1,6 +1,7 @@
+// src/components/product-edit-dialog/product-edit-dialog.tsx
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
 
 import {
   Dialog,
@@ -26,13 +27,32 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+type CustomerLevel = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
+
+const LEVEL_OPTIONS: Array<{ value: CustomerLevel; label: string }> = [
+  { value: "BRONZE", label: "Bronze" },
+  { value: "PRATA", label: "Prata" },
+  { value: "OURO", label: "Ouro" },
+  { value: "DIAMANTE", label: "Diamante" },
+];
+
+const LEVEL_FALLBACK: Record<CustomerLevel, CustomerLevel[]> = {
+  DIAMANTE: ["DIAMANTE", "OURO", "PRATA", "BRONZE"],
+  OURO: ["OURO", "PRATA", "BRONZE"],
+  PRATA: ["PRATA", "BRONZE"],
+  BRONZE: ["BRONZE"],
+};
+
+// ✅ ESTE TYPE PRECISA BATER COM O QUE O page.tsx MANDA PRA <ProductRow />
 export type ProductForRow = {
   id: string;
   name: string;
   description: string | null;
   imageUrl: string | null;
-  priceAsNumber: number;
-  barberPercentageAsNumber: number | null;
+
+  price: number;
+  barberPercentage: number | null;
+
   stockQuantity: number;
   category: string | null;
   isActive: boolean;
@@ -43,11 +63,10 @@ export type ProductForRow = {
   pickupDeadlineDays?: number | null;
 
   birthdayBenefitEnabled?: boolean;
-  birthdayPriceLevel?: "BRONZE" | "PRATA" | "OURO" | "DIAMANTE" | null;
+  birthdayPriceLevel?: CustomerLevel | null;
 
-  levelPrices?: Partial<
-    Record<"BRONZE" | "PRATA" | "OURO" | "DIAMANTE", number>
-  >;
+  // descontos por nível (%)
+  levelDiscounts?: Partial<Record<CustomerLevel, number>>;
 
   isFeatured?: boolean;
 };
@@ -56,16 +75,45 @@ type ProductEditDialogProps = {
   product: ProductForRow;
 };
 
-type CustomerLevel = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
+function toNumberLoose(raw: string): number {
+  const clean = String(raw ?? "")
+    .trim()
+    .replace(/\s/g, "")
+    .replace(",", ".");
+  const n = Number(clean);
+  return Number.isFinite(n) ? n : NaN;
+}
 
-const LEVEL_OPTIONS: Array<{ value: CustomerLevel; label: string }> = [
-  { value: "BRONZE", label: "Bronze" },
-  { value: "PRATA", label: "Prata" },
-  { value: "OURO", label: "Ouro" },
-  { value: "DIAMANTE", label: "Diamante" },
-];
+function clampPct(raw: string): number | null {
+  const s = String(raw ?? "").trim();
+  if (!s) return null;
+  const n = toNumberLoose(s);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(100, Math.floor(n)));
+}
 
-function PriceLevelGrid({
+function fmtMoney(n: number) {
+  if (!Number.isFinite(n)) return "—";
+  return n.toFixed(2).replace(".", ",");
+}
+
+function calcFinal(basePrice: number, pct: number) {
+  const final = basePrice * (1 - pct / 100);
+  return Math.round((final + Number.EPSILON) * 100) / 100;
+}
+
+function pickDiscountPct(
+  level: CustomerLevel,
+  values: Record<CustomerLevel, string>,
+) {
+  for (const l of LEVEL_FALLBACK[level]) {
+    const pct = clampPct(values[l]);
+    if (pct !== null) return { appliedLevel: l, pct };
+  }
+  return { appliedLevel: "BRONZE" as CustomerLevel, pct: 0 };
+}
+
+function DiscountLevelGrid({
   basePrice,
   values,
   onChange,
@@ -74,16 +122,56 @@ function PriceLevelGrid({
   values: Record<CustomerLevel, string>;
   onChange: (level: CustomerLevel, value: string) => void;
 }) {
+  const base = toNumberLoose(basePrice);
+
+  const preview = useMemo(() => {
+    if (!Number.isFinite(base)) {
+      return {
+        BRONZE: { pct: clampPct(values.BRONZE) ?? 0, final: NaN, save: NaN },
+        PRATA: { pct: clampPct(values.PRATA) ?? 0, final: NaN, save: NaN },
+        OURO: { pct: clampPct(values.OURO) ?? 0, final: NaN, save: NaN },
+        DIAMANTE: {
+          pct: clampPct(values.DIAMANTE) ?? 0,
+          final: NaN,
+          save: NaN,
+        },
+      } satisfies Record<
+        CustomerLevel,
+        { pct: number; final: number; save: number }
+      >;
+    }
+
+    const out: any = {};
+    (["BRONZE", "PRATA", "OURO", "DIAMANTE"] as CustomerLevel[]).forEach(
+      (lvl) => {
+        const picked = pickDiscountPct(lvl, values);
+        const final = calcFinal(base, picked.pct);
+        const save = Math.max(0, base - final);
+        out[lvl] = {
+          pct: picked.pct,
+          final,
+          save,
+          appliedLevel: picked.appliedLevel,
+        };
+      },
+    );
+
+    return out as Record<
+      CustomerLevel,
+      { pct: number; final: number; save: number; appliedLevel: CustomerLevel }
+    >;
+  }, [base, values]);
+
   return (
     <div className="space-y-2 rounded-xl border border-border-primary bg-background-tertiary p-3">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-medium text-content-primary">
-            Preços por nível
+            Desconto por nível (%)
           </p>
           <p className="text-xs text-content-secondary">
-            Se você deixar vazio, o sistema usa o preço normal (Bronze) e aplica
-            fallback.
+            Deixe vazio para não definir. O sistema usa fallback (Diamante →
+            Ouro → Prata → Bronze). Vazio = 0% no submit.
           </p>
         </div>
 
@@ -97,65 +185,121 @@ function PriceLevelGrid({
         <div className="space-y-1">
           <label className="text-xs text-content-secondary">Bronze</label>
           <Input
-            name="priceBronze"
-            inputMode="decimal"
-            placeholder={basePrice ? `Ex: ${basePrice}` : "Ex: 79.90"}
+            name="discountBronzePct"
+            inputMode="numeric"
+            placeholder="Ex: 5"
             value={values.BRONZE}
             onChange={(e) => onChange("BRONZE", e.target.value)}
             className="bg-background-secondary border-border-primary text-content-primary"
           />
+          <p className="text-[11px] text-content-secondary">
+            Final:{" "}
+            <span className="text-content-primary">
+              R$ {fmtMoney(preview.BRONZE.final)}
+            </span>
+          </p>
         </div>
 
         <div className="space-y-1">
           <label className="text-xs text-content-secondary">Prata</label>
           <Input
-            name="pricePrata"
-            inputMode="decimal"
-            placeholder="Ex: 74.90"
+            name="discountPrataPct"
+            inputMode="numeric"
+            placeholder="Ex: 8"
             value={values.PRATA}
             onChange={(e) => onChange("PRATA", e.target.value)}
             className="bg-background-secondary border-border-primary text-content-primary"
           />
+          <p className="text-[11px] text-content-secondary">
+            Final:{" "}
+            <span className="text-content-primary">
+              R$ {fmtMoney(preview.PRATA.final)}
+            </span>
+            {Number.isFinite(preview.PRATA.save) && preview.PRATA.save > 0 ? (
+              <span className="text-content-secondary">
+                {" "}
+                (economiza R$ {fmtMoney(preview.PRATA.save)})
+              </span>
+            ) : null}
+          </p>
         </div>
 
         <div className="space-y-1">
           <label className="text-xs text-content-secondary">Ouro</label>
           <Input
-            name="priceOuro"
-            inputMode="decimal"
-            placeholder="Ex: 69.90"
+            name="discountOuroPct"
+            inputMode="numeric"
+            placeholder="Ex: 10"
             value={values.OURO}
             onChange={(e) => onChange("OURO", e.target.value)}
             className="bg-background-secondary border-border-primary text-content-primary"
           />
+          <p className="text-[11px] text-content-secondary">
+            Final:{" "}
+            <span className="text-content-primary">
+              R$ {fmtMoney(preview.OURO.final)}
+            </span>
+            {Number.isFinite(preview.OURO.save) && preview.OURO.save > 0 ? (
+              <span className="text-content-secondary">
+                {" "}
+                (economiza R$ {fmtMoney(preview.OURO.save)})
+              </span>
+            ) : null}
+          </p>
         </div>
 
         <div className="space-y-1">
           <label className="text-xs text-content-secondary">Diamante</label>
           <Input
-            name="priceDiamante"
-            inputMode="decimal"
-            placeholder="Ex: 64.90"
+            name="discountDiamantePct"
+            inputMode="numeric"
+            placeholder="Ex: 15"
             value={values.DIAMANTE}
             onChange={(e) => onChange("DIAMANTE", e.target.value)}
             className="bg-background-secondary border-border-primary text-content-primary"
           />
+          <p className="text-[11px] text-content-secondary">
+            Final:{" "}
+            <span className="text-content-primary">
+              R$ {fmtMoney(preview.DIAMANTE.final)}
+            </span>
+            {Number.isFinite(preview.DIAMANTE.save) &&
+            preview.DIAMANTE.save > 0 ? (
+              <span className="text-content-secondary">
+                {" "}
+                (economiza R$ {fmtMoney(preview.DIAMANTE.save)})
+              </span>
+            ) : null}
+          </p>
         </div>
       </div>
 
       <p className="text-[11px] text-content-secondary">
-        Você pode preencher só alguns níveis. Os demais herdam por fallback
-        (Diamante → Ouro → Prata → Bronze).
+        Regra B: campo vazio vira 0% no submit (o servidor recebe 0).
       </p>
     </div>
   );
 }
 
+function toLevelDiscountState(
+  ld: Partial<Record<CustomerLevel, number>> | undefined,
+): Record<CustomerLevel, string> {
+  const norm = (v: number | undefined) => (v && v > 0 ? String(v) : "");
+  return {
+    BRONZE: norm(ld?.BRONZE),
+    PRATA: norm(ld?.PRATA),
+    OURO: norm(ld?.OURO),
+    DIAMANTE: norm(ld?.DIAMANTE),
+  };
+}
+
+function hasAnyDiscountKey(ld: unknown): ld is Record<string, unknown> {
+  return !!ld && typeof ld === "object" && Object.keys(ld as any).length > 0;
+}
+
 export function ProductEditDialog({ product }: ProductEditDialogProps) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
-
-  const updateProductWithId = updateProductAction.bind(null, product.id);
 
   const pickupDeadlineDaysDefault =
     typeof product.pickupDeadlineDays === "number" &&
@@ -165,32 +309,30 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
 
   const unitLabel = product.unitName || "—";
 
-  const initialBasePrice = useMemo(
-    () => String(product.priceAsNumber ?? ""),
-    [product.priceAsNumber],
+  const [basePrice, setBasePrice] = useState<string>(() =>
+    String(product.price ?? ""),
   );
 
-  const [basePrice, setBasePrice] = useState<string>(initialBasePrice);
+  const [levelDiscounts, setLevelDiscounts] = useState<
+    Record<CustomerLevel, string>
+  >(() => toLevelDiscountState(product.levelDiscounts));
 
-  const [levelPrices, setLevelPrices] = useState<Record<CustomerLevel, string>>(
-    {
-      BRONZE: "",
-      PRATA: "",
-      OURO: "",
-      DIAMANTE: "",
-    },
-  );
-
-  const [birthdayEnabled, setBirthdayEnabled] = useState<boolean>(
+  const [birthdayEnabled, setBirthdayEnabled] = useState<boolean>(() =>
     Boolean(product.birthdayBenefitEnabled),
   );
-  const [birthdayLevel, setBirthdayLevel] = useState<CustomerLevel>(
-    (product.birthdayPriceLevel as CustomerLevel) || "DIAMANTE",
-  );
 
-  const [isFeatured, setIsFeatured] = useState<boolean>(
+  const [birthdayLevel, setBirthdayLevel] = useState<CustomerLevel>(() => {
+    return (product.birthdayPriceLevel as CustomerLevel) || "DIAMANTE";
+  });
+
+  const [isFeatured, setIsFeatured] = useState<boolean>(() =>
     Boolean(product.isFeatured),
   );
+
+  const [barberPercentage, setBarberPercentage] = useState<string>(() => {
+    const v = product.barberPercentage;
+    return v === null || v === undefined ? "" : String(v);
+  });
 
   const birthdayConfigInvalid = birthdayEnabled && !birthdayLevel;
 
@@ -199,73 +341,93 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
 
     let cancelled = false;
 
-    // base price sempre vem do row
-    setBasePrice(String(product.priceAsNumber ?? ""));
-
-    // fallback instantâneo (caso a request demore)
-    const lpFallback = product.levelPrices ?? {};
-    setLevelPrices({
-      BRONZE: lpFallback.BRONZE !== undefined ? String(lpFallback.BRONZE) : "",
-      PRATA: lpFallback.PRATA !== undefined ? String(lpFallback.PRATA) : "",
-      OURO: lpFallback.OURO !== undefined ? String(lpFallback.OURO) : "",
-      DIAMANTE:
-        lpFallback.DIAMANTE !== undefined ? String(lpFallback.DIAMANTE) : "",
-    });
-
+    // ✅ abre SEMPRE preenchido com o que veio do page.tsx
+    setBasePrice(String(product.price ?? ""));
+    setLevelDiscounts(toLevelDiscountState(product.levelDiscounts));
     setBirthdayEnabled(Boolean(product.birthdayBenefitEnabled));
     setBirthdayLevel(
-      ((product.birthdayPriceLevel as CustomerLevel) ||
-        "DIAMANTE") as CustomerLevel,
+      (product.birthdayPriceLevel as CustomerLevel) || "DIAMANTE",
     );
     setIsFeatured(Boolean(product.isFeatured));
+    setBarberPercentage(() => {
+      const v = product.barberPercentage;
+      return v === null || v === undefined ? "" : String(v);
+    });
 
-    // ✅ Fonte real: busca pricing completo no server
+    // ✅ server: só sobrescreve se vier algo útil mesmo
     (async () => {
       try {
         const pricing = await getProductPricing(product.id);
         if (cancelled) return;
 
-        const lp = pricing.levelPrices ?? {};
-        setLevelPrices({
-          BRONZE: lp.BRONZE !== undefined ? String(lp.BRONZE) : "",
-          PRATA: lp.PRATA !== undefined ? String(lp.PRATA) : "",
-          OURO: lp.OURO !== undefined ? String(lp.OURO) : "",
-          DIAMANTE: lp.DIAMANTE !== undefined ? String(lp.DIAMANTE) : "",
-        });
+        // descontos: só aplica se vier pelo menos 1 chave (server agora manda undefined se vazio)
+        if (hasAnyDiscountKey((pricing as any)?.levelDiscounts)) {
+          setLevelDiscounts(
+            toLevelDiscountState((pricing as any).levelDiscounts),
+          );
+        }
 
-        setBirthdayEnabled(Boolean(pricing.birthdayBenefitEnabled));
-        setBirthdayLevel(
-          (pricing.birthdayPriceLevel || "DIAMANTE") as CustomerLevel,
-        );
+        // aniversário
+        if (typeof (pricing as any)?.birthdayBenefitEnabled === "boolean") {
+          setBirthdayEnabled(Boolean((pricing as any).birthdayBenefitEnabled));
+        }
+        if ((pricing as any)?.birthdayPriceLevel) {
+          setBirthdayLevel(
+            ((pricing as any).birthdayPriceLevel ||
+              "DIAMANTE") as CustomerLevel,
+          );
+        }
 
-        setIsFeatured(Boolean(pricing.isFeatured));
+        // destaque: só aplica se veio boolean mesmo (server manda undefined se não existe)
+        if (typeof (pricing as any)?.isFeatured === "boolean") {
+          setIsFeatured((pricing as any).isFeatured);
+        }
+
+        // comissão (se veio no retorno)
+        const bp = (pricing as any)?.barberPercentage;
+        if (bp !== undefined) {
+          setBarberPercentage(bp === null ? "" : String(bp));
+        }
       } catch {
-        // se falhar, mantém fallback do row sem quebrar a UX
+        // mantém fallback (sem apagar state)
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [open, product]);
+  }, [open, product.id]); // ✅ estável
 
-  function handleUpdate(formData: FormData) {
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    const form = e.currentTarget;
+    const formData = new FormData(form);
+
+    // ✅ destaque
+    formData.set("isFeatured", isFeatured ? "true" : "false");
+
+    // ✅ aniversário
     formData.set("birthdayBenefitEnabled", birthdayEnabled ? "true" : "false");
-    if (birthdayEnabled) {
-      formData.set("birthdayPriceLevel", birthdayLevel);
-    } else {
-      formData.delete("birthdayPriceLevel");
-    }
+    if (birthdayEnabled) formData.set("birthdayPriceLevel", birthdayLevel);
+    else formData.set("birthdayPriceLevel", "");
 
-    if (levelPrices.BRONZE.trim())
-      formData.set("priceBronze", levelPrices.BRONZE);
-    if (levelPrices.PRATA.trim()) formData.set("pricePrata", levelPrices.PRATA);
-    if (levelPrices.OURO.trim()) formData.set("priceOuro", levelPrices.OURO);
-    if (levelPrices.DIAMANTE.trim())
-      formData.set("priceDiamante", levelPrices.DIAMANTE);
+    // ✅ regra B: campo vazio = 0% (sempre envia)
+    const bronze = clampPct(levelDiscounts.BRONZE) ?? 0;
+    const prata = clampPct(levelDiscounts.PRATA) ?? 0;
+    const ouro = clampPct(levelDiscounts.OURO) ?? 0;
+    const diamante = clampPct(levelDiscounts.DIAMANTE) ?? 0;
+
+    formData.set("discountBronzePct", String(bronze));
+    formData.set("discountPrataPct", String(prata));
+    formData.set("discountOuroPct", String(ouro));
+    formData.set("discountDiamantePct", String(diamante));
+
+    // ✅ comissão controlada
+    formData.set("barberPercentage", barberPercentage);
 
     startTransition(async () => {
-      await updateProductWithId(formData);
+      await updateProductAction(product.id, formData);
       setOpen(false);
     });
   }
@@ -289,7 +451,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
           </DialogTitle>
         </DialogHeader>
 
-        <form action={handleUpdate} className="space-y-4 pb-2">
+        <form onSubmit={handleSubmit} className="space-y-4 pb-2">
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
               Unidade do estoque
@@ -383,18 +545,19 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
               className="bg-background-tertiary border-border-primary text-content-primary"
             />
             <p className="text-xs text-content-secondary">
-              Esse é o preço padrão (Bronze). Os demais níveis são opcionais.
+              Esse é o preço cheio (base). Os descontos por nível são opcionais.
             </p>
           </div>
 
-          <PriceLevelGrid
+          <DiscountLevelGrid
             basePrice={basePrice}
-            values={levelPrices}
+            values={levelDiscounts}
             onChange={(level, value) =>
-              setLevelPrices((prev) => ({ ...prev, [level]: value }))
+              setLevelDiscounts((prev) => ({ ...prev, [level]: value }))
             }
           />
 
+          {/* BENEFÍCIO DE ANIVERSÁRIO */}
           <div className="space-y-2 rounded-xl border border-border-primary bg-background-tertiary p-3">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -403,7 +566,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
                 </p>
                 <p className="text-xs text-content-secondary">
                   Ativo por 3 dias antes, no dia, e 3 dias depois do aniversário
-                  do cliente. Você escolhe qual “nível de preço” aplicar para
+                  do cliente. Você escolhe qual “nível” (desconto) aplicar para
                   este produto.
                 </p>
               </div>
@@ -422,8 +585,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
             {birthdayEnabled ? (
               <div className="space-y-1">
                 <label className="text-xs text-content-secondary">
-                  Aplicar preço como
-                  <span className="text-red-500"> *</span>
+                  Aplicar desconto como <span className="text-red-500">*</span>
                 </label>
 
                 <Select
@@ -448,7 +610,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
                   </p>
                 ) : (
                   <p className="text-xs text-content-secondary">
-                    Ex.: “Diamante” aplica o preço Diamante deste produto
+                    Ex.: “Diamante” aplica o desconto Diamante deste produto
                     durante a janela do aniversário.
                   </p>
                 )}
@@ -473,6 +635,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
             )}
           </div>
 
+          {/* comissão */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
               Porcentagem do barbeiro (%){" "}
@@ -484,12 +647,8 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
               min={0}
               max={100}
               required
-              defaultValue={
-                product.barberPercentageAsNumber !== null &&
-                product.barberPercentageAsNumber !== undefined
-                  ? String(product.barberPercentageAsNumber)
-                  : ""
-              }
+              value={barberPercentage}
+              onChange={(e) => setBarberPercentage(e.target.value)}
               placeholder="Ex: 20"
               className="bg-background-tertiary border-border-primary text-content-primary"
             />

@@ -33,10 +33,11 @@ function parseLimit(raw: string | null): number {
 }
 
 /* ---------------------------------------------------------
- * 🔥 MOTOR DE PREÇO (Mobile)
- * - Cliente level (M+1) ainda não existe -> default BRONZE
+ * 🔥 MOTOR DE PREÇO (Mobile) - DESCONTO (%)
+ * - Base: Product.price (preço cheio)
+ * - CustomerLevelState por unidade (quando existir) -> levelCurrent
  * - Se estiver na janela de aniversário e produto tiver benefício:
- *   usa birthdayPriceLevel
+ *   usa birthdayPriceLevel (como nível "forçado" pra desconto)
  * - Fallbacks por nível (DIAMANTE -> OURO -> PRATA -> BRONZE)
  * ---------------------------------------------------------*/
 type CustomerLevel = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
@@ -97,10 +98,26 @@ function coerceCustomerLevel(value: unknown): CustomerLevel | null {
   return null;
 }
 
+function clampPct(n: number) {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, Math.floor(n)));
+}
+
+function roundMoney(n: number) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function calcFinalPrice(basePrice: number, discountPct: number) {
+  const pct = clampPct(discountPct);
+  const base = Number.isFinite(basePrice) ? basePrice : 0;
+  const final = base * (1 - pct / 100);
+  return roundMoney(final);
+}
+
 async function resolveProductUnitPrice(args: {
   productId: string;
   clientId: string | null;
-  effectiveLevel?: CustomerLevel; // M+1 futuro
+  effectiveLevel?: CustomerLevel; // nível vigente
   timeZone?: string;
   now?: Date;
 }) {
@@ -117,7 +134,7 @@ async function resolveProductUnitPrice(args: {
         unitId: true,
         birthdayBenefitEnabled: true,
         birthdayPriceLevel: true,
-        prices: { select: { level: true, price: true } }, // ProductPriceByLevel (se existir)
+        discounts: { select: { level: true, discountPct: true } },
       } as any,
     }),
     args.clientId
@@ -130,32 +147,29 @@ async function resolveProductUnitPrice(args: {
 
   if (!product) throw new Error("Produto não encontrado.");
 
-  const priceByLevel = new Map<CustomerLevel, number>();
+  const basePrice = Number((product as any).price);
+  const discountByLevel = new Map<CustomerLevel, number>();
 
-  // ✅ rows protegidos contra tipagens estranhas
   const rows =
-    (((product as any).prices ?? []) as Array<{
+    (((product as any).discounts ?? []) as Array<{
       level: unknown;
-      price: unknown;
+      discountPct: unknown;
     }>) ?? [];
+
   for (const row of rows) {
     const lvl = coerceCustomerLevel(row.level);
-    const val = Number(row.price);
-    if (lvl && Number.isFinite(val)) priceByLevel.set(lvl, val);
+    const pct = clampPct(Number(row.discountPct));
+    if (lvl) discountByLevel.set(lvl, pct);
   }
 
-  // base BRONZE (fallback no price “antigo” do produto)
-  const baseBronze =
-    priceByLevel.get("BRONZE") ?? Number((product as any).price);
-
-  function pickPrice(level: CustomerLevel) {
+  function pickDiscount(level: CustomerLevel) {
     for (const l of LEVEL_FALLBACK[level]) {
-      const found = priceByLevel.get(l);
+      const found = discountByLevel.get(l);
       if (typeof found === "number" && Number.isFinite(found)) {
-        return { level: l, price: found };
+        return { level: l, discountPct: found };
       }
     }
-    return { level: "BRONZE" as CustomerLevel, price: baseBronze };
+    return { level: "BRONZE" as CustomerLevel, discountPct: 0 };
   }
 
   // janela de aniversário: 3 dias antes + dia + 3 dias depois (por dia no TZ)
@@ -179,33 +193,36 @@ async function resolveProductUnitPrice(args: {
 
   // ✅ aniversário ganha prioridade quando habilitado
   if (inBirthdayWindow && (product as any).birthdayBenefitEnabled) {
-    // 🔒 blindagem: só usa se for CustomerLevel válido, senão DIAMANTE
     const chosen =
       coerceCustomerLevel((product as any).birthdayPriceLevel) ??
       ("DIAMANTE" as CustomerLevel);
 
-    const picked = pickPrice(chosen);
+    const picked = pickDiscount(chosen);
+    const finalPrice = calcFinalPrice(basePrice, picked.discountPct);
 
     return {
       unitId: (product as any).unitId as string,
-      basePrice: baseBronze,
-      finalPrice: picked.price,
+      basePrice,
+      finalPrice,
+      discountPct: picked.discountPct,
       appliedLevel: picked.level,
       appliedBecause: "BIRTHDAY" as const,
       inBirthdayWindow: true,
     };
   }
 
-  // nível do cliente (por enquanto BRONZE)
-  const picked = pickPrice(effectiveLevel);
+  // nível do cliente (vigente)
+  const picked = pickDiscount(effectiveLevel);
+  const finalPrice = calcFinalPrice(basePrice, picked.discountPct);
 
   return {
     unitId: (product as any).unitId as string,
-    basePrice: baseBronze,
-    finalPrice: picked.price,
+    basePrice,
+    finalPrice,
+    discountPct: picked.discountPct,
     appliedLevel: picked.level,
     appliedBecause:
-      picked.level === "BRONZE" ? ("BASE" as const) : ("LEVEL" as const),
+      picked.discountPct > 0 ? ("LEVEL" as const) : ("BASE" as const),
     inBirthdayWindow: false,
   };
 }
@@ -229,7 +246,7 @@ export async function GET(req: Request) {
   const headers = corsHeaders();
 
   try {
-    // 🔐 exige auth + pega clientId pra precificação (aniversário)
+    // 🔐 exige auth + pega clientId pra precificação (aniversário + nível)
     const auth = await requireMobileAuth(req);
 
     const url = new URL(req.url);
@@ -293,9 +310,26 @@ export async function GET(req: Request) {
     const hasMore = dbProducts.length > limit;
     const page = hasMore ? dbProducts.slice(0, limit) : dbProducts;
 
-    // ✅ nível do cliente ainda não existe -> default BRONZE
-    const customerLevel: CustomerLevel = "BRONZE";
     const clientId = auth.role === "CLIENT" ? auth.sub : null;
+
+    // ✅ nível do cliente por unidade (em lote)
+    const unitIds = Array.from(new Set(page.map((p) => p.unitId))).filter(
+      Boolean,
+    ) as string[];
+
+    const levelByUnit = new Map<string, CustomerLevel>();
+
+    if (clientId && unitIds.length > 0) {
+      const states = await prisma.customerLevelState.findMany({
+        where: { userId: clientId, unitId: { in: unitIds } },
+        select: { unitId: true, levelCurrent: true },
+      });
+
+      for (const s of states) {
+        const lvl = coerceCustomerLevel(s.levelCurrent);
+        if (lvl) levelByUnit.set(s.unitId, lvl);
+      }
+    }
 
     const items = await Promise.all(
       page.map(async (p) => {
@@ -309,6 +343,9 @@ export async function GET(req: Request) {
         const stockQuantity =
           typeof p.stockQuantity === "number" ? p.stockQuantity : 0;
 
+        const customerLevel: CustomerLevel =
+          levelByUnit.get(p.unitId) ?? ("BRONZE" as CustomerLevel);
+
         const pricing = await resolveProductUnitPrice({
           productId: p.id,
           clientId,
@@ -319,25 +356,31 @@ export async function GET(req: Request) {
 
         const basePrice = Number(pricing.basePrice);
         const finalPrice = Number(pricing.finalPrice);
+        const discountPct = clampPct(Number(pricing.discountPct));
 
         const hasDiscount =
           Number.isFinite(basePrice) &&
           Number.isFinite(finalPrice) &&
+          basePrice > 0 &&
           finalPrice < basePrice;
+
+        const savings = hasDiscount
+          ? roundMoney(Math.max(0, basePrice - finalPrice))
+          : 0;
 
         const badge =
           pricing.appliedBecause === "BIRTHDAY"
             ? { type: "BIRTHDAY" as const, label: "🎂 Aniversário" }
-            : pricing.appliedBecause === "LEVEL"
-              ? { type: "LEVEL" as const, label: "⭐ Oferta do seu nível" }
+            : hasDiscount
+              ? { type: "DISCOUNT" as const, label: `${discountPct}% OFF` }
               : null;
 
         return {
           id: p.id,
           name: p.name,
-          imageUrl: p.imageUrl ?? null,
+          imageUrl: (p as any).imageUrl ?? null,
           description: p.description,
-          category: p.category ?? null,
+          category: (p as any).category ?? null,
 
           stockQuantity,
           isOutOfStock: stockQuantity <= 0,
@@ -347,6 +390,8 @@ export async function GET(req: Request) {
 
           basePrice,
           finalPrice,
+          discountPct,
+          savings,
           hasDiscount,
 
           // compat: "price" = preço final
@@ -357,6 +402,7 @@ export async function GET(req: Request) {
             appliedLevel: pricing.appliedLevel,
             appliedBecause: pricing.appliedBecause,
             inBirthdayWindow: pricing.inBirthdayWindow,
+            discountPct,
           },
 
           badge,

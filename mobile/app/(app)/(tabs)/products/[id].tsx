@@ -186,21 +186,25 @@ export default function ProductDetails() {
     fetchProduct();
   }, [fetchProduct]);
 
-  // ✅ regra de exibição: base riscado + final quando desconto
+  // ✅ regra de exibição: De/Por/Economia quando desconto
   const pricing = useMemo(() => {
     const p = product;
-    if (!p) return { base: 0, final: 0, hasDiscount: false };
+    if (!p) return { base: 0, final: 0, hasDiscount: false, economyPct: 0 };
 
     const base = safeNumber(p.basePrice, NaN);
     const final = safeNumber(p.finalPrice, NaN);
 
     if (Number.isFinite(base) && Number.isFinite(final)) {
       const has = !!p.hasDiscount && final < base;
-      return { base, final, hasDiscount: has };
+
+      const economyPct =
+        has && base > 0 ? Math.round(((base - final) / base) * 100) : 0;
+
+      return { base, final, hasDiscount: has, economyPct };
     }
 
     const only = safeNumber(p.price, 0);
-    return { base: only, final: only, hasDiscount: false };
+    return { base: only, final: only, hasDiscount: false, economyPct: 0 };
   }, [product]);
 
   const baseLabel = useMemo(
@@ -211,6 +215,12 @@ export default function ProductDetails() {
     () => formatMoneySmartBRL(pricing.final),
     [pricing.final],
   );
+
+  const economyPctLabel = useMemo(() => {
+    const v = Number(pricing.economyPct ?? 0);
+    if (!pricing.hasDiscount || !Number.isFinite(v) || v <= 0) return null;
+    return `${Math.max(0, Math.min(99, Math.round(v)))}%`;
+  }, [pricing.economyPct, pricing.hasDiscount]);
 
   const extra = useMemo(() => {
     const p = product;
@@ -393,15 +403,28 @@ export default function ProductDetails() {
               <View style={S.mainInner}>
                 <Text style={S.title}>{product.name}</Text>
 
-                {/* ✅ regra do preço */}
+                {/* ✅ regra do preço (De/Por/Economia) */}
                 {pricing.hasDiscount ? (
                   <View style={S.priceStack}>
-                    <Text style={S.oldPrice}>{baseLabel}</Text>
-                    <Text style={S.price}>{finalLabel}</Text>
+                    <Text style={S.oldPrice} numberOfLines={1}>
+                      De: {baseLabel}
+                    </Text>
+
+                    <Text style={S.price} numberOfLines={1}>
+                      Por: {finalLabel}
+                    </Text>
+
+                    {economyPctLabel ? (
+                      <Text style={S.economyText} numberOfLines={1}>
+                        Economia: {economyPctLabel}
+                      </Text>
+                    ) : null}
                   </View>
                 ) : (
                   <View style={S.priceRow}>
-                    <Text style={S.price}>{finalLabel}</Text>
+                    <Text style={S.price} numberOfLines={1}>
+                      {finalLabel}
+                    </Text>
                   </View>
                 )}
               </View>
@@ -582,7 +605,16 @@ const S = StyleSheet.create({
     fontWeight: "800",
   },
 
+  // “Por: …”
   price: { color: UI.brand.primary, fontSize: 20, fontWeight: "600" },
+
+  // ✅ Economia: X%
+  economyText: {
+    marginTop: 2,
+    color: "rgba(0,0,0,0.45)",
+    fontSize: 13,
+    fontWeight: "900",
+  },
 
   whiteArea: { backgroundColor: UI.colors.white },
 

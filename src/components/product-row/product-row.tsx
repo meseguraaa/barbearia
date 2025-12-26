@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { ServiceStatusBadge } from "@/components/service-status-badge";
 import { ProductEditDialog } from "@/components/product-edit-dialog";
 import { toggleProductStatusAction } from "@/app/admin/products/actions";
-import type { ProductForRow as ProductForEditDialog } from "@/components/product-edit-dialog/product-edit-dialog";
 
 type ProductRowProps = {
   product: ProductForRow;
@@ -47,31 +46,13 @@ function Badge({
 }
 
 export function ProductRow({ product }: ProductRowProps) {
-  // Garante que o objeto enviado para o dialog tenha os campos numéricos esperados
-  const productForDialog: ProductForEditDialog = {
-    ...product,
-    priceAsNumber: Number(product.price),
-    barberPercentageAsNumber:
-      product.barberPercentage !== null ? Number(product.barberPercentage) : 0,
-
-    pickupDeadlineDays:
-      typeof (product as any).pickupDeadlineDays === "number" &&
-      (product as any).pickupDeadlineDays > 0
-        ? (product as any).pickupDeadlineDays
-        : 2,
-  };
-
   const displayName = truncate(product.name);
+
   const deadlineText = formatDeadline(product.pickupDeadlineDays);
 
-  // flags opcionais
-  const birthdayBenefitEnabled = Boolean(
-    (product as any).birthdayBenefitEnabled,
-  );
-  const hasLevelPrices = Boolean((product as any).hasLevelPrices);
-
-  // ✅ destaque
-  const isFeatured = Boolean((product as any).isFeatured);
+  const birthdayBenefitEnabled = Boolean(product.birthdayBenefitEnabled);
+  const hasLevelPrices = Boolean(product.hasLevelPrices);
+  const isFeatured = Boolean(product.isFeatured);
 
   const hasAnyBadge = isFeatured || birthdayBenefitEnabled || hasLevelPrices;
 
@@ -111,7 +92,7 @@ export function ProductRow({ product }: ProductRowProps) {
                 )}
 
                 {hasLevelPrices && (
-                  <Badge title="Este produto tem preços diferentes por nível de cliente.">
+                  <Badge title="Este produto tem descontos por nível.">
                     💎 Níveis
                   </Badge>
                 )}
@@ -146,8 +127,9 @@ export function ProductRow({ product }: ProductRowProps) {
 
       {/* COMISSÃO */}
       <td className="px-4 py-3 whitespace-nowrap">
-        {product.barberPercentage !== null
-          ? `${product.barberPercentage}%`
+        {product.barberPercentage !== null &&
+        product.barberPercentage !== undefined
+          ? `${Number(product.barberPercentage)}%`
           : "-"}
       </td>
 
@@ -175,7 +157,8 @@ export function ProductRow({ product }: ProductRowProps) {
       {/* AÇÕES */}
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-3">
-          <ProductEditDialog product={productForDialog} />
+          {/* ✅ agora sem gambiarra */}
+          <ProductEditDialog product={product} />
 
           <form action={toggleProductStatusAction.bind(null, product.id)}>
             <Button

@@ -6,6 +6,7 @@ import { cookies } from "next/headers";
 import { ProductRow } from "@/components/product-row";
 import { ProductNewDialog } from "@/components/product-new-dialog";
 import { requireAdminPermission } from "@/lib/admin-permissions";
+import type { CustomerLevel } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
 const UNIT_COOKIE_NAME = "admin_unit_context";
 const UNIT_ALL_VALUE = "all";
 
-// 👇 tipo "plano" que vai para o Client Component
+// 👇 tipo que vai para o Client Component
 export type ProductForRow = {
   id: string;
   name: string;
@@ -34,9 +35,15 @@ export type ProductForRow = {
   unitName: string;
 
   birthdayBenefitEnabled: boolean;
+  birthdayPriceLevel?: CustomerLevel | null;
+
+  // agora significa "tem descontos por nível"
   hasLevelPrices: boolean;
 
-  // (não mostramos na tabela; fica apenas nos modais New/Edit)
+  // ✅ valores pra preencher o modal
+  levelDiscounts?: Partial<Record<CustomerLevel, number>>;
+
+  // ✅ destaque
   isFeatured: boolean;
 };
 
@@ -73,44 +80,78 @@ export default async function ProductsPage() {
     select: { id: true, name: true, isActive: true },
   });
 
+  // ✅ Traz explicitamente tudo que o modal precisa (sem depender de action extra)
   const productsPrisma = await prisma.product.findMany({
     where: activeUnitId ? { unitId: activeUnitId } : {},
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    include: {
+    select: {
+      id: true,
+      name: true,
+      imageUrl: true,
+      description: true,
+      price: true,
+      barberPercentage: true,
+      category: true,
+      stockQuantity: true,
+      isActive: true,
+      pickupDeadlineDays: true,
+      unitId: true,
+
       unit: { select: { id: true, name: true } },
-      _count: { select: { prices: true } },
+
+      birthdayBenefitEnabled: true,
+      birthdayPriceLevel: true,
+      isFeatured: true,
+
+      discounts: { select: { level: true, discountPct: true } },
     },
   });
 
-  const products: ProductForRow[] = productsPrisma.map((p) => ({
-    id: p.id,
-    name: p.name,
-    imageUrl: p.imageUrl,
-    description: p.description,
-    price: Number(p.price),
-    barberPercentage:
-      p.barberPercentage !== null && p.barberPercentage !== undefined
-        ? Number(p.barberPercentage)
-        : null,
-    category: p.category,
-    stockQuantity: p.stockQuantity,
-    isActive: p.isActive,
+  const products: ProductForRow[] = productsPrisma.map((p) => {
+    const pickupDeadlineDays =
+      typeof p.pickupDeadlineDays === "number" &&
+      Number.isFinite(p.pickupDeadlineDays) &&
+      p.pickupDeadlineDays > 0
+        ? p.pickupDeadlineDays
+        : 2;
 
-    pickupDeadlineDays:
-      typeof (p as any).pickupDeadlineDays === "number" &&
-      Number.isFinite((p as any).pickupDeadlineDays) &&
-      (p as any).pickupDeadlineDays > 0
-        ? (p as any).pickupDeadlineDays
-        : 2,
+    const levelDiscounts: Partial<Record<CustomerLevel, number>> = {};
 
-    unitId: p.unit?.id ?? p.unitId,
-    unitName: p.unit?.name ?? "—",
+    for (const row of p.discounts ?? []) {
+      const pct = Number(row.discountPct);
+      if (Number.isFinite(pct)) levelDiscounts[row.level] = pct;
+    }
 
-    birthdayBenefitEnabled: Boolean((p as any).birthdayBenefitEnabled),
-    hasLevelPrices: ((p as any)?._count?.prices ?? 0) > 0,
+    return {
+      id: p.id,
+      name: p.name,
+      imageUrl: p.imageUrl,
+      description: p.description,
+      price: Number(p.price),
+      barberPercentage:
+        p.barberPercentage !== null && p.barberPercentage !== undefined
+          ? Number(p.barberPercentage)
+          : null,
+      category: p.category,
+      stockQuantity: p.stockQuantity,
+      isActive: p.isActive,
 
-    isFeatured: Boolean((p as any).isFeatured),
-  }));
+      pickupDeadlineDays,
+
+      unitId: p.unit?.id ?? p.unitId,
+      unitName: p.unit?.name ?? "—",
+
+      birthdayBenefitEnabled: Boolean(p.birthdayBenefitEnabled),
+      birthdayPriceLevel: (p.birthdayPriceLevel ??
+        null) as CustomerLevel | null,
+
+      hasLevelPrices: (p.discounts?.length ?? 0) > 0,
+
+      levelDiscounts,
+
+      isFeatured: Boolean(p.isFeatured),
+    };
+  });
 
   return (
     <div className="max-w-7xl space-y-6">
@@ -131,7 +172,6 @@ export default async function ProductsPage() {
 
       <section className="overflow-x-auto rounded-xl border border-border-primary bg-background-tertiary">
         <table className="w-full table-fixed border-collapse text-sm">
-          {/* ✅ grade fixa (colunas fixas, não dança) */}
           <colgroup>
             <col className="w-[380px]" />
             <col className="w-[220px]" />

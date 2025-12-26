@@ -354,14 +354,24 @@ const FeaturedCarousel = memo(function FeaturedCarousel({
       const pricing = (() => {
         if (Number.isFinite(base) && Number.isFinite(final)) {
           const hasDiscount = !!item.hasDiscount && final < base;
-          return { base, final, hasDiscount };
+          const economyPct =
+            hasDiscount && base > 0
+              ? Math.round(((base - final) / base) * 100)
+              : 0;
+
+          return { base, final, hasDiscount, economyPct };
         }
         const p = safeNumber(item.price, 0);
-        return { base: p, final: p, hasDiscount: false };
+        return { base: p, final: p, hasDiscount: false, economyPct: 0 };
       })();
 
       const baseLabel = formatMoneySmartBRL(pricing.base);
       const finalLabel = formatMoneySmartBRL(pricing.final);
+
+      const economyPctLabel =
+        pricing.hasDiscount && pricing.economyPct > 0
+          ? `${Math.max(0, Math.min(99, Math.round(pricing.economyPct)))}%`
+          : null;
 
       return (
         <Pressable
@@ -390,11 +400,18 @@ const FeaturedCarousel = memo(function FeaturedCarousel({
               {pricing.hasDiscount ? (
                 <View style={{ marginTop: 8 }}>
                   <Text style={S.featureOldPrice} numberOfLines={1}>
-                    {baseLabel}
+                    De: {baseLabel}
                   </Text>
+
                   <Text style={S.featurePrice} numberOfLines={1}>
-                    {finalLabel}
+                    Por: {finalLabel}
                   </Text>
+
+                  {economyPctLabel ? (
+                    <Text style={S.featureEconomy} numberOfLines={1}>
+                      Economia: {economyPctLabel}
+                    </Text>
+                  ) : null}
                 </View>
               ) : (
                 <Text
@@ -554,11 +571,14 @@ const ProductTile = memo(function ProductTile({
 
     if (Number.isFinite(base) && Number.isFinite(final)) {
       const hasDiscount = !!item.hasDiscount && final < base;
-      return { base, final, hasDiscount };
+      const economyPct =
+        hasDiscount && base > 0 ? Math.round(((base - final) / base) * 100) : 0;
+
+      return { base, final, hasDiscount, economyPct };
     }
 
     const p = safeNumber(item.price, 0);
-    return { base: p, final: p, hasDiscount: false };
+    return { base: p, final: p, hasDiscount: false, economyPct: 0 };
   }, [item.basePrice, item.finalPrice, item.hasDiscount, item.price]);
 
   const baseLabel = useMemo(() => formatMoneySmartBRL(pricing.base), [pricing]);
@@ -566,6 +586,12 @@ const ProductTile = memo(function ProductTile({
     () => formatMoneySmartBRL(pricing.final),
     [pricing],
   );
+
+  const economyPctLabel = useMemo(() => {
+    const v = Number(pricing.economyPct ?? 0);
+    if (!pricing.hasDiscount || !Number.isFinite(v) || v <= 0) return null;
+    return `${Math.max(0, Math.min(99, Math.round(v)))}%`;
+  }, [pricing.economyPct, pricing.hasDiscount]);
 
   return (
     <Pressable style={S.productCard} onPress={() => onOpen(item.id)}>
@@ -600,11 +626,18 @@ const ProductTile = memo(function ProductTile({
       {pricing.hasDiscount ? (
         <View style={S.priceStack}>
           <Text style={S.productOldPriceBig} numberOfLines={1}>
-            {baseLabel}
+            De: {baseLabel}
           </Text>
+
           <Text style={S.productPrice} numberOfLines={1}>
-            {finalLabel}
+            Por: {finalLabel}
           </Text>
+
+          {economyPctLabel ? (
+            <Text style={S.economyText} numberOfLines={1}>
+              Economia: {economyPctLabel}
+            </Text>
+          ) : null}
         </View>
       ) : (
         <View style={S.priceRow}>
@@ -1726,6 +1759,14 @@ const S = StyleSheet.create({
     fontSize: 12,
   },
 
+  // ✅ nova linha: Economia: X%
+  economyText: {
+    marginTop: 1,
+    fontSize: 12,
+    fontWeight: "900",
+    color: UI.colors.black45,
+  },
+
   tileFooter: {
     marginTop: 12,
     gap: 10,
@@ -1852,6 +1893,14 @@ const S = StyleSheet.create({
     fontWeight: "900",
     fontSize: 12,
     marginBottom: 2,
+  },
+
+  // ✅ nova linha: Economia: X% (no carrossel)
+  featureEconomy: {
+    marginTop: 2,
+    color: "rgba(255,255,255,0.75)",
+    fontWeight: "900",
+    fontSize: 12,
   },
 
   featureUnit: {

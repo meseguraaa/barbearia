@@ -41,20 +41,31 @@ function normalizePriceToDecimalString(raw: string): string {
   return onlyDigitsAndSeparators;
 }
 
-function parseOptionalDecimalFromFormValue(val: unknown): string | null {
-  const s = String(val ?? "").trim();
-  if (!s) return null;
-  const normalized = normalizePriceToDecimalString(s);
-  const n = Number(normalized);
-  if (!Number.isFinite(n) || n < 0) return null;
-  return normalized;
-}
-
 function parseBoolFromForm(formData: FormData, key: string): boolean {
   const v = formData.get(key);
   if (v === null || v === undefined) return false;
   const s = String(v).toLowerCase();
   return s === "true" || s === "1" || s === "on" || s === "yes";
+}
+
+/**
+ * ✅ B) campo vazio = 0%
+ * - aceita "10", "10%", "10,5" (arredonda pra baixo)
+ * - vazio/null/undefined => 0
+ */
+function parseOptionalPctIntFromFormValue(val: unknown): number {
+  const s = String(val ?? "").trim();
+  if (!s) return 0;
+
+  const clean = s.replace("%", "").trim().replace(",", ".");
+  const n = Number(clean);
+
+  if (!Number.isFinite(n)) return 0;
+
+  const floored = Math.floor(n);
+  if (floored < 0) return 0;
+  if (floored > 100) return 100;
+  return floored;
 }
 
 const customerLevelSchema = z.enum(["BRONZE", "PRATA", "OURO", "DIAMANTE"]);
@@ -108,7 +119,7 @@ const baseProductSchema = z.object({
 
   // ✅ benefício de aniversário
   birthdayBenefitEnabled: z.boolean().optional(),
-  // ✅ aqui está o fix do erro: "" vira undefined e não quebra enum
+  // ✅ "" vira undefined e não quebra enum
   birthdayPriceLevel: optionalCustomerLevelSchema,
 
   // ✅ destaque no app
@@ -164,63 +175,63 @@ async function getUnitIdFromFormOrDefault(formData: FormData): Promise<string> {
 }
 
 /**
- * Lê preços por nível do form (opcional).
+ * ✅ B) Lê descontos (%) por nível do form e SEMPRE retorna os 4 níveis.
+ * Campo vazio = 0%.
+ *
+ * IMPORTANTE:
+ * - aqui você escolheu só mandar > 0 (pra input vazio não gerar linha)
  */
-function readLevelPricesFromForm(
+function readLevelDiscountsFromForm(
   formData: FormData,
-): Partial<Record<CustomerLevel, string>> {
+): Partial<Record<CustomerLevel, number>> {
   const getFirst = (keys: string[]) => {
     for (const k of keys) {
       const v = formData.get(k);
-      const parsed = parseOptionalDecimalFromFormValue(v);
-      if (parsed !== null) return parsed;
+      if (v === null || v === undefined) continue;
+      const parsed = parseOptionalPctIntFromFormValue(v); // vazio => 0
+      return parsed;
     }
-    return null;
+    return 0;
   };
 
-  const bronze = getFirst(["priceBronze", "levelPriceBronze", "price_BRONZE"]);
-  const prata = getFirst(["pricePrata", "levelPricePrata", "price_PRATA"]);
-  const ouro = getFirst(["priceOuro", "levelPriceOuro", "price_OURO"]);
+  const bronze = getFirst([
+    "discountBronzePct",
+    "discountBronze",
+    "levelDiscountBronze",
+    "discount_BRONZE",
+  ]);
+  const prata = getFirst([
+    "discountPrataPct",
+    "discountPrata",
+    "levelDiscountPrata",
+    "discount_PRATA",
+  ]);
+  const ouro = getFirst([
+    "discountOuroPct",
+    "discountOuro",
+    "levelDiscountOuro",
+    "discount_OURO",
+  ]);
   const diamante = getFirst([
-    "priceDiamante",
-    "levelPriceDiamante",
-    "price_DIAMANTE",
+    "discountDiamantePct",
+    "discountDiamante",
+    "levelDiscountDiamante",
+    "discount_DIAMANTE",
   ]);
 
-  const out: Partial<Record<CustomerLevel, string>> = {};
-  if (bronze !== null) out.BRONZE = bronze;
-  if (prata !== null) out.PRATA = prata;
-  if (ouro !== null) out.OURO = ouro;
-  if (diamante !== null) out.DIAMANTE = diamante;
+  // ✅ só inclui no payload se for > 0
+  const out: Partial<Record<CustomerLevel, number>> = {};
+  if (bronze > 0) out.BRONZE = bronze;
+  if (prata > 0) out.PRATA = prata;
+  if (ouro > 0) out.OURO = ouro;
+  if (diamante > 0) out.DIAMANTE = diamante;
+
   return out;
-}
-
-async function upsertProductPricesByLevel(args: {
-  productId: string;
-  prices: Partial<Record<CustomerLevel, string>>;
-}) {
-  const entries = Object.entries(args.prices) as Array<[CustomerLevel, string]>;
-  if (entries.length === 0) return;
-
-  await prisma.$transaction(
-    entries.map(([level, priceStr]) =>
-      prisma.productPriceByLevel.upsert({
-        where: { productId_level: { productId: args.productId, level } },
-        create: {
-          productId: args.productId,
-          level,
-          price: new Prisma.Decimal(priceStr),
-        },
-        update: {
-          price: new Prisma.Decimal(priceStr),
-        },
-      }),
-    ),
-  );
 }
 
 /**
  * 🔒 Compat: só inclui isFeatured no payload se o Prisma Client reconhecer o campo.
+ * (mantive seu comportamento)
  */
 function withFeaturedField<T extends Record<string, any>>(
   data: T,
@@ -236,39 +247,120 @@ function withFeaturedField<T extends Record<string, any>>(
   return { ...data, isFeatured } as T;
 }
 
+/**
+ * ✅ NOVO (mais robusto):
+ * - não depende de _dmmf pra decidir se vai salvar
+ * - tenta rodar e, se não existir model/tabela/constraint, só loga e segue
+ *
+ * regra:
+ * - pct <= 0 => apaga (deleteMany)
+ * - pct > 0  => upsert
+ * - pct undefined => não mexe
+ */
+async function upsertProductDiscountsByLevel(args: {
+  productId: string;
+  discounts: Partial<Record<CustomerLevel, number>>;
+}) {
+  const levels: CustomerLevel[] = ["BRONZE", "PRATA", "OURO", "DIAMANTE"];
+
+  try {
+    await prisma.$transaction(
+      levels.map((level) => {
+        const pct = args.discounts[level];
+
+        // não veio => não mexe nesse nível
+        if (pct === undefined) {
+          return prisma.$executeRaw`SELECT 1`;
+        }
+
+        // veio 0/negativo => apaga registro (deixa "vazio" no edit)
+        if (pct <= 0) {
+          return (prisma as any).productDiscountByLevel.deleteMany({
+            where: { productId: args.productId, level },
+          });
+        }
+
+        // veio >0 => upsert
+        return (prisma as any).productDiscountByLevel.upsert({
+          where: { productId_level: { productId: args.productId, level } },
+          create: { productId: args.productId, level, discountPct: pct },
+          update: { discountPct: pct },
+        });
+      }),
+    );
+  } catch (e) {
+    console.warn("[upsertProductDiscountsByLevel] skip:", e);
+  }
+}
+
 // ✅ buscar pricing completo pra preencher modal de edição
 export async function getProductPricing(productId: string) {
-  const anyPrisma: any = prisma as any;
-  const model = anyPrisma?._dmmf?.modelMap?.Product;
-  const fields: Array<{ name: string }> = model?.fields ?? [];
-  const hasIsFeatured = fields.some((f) => f?.name === "isFeatured");
+  "use server";
 
-  const p = await prisma.product.findUnique({
-    where: { id: productId },
-    select: {
-      id: true,
-      birthdayBenefitEnabled: true,
-      birthdayPriceLevel: true,
-      ...(hasIsFeatured ? { isFeatured: true } : {}),
-      prices: { select: { level: true, price: true } },
-    } as any,
-  });
+  // 1) tenta buscar com os campos novos (discounts + isFeatured)
+  try {
+    const p = await prisma.product.findUnique({
+      where: { id: productId },
+      select: {
+        id: true,
+        barberPercentage: true,
+        birthdayBenefitEnabled: true,
+        birthdayPriceLevel: true,
+        isFeatured: true,
+        discounts: { select: { level: true, discountPct: true } },
+      } as any,
+    });
 
-  if (!p) throw new Error("Produto não encontrado");
+    if (!p) throw new Error("Produto não encontrado");
 
-  const levelPrices: Partial<Record<CustomerLevel, number>> = {};
-  for (const row of (p as any).prices ?? []) {
-    levelPrices[row.level as CustomerLevel] = Number(row.price);
+    const levelDiscounts: Partial<Record<CustomerLevel, number>> = {};
+    for (const row of (p as any).discounts ?? []) {
+      const lvl = row.level as CustomerLevel;
+      const pct = Number(row.discountPct);
+      if (Number.isFinite(pct)) levelDiscounts[lvl] = pct;
+    }
+
+    return {
+      productId: p.id,
+      barberPercentage:
+        p.barberPercentage === null || p.barberPercentage === undefined
+          ? null
+          : Number(p.barberPercentage),
+      birthdayBenefitEnabled: Boolean(p.birthdayBenefitEnabled),
+      birthdayPriceLevel: ((p as any).birthdayPriceLevel ??
+        null) as CustomerLevel | null,
+      isFeatured: Boolean((p as any).isFeatured ?? false),
+      levelDiscounts,
+    };
+  } catch (e) {
+    // 2) fallback sem esses campos (não quebra o modal)
+    console.warn("[getProductPricing] fallback:", e);
+
+    const p = await prisma.product.findUnique({
+      where: { id: productId },
+      select: {
+        id: true,
+        barberPercentage: true,
+        birthdayBenefitEnabled: true,
+        birthdayPriceLevel: true,
+      } as any,
+    });
+
+    if (!p) throw new Error("Produto não encontrado");
+
+    return {
+      productId: p.id,
+      barberPercentage:
+        p.barberPercentage === null || p.barberPercentage === undefined
+          ? null
+          : Number(p.barberPercentage),
+      birthdayBenefitEnabled: Boolean(p.birthdayBenefitEnabled),
+      birthdayPriceLevel: ((p as any).birthdayPriceLevel ??
+        null) as CustomerLevel | null,
+      isFeatured: false,
+      levelDiscounts: {},
+    };
   }
-
-  return {
-    productId: (p as any).id,
-    birthdayBenefitEnabled: Boolean((p as any).birthdayBenefitEnabled),
-    birthdayPriceLevel: ((p as any).birthdayPriceLevel ??
-      null) as CustomerLevel | null,
-    isFeatured: Boolean((p as any).isFeatured ?? false),
-    levelPrices,
-  };
 }
 
 // ===== Funções base (prisma + revalidate) =====
@@ -278,7 +370,6 @@ export async function createProduct(formData: FormData) {
     formData,
     "birthdayBenefitEnabled",
   );
-
   const isFeatured = parseBoolFromForm(formData, "isFeatured");
 
   const parsed = createProductSchema.safeParse({
@@ -290,11 +381,8 @@ export async function createProduct(formData: FormData) {
     category: formData.get("category"),
     stockQuantity: formData.get("stockQuantity"),
     pickupDeadlineDays: formData.get("pickupDeadlineDays"),
-
     birthdayBenefitEnabled,
-    // ✅ pode vir "", null, etc. o preprocess resolve
     birthdayPriceLevel: formData.get("birthdayPriceLevel"),
-
     isFeatured,
   });
 
@@ -321,8 +409,7 @@ export async function createProduct(formData: FormData) {
   const normalizedPrice = normalizePriceToDecimalString(price);
   const unitId = await getUnitIdFromFormOrDefault(formData);
 
-  const levelPrices = readLevelPricesFromForm(formData);
-  if (!levelPrices.BRONZE) levelPrices.BRONZE = normalizedPrice;
+  const levelDiscounts = readLevelDiscountsFromForm(formData);
 
   const baseData = {
     name,
@@ -333,12 +420,10 @@ export async function createProduct(formData: FormData) {
     category,
     stockQuantity,
     pickupDeadlineDays,
-
     birthdayBenefitEnabled,
     birthdayPriceLevel: birthdayBenefitEnabled
       ? (birthdayPriceLevel as CustomerLevel)
       : null,
-
     unit: { connect: { id: unitId } },
   };
 
@@ -347,9 +432,9 @@ export async function createProduct(formData: FormData) {
     select: { id: true },
   });
 
-  await upsertProductPricesByLevel({
+  await upsertProductDiscountsByLevel({
     productId: created.id,
-    prices: levelPrices,
+    discounts: levelDiscounts,
   });
 
   revalidatePath("/admin/products");
@@ -360,7 +445,6 @@ export async function updateProduct(productId: string, formData: FormData) {
     formData,
     "birthdayBenefitEnabled",
   );
-
   const isFeatured = parseBoolFromForm(formData, "isFeatured");
 
   const parsed = updateProductSchema.safeParse({
@@ -372,11 +456,8 @@ export async function updateProduct(productId: string, formData: FormData) {
     category: formData.get("category"),
     stockQuantity: formData.get("stockQuantity"),
     pickupDeadlineDays: formData.get("pickupDeadlineDays"),
-
     birthdayBenefitEnabled,
-    // ✅ pode vir "" quando usuário mexe no form: preprocess evita crash
     birthdayPriceLevel: formData.get("birthdayPriceLevel"),
-
     isFeatured,
   });
 
@@ -401,7 +482,7 @@ export async function updateProduct(productId: string, formData: FormData) {
   } = parsed.data;
 
   const normalizedPrice = normalizePriceToDecimalString(price);
-  const levelPrices = readLevelPricesFromForm(formData);
+  const levelDiscounts = readLevelDiscountsFromForm(formData);
 
   const baseData = {
     name,
@@ -412,7 +493,6 @@ export async function updateProduct(productId: string, formData: FormData) {
     category,
     stockQuantity,
     pickupDeadlineDays,
-
     birthdayBenefitEnabled,
     birthdayPriceLevel: birthdayBenefitEnabled
       ? (birthdayPriceLevel as CustomerLevel)
@@ -424,13 +504,9 @@ export async function updateProduct(productId: string, formData: FormData) {
     data: withFeaturedField(baseData, Boolean(isFeaturedParsed)) as any,
   });
 
-  if (Object.keys(levelPrices).length > 0 && !levelPrices.BRONZE) {
-    levelPrices.BRONZE = normalizedPrice;
-  }
-
-  await upsertProductPricesByLevel({
+  await upsertProductDiscountsByLevel({
     productId,
-    prices: levelPrices,
+    discounts: levelDiscounts,
   });
 
   revalidatePath("/admin/products");

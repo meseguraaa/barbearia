@@ -212,7 +212,7 @@ const ProductCard = memo(function ProductCard({
     onPressDetails(item.id);
   }, [item.id, onPressDetails]);
 
-  // ✅ decide quais valores usar
+  // ✅ decide quais valores usar + calcula economia%
   const pricing = useMemo(() => {
     const base = safeNumber(item.basePrice, NaN);
     const final = safeNumber(item.finalPrice, NaN);
@@ -223,10 +223,15 @@ const ProductCard = memo(function ProductCard({
     // se vier do endpoint: usa (base/final)
     if (hasBase && hasFinal) {
       const hasDiscount = !!item.hasDiscount && final < base;
+
+      const economyPct =
+        hasDiscount && base > 0 ? Math.round(((base - final) / base) * 100) : 0;
+
       return {
         base,
         final,
         hasDiscount,
+        economyPct,
       };
     }
 
@@ -236,6 +241,7 @@ const ProductCard = memo(function ProductCard({
       base: p,
       final: p,
       hasDiscount: false,
+      economyPct: 0,
     };
   }, [item.basePrice, item.finalPrice, item.hasDiscount, item.price]);
 
@@ -247,6 +253,12 @@ const ProductCard = memo(function ProductCard({
     () => formatMoneySmartBRL(pricing.final),
     [pricing.final],
   );
+
+  const economyPctLabel = useMemo(() => {
+    const v = Number(pricing.economyPct ?? 0);
+    if (!Number.isFinite(v) || v <= 0) return null;
+    return `${Math.max(0, Math.min(99, Math.round(v)))}%`;
+  }, [pricing.economyPct]);
 
   return (
     <Pressable onPress={goDetails} style={S.productCard} android_ripple={{}}>
@@ -286,15 +298,22 @@ const ProductCard = memo(function ProductCard({
           {item.unitName}
         </Text>
 
-        {/* ✅ regra do preço (riscado + novo) */}
+        {/* ✅ regra do preço (De/Por/Economia) */}
         {pricing.hasDiscount ? (
           <View style={S.priceStack}>
             <Text style={S.basePriceStriked} numberOfLines={1}>
-              {baseLabel}
+              De: {baseLabel}
             </Text>
+
             <Text style={S.finalPrice} numberOfLines={1}>
-              {finalLabel}
+              Por: {finalLabel}
             </Text>
+
+            {economyPctLabel ? (
+              <Text style={S.economyText} numberOfLines={1}>
+                Economia: {economyPctLabel}
+              </Text>
+            ) : null}
           </View>
         ) : (
           <Text style={S.productPrice} numberOfLines={1}>
@@ -1430,9 +1449,17 @@ const S = StyleSheet.create({
   },
 
   finalPrice: {
-    fontSize: 20,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "900",
     color: UI.brand.primaryText,
+  },
+
+  // ✅ nova linha: Economia: X%
+  economyText: {
+    marginTop: 1,
+    fontSize: 12,
+    fontWeight: "900",
+    color: "rgba(0,0,0,0.58)",
   },
 
   productFooter: {

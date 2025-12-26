@@ -674,8 +674,8 @@ model Product {
   // ✅ PRAZO DE RETIRADA (em dias) para reservas feitas pelo cliente
   pickupDeadlineDays Int @default(2)
 
-  // ✅ NOVO: preço por nível (tabela)
-  prices ProductPriceByLevel[]
+  // ✅ NOVO: desconto por nível (tabela)
+  discounts ProductDiscountByLevel[]
 
   // ✅ NOVO: benefício de aniversário por produto (janela 3 dias antes + dia + 3 dias depois)
   birthdayBenefitEnabled Boolean        @default(false)
@@ -694,15 +694,18 @@ model Product {
   @@index([isFeatured])
 }
 
-// ✅ NOVO: PREÇO DO PRODUTO POR NÍVEL
-model ProductPriceByLevel {
+// ✅ NOVO: DESCONTO DO PRODUTO POR NÍVEL
+// OBS: mantemos o @@map("product_prices_by_level") pra não precisar renomear tabela agora.
+model ProductDiscountByLevel {
   id String @id @default(cuid())
 
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   level CustomerLevel
-  price Decimal       @db.Decimal(10, 2)
+
+  // Percentual de desconto (0 a 100)
+  discountPct Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
