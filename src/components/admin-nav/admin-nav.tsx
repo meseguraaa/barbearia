@@ -18,6 +18,7 @@ import {
   Settings,
   Building2,
   Medal,
+  BarChart3,
 } from "lucide-react";
 import type { AdminModule } from "@/lib/admin-permissions";
 
@@ -51,6 +52,17 @@ const adminLinks: AdminLink[] = [
     icon: LayoutDashboard,
     module: "DASHBOARD",
   },
+
+  // ✅ NOVO: Relatórios (estratégicos)
+  // Por enquanto amarrado no mesmo módulo do Dashboard pra não criar permissão nova agora.
+  // Quando criarmos o módulo "REPORTS", é só trocar aqui.
+  {
+    href: "/admin/reports",
+    label: "Relatórios",
+    icon: BarChart3,
+    module: "DASHBOARD",
+  },
+
   {
     href: "/admin/appointments",
     label: "Agendamentos",
