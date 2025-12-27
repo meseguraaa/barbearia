@@ -50,7 +50,7 @@ export async function GET(req: Request) {
       );
     }
 
-    const barbers = await prisma.barber.findMany({
+    const rows = await prisma.barber.findMany({
       where: {
         isActive: true,
         units: {
@@ -65,12 +65,25 @@ export async function GET(req: Request) {
           },
         },
       },
-      orderBy: { name: "asc" }, // ✅ ordem alfabética
+      orderBy: { name: "asc" },
       select: {
         id: true,
         name: true,
+        imageUrl: true, // Barber.imageUrl (novo padrão)
+        user: {
+          select: {
+            image: true, // User.image (legado / admin)
+          },
+        },
       },
     });
+
+    // ✅ normaliza imagem (novo -> legado)
+    const barbers = rows.map((b) => ({
+      id: b.id,
+      name: b.name,
+      imageUrl: b.imageUrl ?? b.user?.image ?? null,
+    }));
 
     return NextResponse.json(
       { ok: true, barbers },

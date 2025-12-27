@@ -419,11 +419,15 @@ model UnitDailyTimeInterval {
 // =======================
 
 model Barber {
-  id        String   @id @default(cuid())
-  name      String
-  email     String   @unique
-  phone     String?
-  isActive  Boolean  @default(true)
+  id       String  @id @default(cuid())
+  name     String
+  email    String  @unique
+  phone    String?
+  isActive Boolean @default(true)
+
+  // ✅ FOTO DO PROFISSIONAL (URL pública)
+  imageUrl String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

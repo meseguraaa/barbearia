@@ -16,6 +16,7 @@ import {
   ListRenderItemInfo,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -32,6 +33,7 @@ const STICKY_ROW_H = 74;
 type Barber = {
   id: string;
   name: string;
+  imageUrl?: string | null; // ✅ NOVO
 };
 
 type BarbersResponse = {
@@ -39,6 +41,39 @@ type BarbersResponse = {
   barbers?: Barber[];
   error?: string;
 };
+
+const BarberAvatar = memo(function BarberAvatar({
+  imageUrl,
+}: {
+  imageUrl?: string | null;
+}) {
+  const [failed, setFailed] = useState(false);
+
+  const uri = useMemo(() => String(imageUrl ?? "").trim(), [imageUrl]);
+
+  // ✅ importante: se a URL mudar, tenta carregar de novo
+  useEffect(() => {
+    setFailed(false);
+  }, [uri]);
+
+  const canShowImage = !!uri && !failed;
+
+  return (
+    <View style={S.avatarWrap}>
+      {canShowImage ? (
+        <Image
+          source={{ uri }}
+          style={S.avatarImg}
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <View style={S.avatarFallback}>
+          <FontAwesome name="user" size={18} color={UI.brand.primary} />
+        </View>
+      )}
+    </View>
+  );
+});
 
 const BarberRow = memo(function BarberRow({
   item,
@@ -54,9 +89,7 @@ const BarberRow = memo(function BarberRow({
   return (
     <Pressable onPress={onPress} style={S.row}>
       <View style={S.rowLeft}>
-        <View style={S.avatar}>
-          <FontAwesome name="user" size={18} color={UI.brand.primary} />
-        </View>
+        <BarberAvatar imageUrl={item.imageUrl} />
 
         <View style={{ flex: 1 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -359,7 +392,6 @@ export default function BookingProfessional() {
 }
 
 const S = StyleSheet.create({
-  // ✅ CHAVE: fundo branco pra recorte aparecer
   page: { flex: 1, backgroundColor: UI.colors.white },
 
   fixedTop: {
@@ -379,7 +411,6 @@ const S = StyleSheet.create({
     justifyContent: "space-between",
   },
 
-  // ✅ roxinho sólido + ícone branco
   backBtn: {
     width: 42,
     height: 42,
@@ -427,13 +458,6 @@ const S = StyleSheet.create({
     fontSize: 13,
     fontWeight: "500",
     lineHeight: 18,
-  },
-  heroNote: {
-    marginTop: 10,
-    color: UI.colors.text,
-    fontSize: 12,
-    fontWeight: "600",
-    opacity: 0.9,
   },
 
   whiteArea: { flex: 1, backgroundColor: UI.colors.white },
@@ -483,11 +507,25 @@ const S = StyleSheet.create({
   },
   rowLeft: { flexDirection: "row", gap: 12, flex: 1, alignItems: "center" },
 
-  avatar: {
-    width: 38,
-    height: 38,
+  // ✅ Avatar no padrão do Profile (borda + primary) e com retry se URL mudar
+  avatarWrap: {
+    width: 50,
+    height: 50,
     borderRadius: 12,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: UI.brand.primary,
     backgroundColor: "rgba(124,108,255,0.12)",
+  },
+  avatarImg: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+  },
+  avatarFallback: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
   },

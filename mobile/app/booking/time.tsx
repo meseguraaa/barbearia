@@ -80,6 +80,12 @@ function timeToMinutes(hhmm: string) {
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
+// ✅ minutos atuais (hora local do device)
+function nowMinutesLocal() {
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
+
 type AppointmentGetResponse = {
   ok: boolean;
   appointment: {
@@ -311,6 +317,11 @@ export default function BookingTime() {
     [days, selectedDayKey],
   );
 
+  // ✅ verdadeiro quando o dia selecionado é "hoje" (local do device)
+  const isTodaySelected = useMemo(() => {
+    return selectedDayKey === dateKey(new Date());
+  }, [selectedDayKey]);
+
   const [loading, setLoading] = useState(true);
   const [slots, setSlots] = useState<string[]>([]);
 
@@ -395,24 +406,48 @@ export default function BookingTime() {
     return isoDayKeyUTC(currentDateISO) === isoDayKeyUTC(selectedDateISO);
   }, [currentDateISO, isEdit, selectedDateISO]);
 
-  // Segurança extra: se por algum motivo o backend não injetar, a gente garante no UI também.
-  // ✅ Não remove os outros horários: só garante que o atual esteja presente + ordenação + sem duplicar.
+  // Segurança extra:
+  // - modo edit: garante que o horário atual apareça (se for o mesmo dia)
+  // - dia "hoje": remove horários no passado (mantém o "Atual" no edit)
   const displaySlots = useMemo(() => {
     const base = slots.slice();
-    if (!isEdit) return base;
 
-    const t = normTime(currentStartTime);
-    if (!t) return base;
-    if (!sameDayAsCurrent) return base;
+    // 1) merge do horário atual (edit) antes de filtrar
+    let mergedBase = base;
 
-    const merged = base.includes(t) ? base : [t, ...base];
+    if (isEdit) {
+      const t = normTime(currentStartTime);
+      if (t && sameDayAsCurrent) {
+        mergedBase = mergedBase.includes(t) ? mergedBase : [t, ...mergedBase];
+      }
+    }
 
-    const uniq = Array.from(new Set(merged)).sort(
+    // 2) uniq + ordenação
+    const uniq = Array.from(new Set(mergedBase)).sort(
       (a, b) => timeToMinutes(a) - timeToMinutes(b),
     );
 
-    return uniq;
-  }, [currentStartTime, isEdit, sameDayAsCurrent, slots]);
+    // 3) se não for hoje, volta tudo
+    if (!isTodaySelected) return uniq;
+
+    // 4) hoje: remove horários que já passaram
+    const nowMins = nowMinutesLocal();
+
+    const cur = normTime(currentStartTime);
+    const keepCurrent =
+      !!isEdit && !!sameDayAsCurrent && !!cur && uniq.includes(cur);
+
+    return uniq.filter((t) => {
+      const mins = timeToMinutes(t);
+      if (!Number.isFinite(mins)) return false;
+
+      // mantém o "Atual" no modo edição, mesmo que esteja no passado
+      if (keepCurrent && t === cur) return true;
+
+      // não mostra horários no passado
+      return mins >= nowMins;
+    });
+  }, [currentStartTime, isEdit, sameDayAsCurrent, slots, isTodaySelected]);
 
   const onPickTime = useCallback(
     (startTime: string) => {
