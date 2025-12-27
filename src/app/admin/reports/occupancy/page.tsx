@@ -472,12 +472,16 @@ export default async function AdminReportsOccupancyPage({
   return (
     <div className="space-y-6 max-w-7xl">
       <header className="space-y-3">
-        {/* Linha 1: título + botão voltar */}
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-title text-content-primary">
-            Ocupação da agenda
-          </h1>
+        {/* Linha 1: título + descrição | botão voltar */}
+        <div className="flex items-start justify-between gap-3">
+          {/* Título + texto */}
+          <div className="space-y-1">
+            <h1 className="text-title text-content-primary">
+              Ocupação da agenda
+            </h1>
+          </div>
 
+          {/* Botão voltar */}
           <Button variant="outline" asChild>
             <Link href="/admin/reports">Voltar</Link>
           </Button>

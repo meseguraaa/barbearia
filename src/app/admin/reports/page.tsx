@@ -24,7 +24,8 @@ const reports: ReportCard[] = [
   {
     href: "/admin/reports/occupancy",
     title: "Ocupação da agenda",
-    description: "Horários de pico e ociosidade da agenda, por profissional.",
+    description:
+      "Veja os horários de pico e de ociosidade da agenda por dia e hora. Compare profissionais e encontre oportunidades de encaixe.",
     icon: CalendarClock,
     badgeTone: "ready",
   },
@@ -32,19 +33,17 @@ const reports: ReportCard[] = [
     href: "/admin/reports/retention",
     title: "Retenção de clientes",
     description:
-      "Cohort por mês de primeira compra: quem volta em 30/60/90 dias.",
+      "Entenda se os clientes voltam após a primeira compra. Veja retorno em 30/60/90 dias e acompanhe a evolução mês a mês.",
     icon: Users2,
-    // ✅ agora está no ar, então fica "ready" e sem badge "Em breve"
     badgeTone: "ready",
   },
   {
     href: "/admin/reports/funnel",
     title: "Funil do agendamento",
     description:
-      "Criados → confirmados → concluídos. Onde você perde mais receita.",
+      "Acompanhe criados → realizados → pendentes/cancelados. Descubra onde a agenda não vira receita e onde está o gargalo.",
     icon: Filter,
-    badge: "Em breve",
-    badgeTone: "soon",
+    badgeTone: "ready",
   },
 ];
 
@@ -68,7 +67,7 @@ export default async function AdminReportsPage() {
 
         <p className="text-paragraph-small text-content-secondary">
           Relatórios estratégicos para entender tendência, retenção, eficiência
-          e gargalos. (O dashboard continua sendo o “dia a dia”.)
+          e gargalos.
         </p>
       </header>
 
@@ -87,17 +86,14 @@ export default async function AdminReportsPage() {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-start gap-3">
-                  {/* ÍCONE SEM CAIXA */}
                   <Icon className="h-6 w-6 text-content-secondary shrink-0" />
 
                   <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <p className="text-label-large text-content-primary">
-                        {r.title}
-                      </p>
-                    </div>
+                    <p className="text-label-large text-content-primary">
+                      {r.title}
+                    </p>
 
-                    <p className="text-paragraph-small text-content-secondary">
+                    <p className="text-paragraph-small text-content-secondary line-clamp-3">
                       {r.description}
                     </p>
                   </div>
@@ -117,16 +113,6 @@ export default async function AdminReportsPage() {
             </Link>
           );
         })}
-      </section>
-
-      <section className="rounded-xl border border-border-primary bg-background-tertiary p-4">
-        <p className="text-paragraph-small text-content-secondary">
-          ✅ <b>Ocupação da agenda</b> já está no ar: heatmap + filtros +{" "}
-          <b>comparação lado a lado</b> entre profissionais.
-          <br />✅ <b>Retenção</b> já tem layout e filtros no ar.
-          <br />
-          Próximo na fila: <b>Funil</b>.
-        </p>
       </section>
     </div>
   );
