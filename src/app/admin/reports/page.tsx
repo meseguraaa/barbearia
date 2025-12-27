@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { cn } from "@/lib/utils";
-import { CalendarClock, Users2, Filter, Sparkles } from "lucide-react";
+import { CalendarClock, Users2, Filter } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -34,8 +34,8 @@ const reports: ReportCard[] = [
     description:
       "Cohort por mês de primeira compra: quem volta em 30/60/90 dias.",
     icon: Users2,
-    badge: "Em breve",
-    badgeTone: "soon",
+    // ✅ agora está no ar, então fica "ready" e sem badge "Em breve"
+    badgeTone: "ready",
   },
   {
     href: "/admin/reports/funnel",
@@ -75,7 +75,6 @@ export default async function AdminReportsPage() {
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {reports.map((r) => {
           const Icon = r.icon;
-          const isReady = r.badgeTone === "ready";
 
           return (
             <Link
@@ -124,8 +123,9 @@ export default async function AdminReportsPage() {
         <p className="text-paragraph-small text-content-secondary">
           ✅ <b>Ocupação da agenda</b> já está no ar: heatmap + filtros +{" "}
           <b>comparação lado a lado</b> entre profissionais.
+          <br />✅ <b>Retenção</b> já tem layout e filtros no ar.
           <br />
-          Próximos na fila: <b>Retenção</b> e <b>Funil</b>.
+          Próximo na fila: <b>Funil</b>.
         </p>
       </section>
     </div>
