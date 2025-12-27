@@ -77,7 +77,7 @@ const adminLinks: AdminLink[] = [
   },
   {
     // ✅ FIX: rota correta (plural) pra bater com o resto do projeto
-    href: "/admin/professionals",
+    href: "/admin/professional",
     label: "Profissionais",
     icon: Scissors,
     module: "PROFESSIONALS",

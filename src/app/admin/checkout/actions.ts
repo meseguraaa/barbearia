@@ -57,6 +57,74 @@ function assertPositiveInt(n: number, label: string) {
   }
 }
 
+/** Decimal/any -> number seguro */
+function toNumberDecimal(v: any): number {
+  if (v == null) return NaN;
+  if (typeof v === "number") return v;
+  if (typeof v === "string") {
+    const n = Number(v.replace(",", "."));
+    return Number.isFinite(n) ? n : NaN;
+  }
+  if (typeof v === "object") {
+    if (typeof v.toNumber === "function") {
+      const n = v.toNumber();
+      return Number.isFinite(n) ? n : NaN;
+    }
+    if (typeof v.toString === "function") {
+      const n = Number(String(v.toString()).replace(",", "."));
+      return Number.isFinite(n) ? n : NaN;
+    }
+  }
+  return NaN;
+}
+
+/**
+ * ✅ Snapshot financeiro do serviço
+ * - total = soma dos itens de serviço do pedido
+ * - fallback: totalPrice -> unitPrice*qty -> service.price*qty
+ */
+function calcServiceSubtotal(
+  items: Array<{
+    quantity: number;
+    unitPrice: any | null;
+    totalPrice: any | null;
+    service?: { price: any | null } | null;
+  }>,
+) {
+  let total = 0;
+
+  for (const it of items) {
+    const qty = Number(it.quantity ?? 0) || 0;
+    if (qty <= 0) continue;
+
+    const totalPrice = toNumberDecimal(it.totalPrice);
+    if (Number.isFinite(totalPrice) && totalPrice >= 0) {
+      total += totalPrice;
+      continue;
+    }
+
+    const unitPrice = toNumberDecimal(it.unitPrice);
+    if (Number.isFinite(unitPrice) && unitPrice >= 0) {
+      total += unitPrice * qty;
+      continue;
+    }
+
+    const basePrice = toNumberDecimal(it.service?.price);
+    if (Number.isFinite(basePrice) && basePrice >= 0) {
+      total += basePrice * qty;
+      continue;
+    }
+  }
+
+  return total;
+}
+
+function calcCommission(serviceSubtotal: number, pct: number) {
+  if (!Number.isFinite(serviceSubtotal) || serviceSubtotal <= 0) return 0;
+  if (!Number.isFinite(pct) || pct < 0) return 0;
+  return (serviceSubtotal * pct) / 100;
+}
+
 /* ---------------------------------------------------------
  * UNIT SCOPE (mesma regra do page.tsx)
  * ---------------------------------------------------------*/
@@ -572,29 +640,79 @@ export async function finalizeClientOpenOrders(formData: FormData) {
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1) Finaliza serviços
+      // 1) Finaliza serviços (✅ com snapshot financeiro)
       for (const order of serviceOrders) {
         if (order.status !== "PENDING") continue;
 
         assertOrderInActiveUnit({ unitId: order.unitId ?? null }, activeUnitId);
 
-        await tx.order.update({
+        // ✅ idempotência
+        const fresh = await tx.order.findUnique({
           where: { id: order.id },
-          data: {
-            status: "COMPLETED",
+          select: { id: true, status: true },
+        });
+        if (!fresh || fresh.status !== "PENDING") continue;
+
+        // ✅ pega itens e appointment+service para congelar financeiro
+        const full = await tx.order.findUnique({
+          where: { id: order.id },
+          include: {
+            items: {
+              include: {
+                service: { select: { price: true, barberPercentage: true } },
+              },
+            },
+            appointment: {
+              select: {
+                id: true,
+                status: true,
+                service: { select: { barberPercentage: true } },
+              },
+            },
           },
         });
 
-        if (order.appointmentId) {
+        if (!full) continue;
+
+        await tx.order.update({
+          where: { id: order.id },
+          data: { status: "COMPLETED" },
+        });
+
+        // Snapshot apenas se existir appointment vinculado
+        if (full.appointment?.id) {
+          const serviceItems = (full.items ?? []).filter(
+            (it: any) => it.serviceId != null,
+          );
+
+          const serviceSubtotal = calcServiceSubtotal(
+            serviceItems.map((it: any) => ({
+              quantity: it.quantity,
+              unitPrice: it.unitPrice ?? null,
+              totalPrice: it.totalPrice ?? null,
+              service: it.service ?? null,
+            })),
+          );
+
+          const pct =
+            toNumberDecimal(full.appointment.service?.barberPercentage) || 0;
+
+          const earning = calcCommission(serviceSubtotal, pct);
+
           await tx.appointment.updateMany({
             where: {
-              id: order.appointmentId,
+              id: full.appointment.id,
               status: "PENDING",
               ...(activeUnitId ? { unitId: activeUnitId } : {}),
             } as any,
             data: {
               status: "DONE",
               concludedByRole: "ADMIN",
+
+              // ✅ congela contábil
+              servicePriceAtTheTime: serviceSubtotal,
+              barberPercentageAtTheTime: pct,
+              barberEarningValue: earning,
             } as any,
           });
         }
@@ -952,21 +1070,65 @@ export async function finalizeServiceOrder(formData: FormData) {
       });
       if (!fresh || fresh.status !== "PENDING") return;
 
+      // ✅ pega itens completos + appointment.service para snapshot
+      const full = await tx.order.findUnique({
+        where: { id: orderId },
+        include: {
+          items: {
+            include: {
+              service: { select: { price: true, barberPercentage: true } },
+            },
+          },
+          appointment: {
+            select: {
+              id: true,
+              status: true,
+              service: { select: { barberPercentage: true } },
+            },
+          },
+        },
+      });
+
+      if (!full) return;
+
       await tx.order.update({
         where: { id: orderId },
         data: { status: "COMPLETED" },
       });
 
-      if (order.appointmentId) {
+      if (full.appointment?.id) {
+        const serviceItems = (full.items ?? []).filter(
+          (it: any) => it.serviceId != null,
+        );
+
+        const serviceSubtotal = calcServiceSubtotal(
+          serviceItems.map((it: any) => ({
+            quantity: it.quantity,
+            unitPrice: it.unitPrice ?? null,
+            totalPrice: it.totalPrice ?? null,
+            service: it.service ?? null,
+          })),
+        );
+
+        const pct =
+          toNumberDecimal(full.appointment.service?.barberPercentage) || 0;
+
+        const earning = calcCommission(serviceSubtotal, pct);
+
         await tx.appointment.updateMany({
           where: {
-            id: order.appointmentId,
+            id: full.appointment.id,
             status: "PENDING",
             ...(activeUnitId ? { unitId: activeUnitId } : {}),
           } as any,
           data: {
             status: "DONE",
             concludedByRole: "ADMIN",
+
+            // ✅ congela contábil
+            servicePriceAtTheTime: serviceSubtotal,
+            barberPercentageAtTheTime: pct,
+            barberEarningValue: earning,
           } as any,
         });
       }
