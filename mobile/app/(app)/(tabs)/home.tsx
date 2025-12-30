@@ -22,6 +22,96 @@ import { HomeSkeleton } from "../../../src/components/loading/HomeSkeleton";
 
 const STICKY_ROW_H = 74;
 
+/**
+ * ===========================================
+ * 📈 Analytics (base do mapa de calor)
+ * ===========================================
+ * - Envia eventos simples para o backend.
+ * - Já preparado para atribuição de push via contexto global opcional.
+ *
+ * Próximo passo (em outro arquivo): preencher `globalThis.__lastPushContext`
+ * quando um push for visualizado.
+ */
+type AnalyticsSource = "direct" | "push" | "menu" | "deep_link" | "flow";
+
+type PushContext = {
+  pushId?: string | null;
+  pushType?: string | null;
+  viewedAt?: string | null; // ISO
+};
+
+type AnalyticsContext = {
+  source: AnalyticsSource;
+  pushId?: string | null;
+  pushType?: string | null;
+  secondsSincePush?: number | null;
+};
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __lastPushContext: PushContext | undefined;
+}
+
+function safeNowISO() {
+  try {
+    return new Date().toISOString();
+  } catch {
+    return "";
+  }
+}
+
+function secondsBetween(aISO?: string | null, bISO?: string | null) {
+  try {
+    if (!aISO || !bISO) return null;
+    const a = new Date(aISO).getTime();
+    const b = new Date(bISO).getTime();
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    const s = Math.floor((b - a) / 1000);
+    return Number.isFinite(s) ? Math.max(0, s) : null;
+  } catch {
+    return null;
+  }
+}
+
+function getAnalyticsContext(): AnalyticsContext {
+  const lastPush = globalThis.__lastPushContext;
+
+  if (lastPush?.pushId) {
+    const nowISO = safeNowISO();
+    return {
+      source: "push",
+      pushId: lastPush.pushId ?? null,
+      pushType: lastPush.pushType ?? null,
+      secondsSincePush: secondsBetween(lastPush.viewedAt ?? null, nowISO),
+    };
+  }
+
+  return { source: "direct" };
+}
+
+async function trackEvent(
+  name: string,
+  payload: Record<string, any> = {},
+  ctx?: AnalyticsContext,
+) {
+  try {
+    const context = ctx ?? getAnalyticsContext();
+
+    await api.post(
+      "/api/mobile/analytics/events",
+      {
+        name,
+        ts: safeNowISO(),
+        context,
+        payload,
+      },
+      {},
+    );
+  } catch {
+    // silencioso: analytics nunca pode quebrar UX
+  }
+}
+
 type ProductBadge =
   | { type: "BIRTHDAY"; label: string }
   | { type: "LEVEL"; label: string }
@@ -664,6 +754,9 @@ export default function Home() {
 
   useFocusEffect(
     useCallback(() => {
+      // 📌 Home entrou em foco: page_viewed (base do heatmap)
+      trackEvent("page_viewed", { page: "home" });
+
       fetchNext();
       fetchHistoryPreview();
       fetchProductsPreview();
@@ -688,25 +781,36 @@ export default function Home() {
   const topBounceHeight = useMemo(() => TOP_OFFSET + 1400, [TOP_OFFSET]);
 
   const goToBooking = useCallback(() => {
+    trackEvent("nav_click", { from: "home", to: "/booking/unit" });
     router.push("/booking/unit");
   }, [router]);
 
   const goToHistory = useCallback(() => {
+    trackEvent("nav_click", { from: "home", to: "/client/history" });
     router.push("/client/history");
   }, [router]);
 
   const goToProducts = useCallback(() => {
+    trackEvent("nav_click", { from: "home", to: "/products" });
     router.push("/products");
   }, [router]);
 
   const goToProductDetails = useCallback(
     (id: string) => {
+      trackEvent("nav_click", {
+        from: "home",
+        to: "/(app)/(tabs)/products/[id]",
+        productId: id,
+      });
+
       router.push({ pathname: "/(app)/(tabs)/products/[id]", params: { id } });
     },
     [router],
   );
 
   const goCart = useCallback(async () => {
+    trackEvent("nav_click", { from: "home", to: "/client/cart" });
+
     try {
       const currentId = pendingCartOrderId;
       if (currentId) {
@@ -733,11 +837,19 @@ export default function Home() {
   }, [fetchPendingCart, pendingCartOrderId, router]);
 
   const goNotifications = useCallback(() => {
+    trackEvent("nav_click", { from: "home", to: "/client/notifications" });
     router.push("/client/notifications");
   }, [router]);
 
   const onPressReschedule = useCallback(() => {
     if (!next) return;
+
+    trackEvent("nav_click", {
+      from: "home",
+      to: "/booking/unit",
+      action: "reschedule",
+      appointmentId: next.id,
+    });
 
     router.push({
       pathname: "/booking/unit",
@@ -748,6 +860,12 @@ export default function Home() {
   const cancelApiCall = useCallback(
     async (appointmentId: string) => {
       try {
+        trackEvent("action_click", {
+          from: "home",
+          action: "cancel_appointment",
+          appointmentId,
+        });
+
         const res = await api.post<{ ok: boolean; error?: string }>(
           `/api/mobile/me/appointments/${appointmentId}/cancel`,
           {},
@@ -1013,6 +1131,9 @@ export default function Home() {
 
   const onPressBirthday = useCallback(() => {
     if (!birthdayBadgeLabel) return;
+
+    trackEvent("action_click", { from: "home", action: "birthday_badge" });
+
     Alert.alert(
       "Parabéns pra você! 🎂 \nAproveite os descontos especiais para aniversariantes.",
     );
@@ -1061,7 +1182,13 @@ export default function Home() {
               {userLevelLabel ? (
                 <Pressable
                   style={[S.iconBtn, S.levelBtn, userLevelStyle?.container]}
-                  onPress={() => {}}
+                  onPress={() => {
+                    trackEvent("action_click", {
+                      from: "home",
+                      action: "level_chip",
+                      level: userLevelLabel,
+                    });
+                  }}
                   hitSlop={8}
                 >
                   <FontAwesome

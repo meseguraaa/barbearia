@@ -115,6 +115,21 @@ function isValidBirthBR(b: string) {
   return true;
 }
 
+// ✅ converte dd/mm/aaaa -> yyyy-mm-dd (melhor pro backend)
+function birthBRToISO(b: string): string | null {
+  const s = String(b ?? "").trim();
+  if (!s) return null;
+  if (!isValidBirthBR(s)) return null;
+
+  const [ddS, mmS, yyyyS] = s.split("/");
+  const dd = Number(ddS);
+  const mm = Number(mmS);
+  const yyyy = Number(yyyyS);
+
+  const pad2 = (n: number) => String(n).padStart(2, "0");
+  return `${yyyy}-${pad2(mm)}-${pad2(dd)}`;
+}
+
 type MeApiUser = {
   id: string;
   name: string | null;
@@ -251,7 +266,7 @@ const Field = memo(function Field({
 export default function Profile() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { signOut, user } = useAuth();
 
   const [loadingMe, setLoadingMe] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -286,8 +301,6 @@ export default function Profile() {
   );
 
   // ✅ nível (label curta) + cores do Admin
-  const { user } = useAuth();
-
   const userLevelLabel = useMemo(() => {
     const raw =
       (user as any)?.level?.label ??
@@ -470,6 +483,15 @@ export default function Profile() {
       }
     }
 
+    // ✅ payload “limpo” pro backend
+    const phoneDigits = digitsOnly(phone);
+    const birthdayISO = b ? birthBRToISO(b) : null;
+
+    if (b && !birthdayISO) {
+      Alert.alert("Data inválida", "Verifique o dia/mês/ano.");
+      return;
+    }
+
     try {
       setSaving(true);
 
@@ -478,8 +500,8 @@ export default function Profile() {
         {
           method: "PATCH",
           body: JSON.stringify({
-            phone: phone.trim() || null,
-            birthday: b || null,
+            phone: phoneDigits || null,
+            birthday: birthdayISO || null,
           }),
         },
       );

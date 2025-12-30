@@ -3,10 +3,11 @@ import React, { memo, useCallback, useMemo, useRef, useState } from "react";
 import { View, Text, Pressable, StyleSheet, SectionList } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useRouter, usePathname } from "expo-router";
 
 import { UI } from "../../src/theme/client-theme";
 import { api } from "../../src/services/api";
+import { trackEvent } from "../../src/services/analytics"; // ✅ analytics global
 
 import { ScreenGate } from "../../src/components/layout/ScreenGate";
 import { HistorySkeleton } from "../../src/components/loading/HistorySkeleton";
@@ -29,6 +30,14 @@ type HistoryResponse = {
   orders: HistoryItem[];
   error?: string;
 };
+
+function normalizePage(pathname: string) {
+  const p = (pathname || "/").trim();
+  const noQuery = p.split("?")[0].split("#")[0];
+  return noQuery.length > 1 && noQuery.endsWith("/")
+    ? noQuery.slice(0, -1)
+    : noQuery || "/";
+}
 
 const HistoryRow = memo(function HistoryRow({
   item,
@@ -69,6 +78,7 @@ const HistoryRow = memo(function HistoryRow({
 export default function ClientHistory() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
 
   const [reviews, setReviews] = useState<HistoryItem[]>([]);
   const [done, setDone] = useState<HistoryItem[]>([]);
@@ -84,6 +94,24 @@ export default function ClientHistory() {
   const recomputeReady = useCallback(() => {
     if (didHistoryRef.current) setDataReady(true);
   }, []);
+
+  // ✅ page_viewed (dedupe por foco)
+  const lastViewedKeyRef = useRef<string>("");
+
+  const trackPageViewed = useCallback(() => {
+    const page = normalizePage(pathname || "/");
+    const key = page;
+
+    if (lastViewedKeyRef.current === key) return;
+    lastViewedKeyRef.current = key;
+
+    try {
+      trackEvent("page_viewed", {
+        page,
+        platform: "mobile",
+      });
+    } catch {}
+  }, [pathname]);
 
   const fetchHistory = useCallback(async () => {
     if (fetchingRef.current) return;
@@ -121,6 +149,18 @@ export default function ClientHistory() {
       recomputeReady();
     }
   }, [recomputeReady]);
+
+  useFocusEffect(
+    useCallback(() => {
+      // ✅ analytics: view da página ao entrar
+      trackPageViewed();
+
+      // ✅ reseta dedupe ao sair (pra contar nova visita real depois)
+      return () => {
+        lastViewedKeyRef.current = "";
+      };
+    }, [trackPageViewed]),
+  );
 
   useFocusEffect(
     useCallback(() => {

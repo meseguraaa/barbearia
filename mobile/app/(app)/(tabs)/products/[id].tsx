@@ -8,6 +8,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  NativeSyntheticEvent,
+  NativeScrollEvent,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -20,6 +22,93 @@ import { ScreenGate } from "../../../../src/components/layout/ScreenGate";
 import { ProductDetailsSkeleton } from "../../../../src/components/loading/ProductDetailsSkeleton";
 
 const HERO_H = 320;
+
+/**
+ * ===========================================
+ * 📈 Analytics (Produto: detalhe)
+ * ===========================================
+ * Silencioso, não quebra UX.
+ * Preparado para contexto de push (quando existir).
+ */
+type AnalyticsSource = "direct" | "push" | "menu" | "deep_link" | "flow";
+
+type PushContext = {
+  pushId?: string | null;
+  pushType?: string | null;
+  viewedAt?: string | null; // ISO
+};
+
+type AnalyticsContext = {
+  source: AnalyticsSource;
+  pushId?: string | null;
+  pushType?: string | null;
+  secondsSincePush?: number | null;
+};
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __lastPushContext: PushContext | undefined;
+}
+
+function safeNowISO() {
+  try {
+    return new Date().toISOString();
+  } catch {
+    return "";
+  }
+}
+
+function secondsBetween(aISO?: string | null, bISO?: string | null) {
+  try {
+    if (!aISO || !bISO) return null;
+    const a = new Date(aISO).getTime();
+    const b = new Date(bISO).getTime();
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+    const s = Math.floor((b - a) / 1000);
+    return Number.isFinite(s) ? Math.max(0, s) : null;
+  } catch {
+    return null;
+  }
+}
+
+function getAnalyticsContext(): AnalyticsContext {
+  const lastPush = globalThis.__lastPushContext;
+
+  if (lastPush?.pushId) {
+    const nowISO = safeNowISO();
+    return {
+      source: "push",
+      pushId: lastPush.pushId ?? null,
+      pushType: lastPush.pushType ?? null,
+      secondsSincePush: secondsBetween(lastPush.viewedAt ?? null, nowISO),
+    };
+  }
+
+  return { source: "direct" };
+}
+
+async function trackEvent(
+  name: string,
+  payload: Record<string, any> = {},
+  ctx?: AnalyticsContext,
+) {
+  try {
+    const context = ctx ?? getAnalyticsContext();
+
+    await api.post(
+      "/api/mobile/analytics/events",
+      {
+        name,
+        ts: safeNowISO(),
+        context,
+        payload,
+      },
+      {},
+    );
+  } catch {
+    // silencioso: analytics nunca pode quebrar UX
+  }
+}
 
 type ProductBadge =
   | { type: "BIRTHDAY"; label: string }
@@ -92,6 +181,9 @@ export default function ProductDetails() {
   // ✅ gate: libera quando a primeira tentativa terminar (sucesso/erro/vazio)
   const [dataReady, setDataReady] = useState(false);
 
+  // ✅ scroll depth dedupe
+  const scrollMarksRef = useRef<Set<number>>(new Set());
+
   const fetchProduct = useCallback(async () => {
     setDataReady(false);
 
@@ -99,11 +191,21 @@ export default function ProductDetails() {
       setLoading(false);
       setProduct(null);
       setDataReady(true);
+
+      trackEvent("product_not_found", {
+        page: "product_details",
+        productId: "",
+        reason: "missing_id",
+      });
+
       return;
     }
 
     if (fetchingRef.current) return;
     fetchingRef.current = true;
+
+    // ✅ page viewed (primeira tentativa de carregar)
+    trackEvent("page_viewed", { page: "product_details", productId });
 
     try {
       setLoading(true);
@@ -118,6 +220,13 @@ export default function ProductDetails() {
 
       if (!p?.id) {
         setProduct(null);
+
+        trackEvent("product_not_found", {
+          page: "product_details",
+          productId,
+          reason: "api_empty",
+        });
+
         return;
       }
 
@@ -144,7 +253,7 @@ export default function ProductDetails() {
         ? finalPrice
         : safeNumber(p?.price, 0);
 
-      setProduct({
+      const mapped: ApiProduct = {
         id: String(p.id),
         name: String(p.name ?? "Produto"),
         imageUrl: typeof p.imageUrl === "string" ? p.imageUrl : null,
@@ -164,9 +273,26 @@ export default function ProductDetails() {
         pickupDeadlineDays: safeNumber(p.pickupDeadlineDays, 2),
         unitId: String(p.unitId ?? ""),
         unitName: String(p.unitName ?? "—"),
+      };
+
+      setProduct(mapped);
+
+      trackEvent("product_loaded", {
+        page: "product_details",
+        productId: mapped.id,
+        isOutOfStock: !!mapped.isOutOfStock,
+        category: mapped.category ?? null,
+        unitId: mapped.unitId ?? "",
+        hasDiscount: !!mapped.hasDiscount,
       });
     } catch (err: any) {
       console.log("[product details] error:", err?.data ?? err?.message ?? err);
+
+      trackEvent("product_load_error", {
+        page: "product_details",
+        productId,
+        message: String(err?.data?.error ?? err?.message ?? "error"),
+      });
 
       const msg =
         err?.data?.error ||
@@ -183,6 +309,8 @@ export default function ProductDetails() {
   }, [productId]);
 
   useEffect(() => {
+    // a cada troca de produto, reseta scroll marks
+    scrollMarksRef.current = new Set();
     fetchProduct();
   }, [fetchProduct]);
 
@@ -237,10 +365,25 @@ export default function ProductDetails() {
     ];
   }, [product, productId]);
 
+  const onPressBack = useCallback(() => {
+    trackEvent("nav_click", {
+      from: "product_details",
+      to: "back",
+      productId: product?.id ?? productId,
+    });
+    router.back();
+  }, [router, product?.id, productId]);
+
   const onPressReserve = useCallback(async () => {
     if (!product) return;
 
     if (product.isOutOfStock) {
+      trackEvent("add_to_cart_blocked", {
+        from: "product_details",
+        productId: product.id,
+        reason: "out_of_stock",
+      });
+
       Alert.alert("Esgotado", "Este produto está sem estoque no momento.");
       return;
     }
@@ -249,6 +392,12 @@ export default function ProductDetails() {
 
     try {
       setReserving(true);
+
+      trackEvent("add_to_cart_attempt", {
+        from: "product_details",
+        productId: product.id,
+        quantity: 1,
+      });
 
       const res = await api.post<{
         ok: boolean;
@@ -260,14 +409,68 @@ export default function ProductDetails() {
 
       if (!res?.ok || !orderId) throw new Error("invalid_response");
 
+      trackEvent("add_to_cart_success", {
+        from: "product_details",
+        productId: product.id,
+        quantity: 1,
+        orderId: String(orderId),
+      });
+
       router.push({ pathname: "/client/cart", params: { orderId } });
-    } catch (err) {
+    } catch (err: any) {
+      trackEvent("add_to_cart_error", {
+        from: "product_details",
+        productId: product?.id ?? productId,
+        message: String(err?.data?.error ?? err?.message ?? "error"),
+      });
+
       console.log("[reserve details] error:", err);
       Alert.alert("Erro", "Não foi possível reservar agora. Tente novamente.");
     } finally {
       setReserving(false);
     }
   }, [product, reserving, router, productId]);
+
+  const onScroll = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      try {
+        const pId = product?.id ?? productId;
+        if (!pId) return;
+
+        const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+
+        const y = Number(contentOffset?.y ?? 0);
+        const h = Number(layoutMeasurement?.height ?? 0);
+        const total = Number(contentSize?.height ?? 0);
+
+        if (
+          !Number.isFinite(y) ||
+          !Number.isFinite(h) ||
+          !Number.isFinite(total)
+        )
+          return;
+
+        const denom = Math.max(1, total - h);
+        const pct = Math.max(0, Math.min(1, y / denom));
+        const pct100 = Math.round(pct * 100);
+
+        const marks = [25, 50, 75, 100] as const;
+
+        for (const m of marks) {
+          if (pct100 >= m && !scrollMarksRef.current.has(m)) {
+            scrollMarksRef.current.add(m);
+
+            trackEvent("scroll_depth", {
+              page: "product_details",
+              productId: pId,
+              depth: m,
+            });
+          }
+        }
+      } catch {}
+    },
+    [product?.id, productId],
+  );
 
   return (
     <ScreenGate dataReady={dataReady} skeleton={<ProductDetailsSkeleton />}>
@@ -289,7 +492,7 @@ export default function ProductDetails() {
       ) : !product ? (
         <View style={S.page}>
           <View style={[S.headerFloat, { top: insets.top + 10 }]}>
-            <Pressable onPress={() => router.back()} style={S.backBtn}>
+            <Pressable onPress={onPressBack} style={S.backBtn}>
               <FontAwesome name="angle-left" size={20} color="#FFFFFF" />
             </Pressable>
           </View>
@@ -315,7 +518,14 @@ export default function ProductDetails() {
             </Text>
 
             <Pressable
-              onPress={fetchProduct}
+              onPress={() => {
+                trackEvent("action_click", {
+                  page: "product_details",
+                  action: "retry_fetch",
+                  productId,
+                });
+                fetchProduct();
+              }}
               style={[
                 styles.pillPrimary,
                 {
@@ -330,7 +540,7 @@ export default function ProductDetails() {
             </Pressable>
 
             <Pressable
-              onPress={() => router.back()}
+              onPress={onPressBack}
               style={[
                 {
                   marginTop: 10,
@@ -389,7 +599,7 @@ export default function ProductDetails() {
           </View>
 
           <View style={[S.headerFloat, { top: insets.top + 10 }]}>
-            <Pressable onPress={() => router.back()} style={S.backBtn}>
+            <Pressable onPress={onPressBack} style={S.backBtn}>
               <FontAwesome name="angle-left" size={20} color="#FFFFFF" />
             </Pressable>
           </View>
@@ -398,6 +608,8 @@ export default function ProductDetails() {
             showsVerticalScrollIndicator={false}
             style={S.scroll}
             contentContainerStyle={{ paddingBottom: 140 }}
+            onScroll={onScroll}
+            scrollEventThrottle={120}
           >
             <View style={S.mainShell}>
               <View style={S.mainInner}>

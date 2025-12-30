@@ -131,6 +131,9 @@ model User {
   customerLevelStates  CustomerLevelState[]
   customerLevelPeriods CustomerLevelPeriod[]
 
+  // ✅ FIX: relacionamento correto (antes estava MobileAnalyticsEvent[])
+  analyticsEvents AnalyticsEvent[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -226,6 +229,9 @@ model Unit {
   barberWeeklyAvailabilities BarberWeeklyAvailability[]
   barberDailyAvailabilities  BarberDailyAvailability[]
   services                   Service[]
+
+  // ✅ FIX: relacionamento correto (antes estava MobileAnalyticsEvent[])
+  analyticsEvents AnalyticsEvent[]
 
   @@map("units")
 }
@@ -1005,4 +1011,45 @@ model AdminAccess {
   updatedAt DateTime @updatedAt
 
   @@index([unitId])
+}
+
+// =======================
+// 📈 ANALYTICS (mobile events)
+// =======================
+
+model AnalyticsEvent {
+  id String @id @default(cuid())
+
+  // Quem gerou
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Por unidade (tenant)
+  unitId String?
+  unit   Unit?   @relation(fields: [unitId], references: [id], onDelete: SetNull)
+
+  // Evento
+  name String
+  ts   DateTime @default(now()) // timestamp do evento (do client, quando válido)
+
+  // Contexto útil pra heatmap/atribuição
+  source           String?
+  pushId           String?
+  pushType         String?
+  secondsSincePush Int?
+
+  // Dados extras (livres)
+  payload Json?
+  context Json?
+
+  // Debug/forense
+  ip        String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+
+  @@index([unitId, createdAt])
+  @@index([userId, createdAt])
+  @@index([name, createdAt])
+  @@map("analytics_events")
 }

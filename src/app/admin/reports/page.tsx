@@ -65,6 +65,14 @@ const reports: ReportCard[] = [
     icon: Wallet,
     badgeTone: "ready",
   },
+  {
+    href: "/admin/reports/analytics",
+    title: "Analytics: Acesso & Conversão",
+    description:
+      "Acompanhe page views, impressões e cliques de produto, add-to-cart e conversões. Veja heatmap de acessos, top páginas e produtos mais quentes.",
+    icon: BarChart3,
+    badgeTone: "ready",
+  },
 ];
 
 function badgeClasses(tone: ReportCard["badgeTone"]) {
@@ -354,7 +362,7 @@ export default async function AdminReportsPage({
           </div>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <KpiCard
             title="Ocupação"
             value={formatPct(occupancy)}
@@ -380,14 +388,6 @@ export default async function AdminReportsPage({
             delta={ticketDelta}
             href={withMonth("/admin/reports/revenue")}
             icon={Wallet}
-          />
-
-          <KpiCard
-            title="Retenção"
-            value="ver relatório"
-            subtitle="30/60/90 dias"
-            href={withMonth("/admin/reports/retention")}
-            icon={Users2}
           />
 
           <KpiCard

@@ -13,14 +13,16 @@ import {
   Dimensions,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  ViewToken,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useRouter, usePathname } from "expo-router";
 
 import { UI, styles } from "../../../../src/theme/client-theme";
 import { useAuth } from "../../../../src/auth/auth-context";
 import { api } from "../../../../src/services/api";
+import { trackEvent } from "../../../../src/services/analytics";
 
 import { ScreenGate } from "../../../../src/components/layout/ScreenGate";
 import { ProductsSkeleton } from "../../../../src/components/loading/ProductsSkeleton";
@@ -148,6 +150,15 @@ function sumQtyFromOrder(order: any): number {
   return total > 0 ? total : 0;
 }
 
+// ✅ normaliza página (evita "/x/" e "/x" contarem diferente)
+function normalizePage(pathname: string) {
+  const p = (pathname || "/").trim();
+  const noQuery = p.split("?")[0].split("#")[0];
+  return noQuery.length > 1 && noQuery.endsWith("/")
+    ? noQuery.slice(0, -1)
+    : noQuery || "/";
+}
+
 // =======================
 // 🎨 NÍVEL DO CLIENTE (cores copiadas do Admin)
 // =======================
@@ -198,27 +209,27 @@ function levelChipColors(level: CustomerLevelKey) {
   switch (level) {
     case "BRONZE":
       return {
-        bg: "rgba(245, 158, 11, 0.10)", // amber-500/10
-        border: "rgba(245, 158, 11, 0.30)", // amber-500/30
-        text: "rgb(180, 83, 9)", // amber-700
+        bg: "rgba(245, 158, 11, 0.10)",
+        border: "rgba(245, 158, 11, 0.30)",
+        text: "rgb(180, 83, 9)",
       };
     case "PRATA":
       return {
-        bg: "rgba(100, 116, 139, 0.10)", // slate-500/10
-        border: "rgba(100, 116, 139, 0.30)", // slate-500/30
-        text: "rgb(226, 232, 240)", // slate-200
+        bg: "rgba(100, 116, 139, 0.10)",
+        border: "rgba(100, 116, 139, 0.30)",
+        text: "rgb(226, 232, 240)",
       };
     case "OURO":
       return {
-        bg: "rgba(234, 179, 8, 0.10)", // yellow-500/10
-        border: "rgba(234, 179, 8, 0.30)", // yellow-500/30
-        text: "rgb(161, 98, 7)", // yellow-700 (aprox)
+        bg: "rgba(234, 179, 8, 0.10)",
+        border: "rgba(234, 179, 8, 0.30)",
+        text: "rgb(161, 98, 7)",
       };
     case "DIAMANTE":
       return {
-        bg: "rgba(14, 165, 233, 0.10)", // sky-500/10
-        border: "rgba(14, 165, 233, 0.30)", // sky-500/30
-        text: "rgb(3, 105, 161)", // sky-700
+        bg: "rgba(14, 165, 233, 0.10)",
+        border: "rgba(14, 165, 233, 0.30)",
+        text: "rgb(3, 105, 161)",
       };
   }
 }
@@ -227,12 +238,14 @@ type FeaturedCarouselProps = {
   items: FeaturedProduct[];
   loading: boolean;
   onOpen: (id: string) => void;
+  onImpression?: (id: string) => void;
 };
 
 const FeaturedCarousel = memo(function FeaturedCarousel({
   items,
   loading,
   onOpen,
+  onImpression,
 }: FeaturedCarouselProps) {
   const listRef = useRef<FlatList<FeaturedProduct> | null>(null);
   const intervalRef = useRef<any>(null);
@@ -298,25 +311,37 @@ const FeaturedCarousel = memo(function FeaturedCarousel({
     useCallback(() => {
       if (count >= 2) {
         currentIndexRef.current = startIndex;
-        // garante que já nasce no meio sem “salto”
         requestAnimationFrame(() => scrollToIndexNoAnim(startIndex));
       }
       startAuto();
+
+      // ✅ impressão inicial do destaque (1 item)
+      if (count === 1 && items[0]?.id) {
+        try {
+          onImpression?.(items[0].id);
+        } catch {}
+      }
+
       return () => stopAuto();
-    }, [count, scrollToIndexNoAnim, startAuto, stopAuto, startIndex]),
+    }, [
+      count,
+      scrollToIndexNoAnim,
+      startAuto,
+      stopAuto,
+      startIndex,
+      items,
+      onImpression,
+    ]),
   );
 
   const normalizeLoopIndex = useCallback(
     (idx: number) => {
       if (count < 2) return idx;
 
-      // Se caiu no 1º bloco, empurra pro bloco do meio (mesmo item)
       if (idx < count) return idx + count;
-
-      // Se caiu no 3º bloco, puxa pro bloco do meio (mesmo item)
       if (idx >= count * 2) return idx - count;
 
-      return idx; // já tá no bloco do meio
+      return idx;
     },
     [count],
   );
@@ -328,22 +353,32 @@ const FeaturedCarousel = memo(function FeaturedCarousel({
       const x = e.nativeEvent.contentOffset.x;
       const idx = Math.round(x / snap);
 
-      // registra onde parou
       currentIndexRef.current = idx;
 
-      // ✅ reset invisível pro bloco do meio
       const normalized = normalizeLoopIndex(idx);
       if (normalized !== idx) {
         currentIndexRef.current = normalized;
-
-        // importante: faz o reset no próximo frame pra não “piscar”
         requestAnimationFrame(() => scrollToIndexNoAnim(normalized));
       }
 
-      // reinicia o timer “sem brigar com o dedo”
+      // ✅ impressão do item “central”
+      try {
+        const realIndex = ((currentIndexRef.current % count) + count) % count;
+        const id = items?.[realIndex]?.id;
+        if (id) onImpression?.(id);
+      } catch {}
+
       startAuto();
     },
-    [count, normalizeLoopIndex, scrollToIndexNoAnim, snap, startAuto],
+    [
+      count,
+      normalizeLoopIndex,
+      scrollToIndexNoAnim,
+      snap,
+      startAuto,
+      items,
+      onImpression,
+    ],
   );
 
   const renderFeatured = useCallback(
@@ -493,7 +528,6 @@ const FeaturedCarousel = memo(function FeaturedCarousel({
       <FlatList
         ref={setListRef}
         data={loopData}
-        // ✅ key por índice virtual: estável pro bloco (não “sentinela”)
         keyExtractor={(_, idx) => `featured_loop_${idx}`}
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -510,7 +544,6 @@ const FeaturedCarousel = memo(function FeaturedCarousel({
           index,
         })}
         initialScrollIndex={startIndex}
-        // ✅ IMPORTANTÍSSIMO: isso aqui costuma causar o “pisca”
         removeClippedSubviews={false}
         initialNumToRender={5}
         maxToRenderPerBatch={6}
@@ -534,6 +567,7 @@ type ProductsHeaderProps = {
   featured: FeaturedProduct[];
   featuredLoading: boolean;
   onOpenFeatured: (id: string) => void;
+  onImpressionFeatured?: (id: string) => void;
 };
 
 const CategoryChip = memo(function CategoryChip({
@@ -599,7 +633,6 @@ const ProductTile = memo(function ProductTile({
         <Image
           source={{ uri: item.image }}
           style={S.productImage}
-          // ✅ também ajuda a não “piscarem” imagens na grid quando recicla célula
           fadeDuration={0}
         />
 
@@ -699,6 +732,7 @@ const ProductsHeader = memo(function ProductsHeader({
   featured,
   featuredLoading,
   onOpenFeatured,
+  onImpressionFeatured,
 }: ProductsHeaderProps) {
   return (
     <View>
@@ -759,6 +793,7 @@ const ProductsHeader = memo(function ProductsHeader({
             items={featured}
             loading={featuredLoading}
             onOpen={onOpenFeatured}
+            onImpression={onImpressionFeatured}
           />
         </View>
       </View>
@@ -804,6 +839,7 @@ const ProductsFooter = memo(function ProductsFooter({
 export default function Products() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const pathname = usePathname();
 
   const { user, meLoading } = useAuth();
 
@@ -893,6 +929,30 @@ export default function Products() {
   const didReviewRef = useRef(false);
   const [dataReady, setDataReady] = useState(false);
 
+  // ============================
+  // 👀 Impressions (anti-spam)
+  // ============================
+  const seenProductIdsRef = useRef<Set<string>>(new Set());
+  const seenFeaturedIdsRef = useRef<Set<string>>(new Set());
+
+  // ✅ page_viewed (dedupe por foco)
+  const lastViewedKeyRef = useRef<string>("");
+
+  const trackPageViewed = useCallback(() => {
+    const page = normalizePage(pathname || "/");
+    const key = page;
+
+    if (lastViewedKeyRef.current === key) return;
+    lastViewedKeyRef.current = key;
+
+    try {
+      trackEvent("page_viewed", {
+        page,
+        platform: "mobile",
+      });
+    } catch {}
+  }, [pathname]);
+
   const recomputeReady = useCallback(() => {
     if (dataReady) return;
     if (didProductsRef.current && didCartRef.current && didReviewRef.current) {
@@ -911,9 +971,14 @@ export default function Products() {
 
   const openProduct = useCallback(
     (id: string) => {
+      trackEvent("product_click", {
+        page: normalizePage(pathname || "/"),
+        from: "products",
+        productId: id,
+      });
       router.push({ pathname: "/(app)/(tabs)/products/[id]", params: { id } });
     },
-    [router],
+    [router, pathname],
   );
 
   const fetchPendingCart = useCallback(async () => {
@@ -995,6 +1060,12 @@ export default function Products() {
   }, [recomputeReady]);
 
   const goCart = useCallback(async () => {
+    trackEvent("nav_click", {
+      page: normalizePage(pathname || "/"),
+      from: "products",
+      to: "/client/cart",
+    });
+
     try {
       const currentId = pendingCartOrderId;
       if (currentId) {
@@ -1018,11 +1089,16 @@ export default function Products() {
     } catch {
       router.push("/client/cart");
     }
-  }, [fetchPendingCart, pendingCartOrderId, router]);
+  }, [fetchPendingCart, pendingCartOrderId, router, pathname]);
 
   const goNotifications = useCallback(() => {
+    trackEvent("nav_click", {
+      page: normalizePage(pathname || "/"),
+      from: "products",
+      to: "/client/notifications",
+    });
     router.push("/client/notifications");
-  }, [router]);
+  }, [router, pathname]);
 
   const reserveProduct = useCallback(
     async (productId: string) => {
@@ -1031,6 +1107,13 @@ export default function Products() {
 
       try {
         setReservingId(productId);
+
+        trackEvent("add_to_cart_attempt", {
+          page: normalizePage(pathname || "/"),
+          from: "products",
+          productId,
+          quantity: 1,
+        });
 
         const res = await api.post<{
           ok: boolean;
@@ -1042,11 +1125,26 @@ export default function Products() {
 
         if (!res?.ok || !orderId) throw new Error("invalid_response");
 
+        trackEvent("add_to_cart_success", {
+          page: normalizePage(pathname || "/"),
+          from: "products",
+          productId,
+          quantity: 1,
+          orderId: String(orderId),
+        });
+
         setPendingCartOrderId(String(orderId));
         await fetchPendingCart();
 
         router.push({ pathname: "/client/cart", params: { orderId } });
       } catch (err) {
+        trackEvent("add_to_cart_error", {
+          page: normalizePage(pathname || "/"),
+          from: "products",
+          productId,
+          message: String((err as any)?.message ?? "error"),
+        });
+
         console.log("[reserve] error:", err);
         Alert.alert(
           "Erro",
@@ -1056,7 +1154,7 @@ export default function Products() {
         setReservingId(null);
       }
     },
-    [fetchPendingCart, reservingId, router],
+    [fetchPendingCart, reservingId, router, pathname],
   );
 
   const fetchAllProducts = useCallback(async () => {
@@ -1254,15 +1352,29 @@ export default function Products() {
 
   useFocusEffect(
     useCallback(() => {
+      // ✅ reset dedupe por sessão de tela
+      seenProductIdsRef.current = new Set();
+      seenFeaturedIdsRef.current = new Set();
+      lastViewedKeyRef.current = "";
+
+      // ✅ page_viewed padrão (rota real)
+      trackPageViewed();
+
       fetchAllProducts();
       fetchPendingCart();
       fetchPendingReview();
       fetchFeaturedProducts();
+
+      return () => {
+        // ao sair, permite registrar de novo quando voltar
+        lastViewedKeyRef.current = "";
+      };
     }, [
       fetchAllProducts,
       fetchPendingCart,
       fetchPendingReview,
       fetchFeaturedProducts,
+      trackPageViewed,
     ]),
   );
 
@@ -1318,9 +1430,82 @@ export default function Products() {
     [openProduct, reserveProduct, reservingId],
   );
 
-  const onSelectCategory = useCallback((id: string) => {
-    setActiveCategory(id);
-  }, []);
+  const onSelectCategory = useCallback(
+    (id: string) => {
+      setActiveCategory(id);
+      trackEvent("filter_category", {
+        page: normalizePage(pathname || "/"),
+        category: id,
+      });
+    },
+    [pathname],
+  );
+
+  // ✅ search tracking com debounce
+  const searchTimerRef = useRef<any>(null);
+  const onChangeSearch = useCallback(
+    (v: string) => {
+      setSearch(v);
+
+      try {
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = setTimeout(() => {
+          trackEvent("search_change", {
+            page: normalizePage(pathname || "/"),
+            queryLen: String(v ?? "").trim().length,
+          });
+        }, 600);
+      } catch {}
+    },
+    [pathname],
+  );
+
+  // ✅ Impressions na grid (só quando aparece na tela)
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 60,
+    minimumViewTime: 250,
+  }).current;
+
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: Array<ViewToken> }) => {
+      try {
+        for (const v of viewableItems) {
+          const item = v?.item as Product | undefined;
+          if (!item?.id) continue;
+          if (!v?.isViewable) continue;
+
+          if (!seenProductIdsRef.current.has(item.id)) {
+            seenProductIdsRef.current.add(item.id);
+
+            trackEvent("product_impression", {
+              page: normalizePage(pathname || "/"),
+              productId: item.id,
+              placement: "grid",
+              isOutOfStock: !!item.isOutOfStock,
+              category: item.category ?? null,
+            });
+          }
+        }
+      } catch {}
+    },
+  ).current;
+
+  const onImpressionFeatured = useCallback(
+    (id: string) => {
+      try {
+        if (!id) return;
+        if (seenFeaturedIdsRef.current.has(id)) return;
+        seenFeaturedIdsRef.current.add(id);
+
+        trackEvent("product_impression", {
+          page: normalizePage(pathname || "/"),
+          productId: id,
+          placement: "featured",
+        });
+      } catch {}
+    },
+    [pathname],
+  );
 
   const ListHeader = useMemo(
     () => (
@@ -1331,12 +1516,13 @@ export default function Products() {
         activeCategoryId={activeCategory}
         onSelectCategory={onSelectCategory}
         search={search}
-        onChangeSearch={setSearch}
+        onChangeSearch={onChangeSearch}
         loading={loading}
         totalCount={filteredProducts.length}
         featured={featured}
         featuredLoading={featuredLoading}
         onOpenFeatured={openProduct}
+        onImpressionFeatured={onImpressionFeatured}
       />
     ),
     [
@@ -1345,21 +1531,29 @@ export default function Products() {
       filteredProducts.length,
       loading,
       search,
+      onChangeSearch,
       topBounceHeight,
       activeCategory,
       onSelectCategory,
       featured,
       featuredLoading,
       openProduct,
+      onImpressionFeatured,
     ],
   );
 
   const onPressBirthday = useCallback(() => {
     if (!birthdayBadgeLabel) return;
+
+    trackEvent("action_click", {
+      page: normalizePage(pathname || "/"),
+      action: "birthday_badge",
+    });
+
     Alert.alert(
       "Parabéns pra você! 🎂 \nAproveite os descontos especiais para aniversariantes.",
     );
-  }, [birthdayBadgeLabel]);
+  }, [birthdayBadgeLabel, pathname]);
 
   return (
     <ScreenGate dataReady={dataReady} skeleton={<ProductsSkeleton />}>
@@ -1380,7 +1574,7 @@ export default function Products() {
             </View>
 
             <View style={S.topRightRow}>
-              {/* ✅ ANIVERSÁRIO: aparece só aqui, à esquerda do nível (padrão iconBtn42 + bolinha) */}
+              {/* ✅ ANIVERSÁRIO: aparece só aqui */}
               {birthdayBadgeLabel ? (
                 <Pressable
                   style={styles.iconBtn42}
@@ -1406,7 +1600,13 @@ export default function Products() {
                     S.levelBtn,
                     userLevelStyle?.container,
                   ]}
-                  onPress={() => {}}
+                  onPress={() => {
+                    trackEvent("action_click", {
+                      page: normalizePage(pathname || "/"),
+                      action: "level_chip",
+                      level: userLevelLabel,
+                    });
+                  }}
                   hitSlop={8}
                 >
                   <FontAwesome
@@ -1485,6 +1685,8 @@ export default function Products() {
           maxToRenderPerBatch={8}
           windowSize={7}
           updateCellsBatchingPeriod={50}
+          viewabilityConfig={viewabilityConfig}
+          onViewableItemsChanged={onViewableItemsChanged}
         />
       </View>
     </ScreenGate>
@@ -1549,7 +1751,6 @@ const S = StyleSheet.create({
     textAlignVertical: "center",
   },
 
-  // ✅ bolinha do aniversário (bem sutil, mesmo padrão dos outros botões)
   birthdayDot: {
     position: "absolute",
     top: -6,
@@ -1759,7 +1960,6 @@ const S = StyleSheet.create({
     fontSize: 12,
   },
 
-  // ✅ nova linha: Economia: X%
   economyText: {
     marginTop: 1,
     fontSize: 12,
@@ -1895,7 +2095,6 @@ const S = StyleSheet.create({
     marginBottom: 2,
   },
 
-  // ✅ nova linha: Economia: X% (no carrossel)
   featureEconomy: {
     marginTop: 2,
     color: "rgba(255,255,255,0.75)",
@@ -1962,7 +2161,6 @@ const S = StyleSheet.create({
     letterSpacing: 0.2,
   },
 
-  // skeletonzinho rápido
   skelLineSmall: {
     height: 10,
     width: "45%",

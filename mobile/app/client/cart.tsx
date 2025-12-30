@@ -1,5 +1,12 @@
 // app/client/cart.tsx
-import React, { memo, useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   View,
   Text,
@@ -11,11 +18,17 @@ import {
   Image,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import {
+  useLocalSearchParams,
+  useRouter,
+  usePathname,
+  useFocusEffect,
+} from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 
 import { UI } from "../../src/theme/client-theme";
 import { api } from "../../src/services/api";
+import { trackEvent } from "../../src/services/analytics"; // ✅ analytics global
 
 import { ScreenGate } from "../../src/components/layout/ScreenGate";
 import { CartSkeleton } from "../../src/components/loading/CartSkeleton";
@@ -114,6 +127,15 @@ function statusLabel(status?: string | null) {
   return s;
 }
 
+// ✅ normaliza página pra não gerar "/x/" e "/x" como coisas diferentes
+function normalizePage(pathname: string) {
+  const p = (pathname || "/").trim();
+  const noQuery = p.split("?")[0].split("#")[0];
+  return noQuery.length > 1 && noQuery.endsWith("/")
+    ? noQuery.slice(0, -1)
+    : noQuery || "/";
+}
+
 const Row = memo(function Row({
   icon,
   label,
@@ -139,6 +161,7 @@ const Row = memo(function Row({
 export default function CartScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const pathname = usePathname();
 
   const params = useLocalSearchParams<{
     orderId?: string | string[];
@@ -172,6 +195,25 @@ export default function CartScreen() {
       router.back();
     }
   }, [router]);
+
+  // ✅ page_viewed (dedupe por foco)
+  const lastViewedKeyRef = useRef<string>("");
+
+  const trackPageViewed = useCallback(() => {
+    const page = normalizePage(pathname || "/");
+    const key = `${page}|${orderId || "no-order"}`;
+
+    if (lastViewedKeyRef.current === key) return;
+    lastViewedKeyRef.current = key;
+
+    try {
+      trackEvent("page_viewed", {
+        page,
+        platform: "mobile",
+        orderId: orderId || null,
+      });
+    } catch {}
+  }, [pathname, orderId]);
 
   const load = useCallback(async () => {
     setDataReady(false);
@@ -221,6 +263,16 @@ export default function CartScreen() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // ✅ dispara view ao entrar na tela (e reseta ao sair)
+  useFocusEffect(
+    useCallback(() => {
+      trackPageViewed();
+      return () => {
+        lastViewedKeyRef.current = "";
+      };
+    }, [trackPageViewed]),
+  );
 
   const items = order?.items ?? [];
 

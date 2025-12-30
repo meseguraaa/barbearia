@@ -10,10 +10,11 @@ import {
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect, useRouter, usePathname } from "expo-router";
 
 import { UI } from "../../src/theme/client-theme";
 import { api } from "../../src/services/api";
+import { trackEvent } from "../../src/services/analytics"; // ✅ analytics global
 
 import { ScreenGate } from "../../src/components/layout/ScreenGate";
 import { HistorySkeleton } from "../../src/components/loading/HistorySkeleton";
@@ -56,6 +57,14 @@ function formatPtBRDateTime(iso: string) {
   } catch {
     return "—";
   }
+}
+
+function normalizePage(pathname: string) {
+  const p = (pathname || "/").trim();
+  const noQuery = p.split("?")[0].split("#")[0];
+  return noQuery.length > 1 && noQuery.endsWith("/")
+    ? noQuery.slice(0, -1)
+    : noQuery || "/";
 }
 
 const NotificationRow = memo(function NotificationRow({
@@ -136,6 +145,7 @@ const NotificationRow = memo(function NotificationRow({
 export default function ClientNotifications() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const pathname = usePathname();
 
   const [pendingItems, setPendingItems] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -150,6 +160,24 @@ export default function ClientNotifications() {
   const recomputeReady = useCallback(() => {
     if (didRef.current) setDataReady(true);
   }, []);
+
+  // ✅ page_viewed (dedupe simples por foco)
+  const lastViewedKeyRef = useRef<string>("");
+
+  const trackPageViewed = useCallback(() => {
+    const page = normalizePage(pathname || "/");
+    const key = page;
+
+    if (lastViewedKeyRef.current === key) return;
+    lastViewedKeyRef.current = key;
+
+    try {
+      trackEvent("page_viewed", {
+        page,
+        platform: "mobile",
+      });
+    } catch {}
+  }, [pathname]);
 
   const fetchNotifications = useCallback(async () => {
     if (fetchingRef.current) return;
@@ -194,6 +222,18 @@ export default function ClientNotifications() {
       recomputeReady();
     }
   }, [recomputeReady]);
+
+  useFocusEffect(
+    useCallback(() => {
+      // ✅ analytics: view da página ao entrar
+      trackPageViewed();
+
+      // ✅ reseta dedupe ao sair (pra contar uma nova visita real depois)
+      return () => {
+        lastViewedKeyRef.current = "";
+      };
+    }, [trackPageViewed]),
+  );
 
   useFocusEffect(
     useCallback(() => {

@@ -10,12 +10,13 @@ import {
   Alert,
 } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter, usePathname } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useFocusEffect } from "expo-router";
 
 import { UI } from "../../src/theme/client-theme";
 import { api } from "../../src/services/api";
+import { trackEvent } from "../../src/services/analytics"; // ✅ analytics global
 
 import { ScreenGate } from "../../src/components/layout/ScreenGate";
 import { HistorySkeleton } from "../../src/components/loading/HistorySkeleton";
@@ -64,6 +65,14 @@ function formatPtBRDateTime(iso: string) {
   }
 }
 
+function normalizePage(pathname: string) {
+  const p = (pathname || "/").trim();
+  const noQuery = p.split("?")[0].split("#")[0];
+  return noQuery.length > 1 && noQuery.endsWith("/")
+    ? noQuery.slice(0, -1)
+    : noQuery || "/";
+}
+
 const CardRow = memo(function CardRow({
   icon,
   title,
@@ -102,6 +111,7 @@ export default function ClientReview() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ appointmentId?: string }>();
+  const pathname = usePathname();
 
   const appointmentIdParam = useMemo(() => {
     const v = params?.appointmentId;
@@ -126,6 +136,25 @@ export default function ClientReview() {
   const recomputeReady = useCallback(() => {
     if (didRef.current) setDataReady(true);
   }, []);
+
+  // ✅ page_viewed (dedupe simples por foco)
+  const lastViewedKeyRef = useRef<string>("");
+
+  const trackPageViewed = useCallback(() => {
+    const page = normalizePage(pathname || "/");
+    const key = `${page}|${appointmentIdParam || ""}`;
+
+    if (lastViewedKeyRef.current === key) return;
+    lastViewedKeyRef.current = key;
+
+    try {
+      trackEvent("page_viewed", {
+        page,
+        platform: "mobile",
+        appointmentId: appointmentIdParam ? appointmentIdParam : undefined,
+      });
+    } catch {}
+  }, [appointmentIdParam, pathname]);
 
   const fetchPending = useCallback(async () => {
     if (fetchingRef.current) return;
@@ -163,6 +192,18 @@ export default function ClientReview() {
       recomputeReady();
     }
   }, [appointmentIdParam, recomputeReady]);
+
+  useFocusEffect(
+    useCallback(() => {
+      // ✅ dispara view da página ao entrar na tela
+      trackPageViewed();
+
+      // ✅ reseta dedupe ao sair, para contar uma nova visita real depois
+      return () => {
+        lastViewedKeyRef.current = "";
+      };
+    }, [trackPageViewed]),
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -486,7 +527,6 @@ export default function ClientReview() {
     },
     [
       canSubmit,
-      comment,
       dismiss,
       isNegative,
       pending,
@@ -497,6 +537,7 @@ export default function ClientReview() {
       tags,
       toggleTag,
       whenLabel,
+      comment,
     ],
   );
 
