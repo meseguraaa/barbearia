@@ -12,7 +12,7 @@ import { MonthPicker } from "@/components/month-picker";
 const SESSION_COOKIE_NAME = "painel_session";
 
 type PainelSessionPayload = {
-  sub: string;
+  sub: string; // userId
   role: "CLIENT" | "BARBER" | "ADMIN";
   email: string;
   name?: string | null;
@@ -44,15 +44,26 @@ async function getCurrentBarber() {
       redirect("/painel/login");
     }
 
-    const barber = await prisma.barber.findFirst({
-      where: { email: payload.email },
+    // ✅ BarberWhereUniqueInput não aceita { email } no seu schema.
+    // Uniques: id, userId, companyId_email. Então buscamos por userId (payload.sub).
+    const barberByUserId = await prisma.barber.findUnique({
+      where: { userId: payload.sub },
     });
+
+    // fallback seguro (tokens antigos)
+    const barber =
+      barberByUserId ??
+      (await prisma.barber.findFirst({
+        where: { email: payload.email },
+      }));
 
     if (!barber) {
       redirect("/painel/login");
     }
 
-    return barber;
+    const companyId = (barber as any)?.companyId as string | undefined;
+
+    return { barber, companyId };
   } catch (error) {
     console.error("Erro ao validar sessão do barbeiro:", error);
     redirect("/painel/login");
@@ -74,7 +85,32 @@ type BarberReviewsPageProps = {
 export default async function BarberReviewsPage({
   searchParams,
 }: BarberReviewsPageProps) {
-  const barber = await getCurrentBarber();
+  const { barber, companyId } = await getCurrentBarber();
+
+  // 🔒 Multi-tenant REAL: sem companyId, sem dados
+  if (!companyId) {
+    return (
+      <div className="max-w-7xl space-y-6">
+        <header className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-title text-content-primary">
+              Minhas avaliações
+            </h1>
+            <p className="text-paragraph-medium-size text-content-secondary">
+              Veja como os clientes avaliaram seus atendimentos.
+            </p>
+          </div>
+        </header>
+
+        <section className="rounded-xl border border-border-primary bg-background-tertiary p-4">
+          <p className="text-paragraph-medium text-content-secondary">
+            Seu usuário está sem vínculo de empresa (companyId). Peça para um
+            administrador corrigir o cadastro do barbeiro.
+          </p>
+        </section>
+      </div>
+    );
+  }
 
   const resolvedSearchParams = await searchParams;
   const monthParam = resolvedSearchParams.month;
@@ -97,6 +133,7 @@ export default async function BarberReviewsPage({
     // ⭐ Avaliações do barbeiro no mês selecionado
     prisma.appointmentReview.findMany({
       where: {
+        companyId, // ✅ scoping
         barberId: barber.id,
         createdAt: {
           gte: monthStart,
@@ -124,6 +161,7 @@ export default async function BarberReviewsPage({
     // ⭐ Todas as avaliações históricas do barbeiro (sem filtro de data)
     prisma.appointmentReview.findMany({
       where: {
+        companyId, // ✅ scoping
         barberId: barber.id,
       },
       select: {

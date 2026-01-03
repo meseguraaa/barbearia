@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
-import { prisma } from "../../../../lib/prisma";
+import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 
 type MobileTokenPayload = {
   sub: string;
   role?: "CLIENT" | "BARBER" | "ADMIN";
+  companyId: string; // ✅ multi-tenant obrigatório
 };
 
 function corsHeaders() {
@@ -28,7 +29,21 @@ async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
   if (!token) throw new Error("Token ausente");
 
   const { payload } = await jwtVerify(token, getJwtSecretKey());
-  return payload as unknown as MobileTokenPayload;
+
+  const sub = String((payload as any)?.sub || "").trim();
+  if (!sub) throw new Error("Token inválido");
+
+  const companyId =
+    typeof (payload as any)?.companyId === "string"
+      ? String((payload as any).companyId).trim()
+      : "";
+  if (!companyId) throw new Error("companyId ausente no token");
+
+  return {
+    sub,
+    role: (payload as any).role,
+    companyId,
+  };
 }
 
 function toNumber(v: any): number {
@@ -50,10 +65,11 @@ export async function OPTIONS() {
 
 export async function GET(req: Request) {
   try {
-    await requireMobileAuth(req);
+    const auth = await requireMobileAuth(req);
+    const companyId = auth.companyId;
 
     const url = new URL(req.url);
-    const unitId = url.searchParams.get("unitId") || "";
+    const unitId = String(url.searchParams.get("unitId") || "").trim();
 
     if (!unitId) {
       return NextResponse.json(
@@ -62,19 +78,36 @@ export async function GET(req: Request) {
       );
     }
 
-    // 1) Barbeiros ativos vinculados à unidade
+    // ✅ 0) valida que a unit pertence ao tenant
+    const unit = await prisma.unit.findFirst({
+      where: { id: unitId, companyId, isActive: true },
+      select: { id: true },
+    });
+
+    if (!unit) {
+      return NextResponse.json(
+        { error: "Unidade inválida" },
+        { status: 404, headers: corsHeaders() },
+      );
+    }
+
+    // ✅ 1) barbeiros ativos vinculados à unidade (tenant-safe)
     const unitBarbers = await prisma.barberUnit.findMany({
       where: {
+        companyId, // ✅ garante vínculo do tenant (se existir no schema)
         unitId,
         isActive: true,
-        barber: { isActive: true },
-      },
+        barber: {
+          companyId, // ✅ garante barbeiro do mesmo tenant
+          isActive: true,
+        } as any,
+      } as any,
       select: { barberId: true },
     });
 
-    const barberIds = Array.from(
-      new Set(unitBarbers.map((b) => b.barberId)),
-    ).filter(Boolean);
+    const barberIds = Array.from(new Set(unitBarbers.map((b) => b.barberId)))
+      .filter(Boolean)
+      .map((x) => String(x));
 
     if (barberIds.length === 0) {
       return NextResponse.json(
@@ -83,15 +116,19 @@ export async function GET(req: Request) {
       );
     }
 
-    // 2) Serviços que esses barbeiros executam
+    // ✅ 2) serviços que esses barbeiros executam (tenant-safe)
     const serviceLinks = await prisma.serviceProfessional.findMany({
-      where: { barberId: { in: barberIds } },
+      where: {
+        companyId, // ✅ se existir no schema
+        barberId: { in: barberIds },
+        service: { companyId } as any, // ✅ garante service do mesmo tenant
+      } as any,
       select: { serviceId: true },
     });
 
-    const serviceIds = Array.from(
-      new Set(serviceLinks.map((s) => s.serviceId)),
-    ).filter(Boolean);
+    const serviceIds = Array.from(new Set(serviceLinks.map((s) => s.serviceId)))
+      .filter(Boolean)
+      .map((x) => String(x));
 
     if (serviceIds.length === 0) {
       return NextResponse.json(
@@ -100,9 +137,10 @@ export async function GET(req: Request) {
       );
     }
 
-    // 3) Serviços ativos (ordem alfabética)
+    // ✅ 3) serviços ativos (tenant-safe)
     const services = await prisma.service.findMany({
       where: {
+        companyId,
         id: { in: serviceIds },
         isActive: true,
       },
@@ -117,16 +155,13 @@ export async function GET(req: Request) {
       },
     });
 
-    // payload amigável pro mobile
     const payload = services.map((s) => ({
       id: s.id,
       name: s.name,
       durationMinutes: s.durationMinutes ?? 0,
       price: moneyBRLFromDecimal(s.price),
-      // se quiser usar depois no app:
-      cancelFeePercentage: s.cancelFeePercentage
-        ? toNumber(s.cancelFeePercentage)
-        : null,
+      cancelFeePercentage:
+        s.cancelFeePercentage == null ? null : toNumber(s.cancelFeePercentage),
       cancelLimitHours: s.cancelLimitHours ?? null,
     }));
 
@@ -136,11 +171,13 @@ export async function GET(req: Request) {
     );
   } catch (err: any) {
     const msg = String(err?.message ?? "Não autorizado");
+    const lower = msg.toLowerCase();
 
     if (
-      msg.toLowerCase().includes("token") ||
-      msg.toLowerCase().includes("jwt") ||
-      msg.toLowerCase().includes("signature")
+      lower.includes("token") ||
+      lower.includes("jwt") ||
+      lower.includes("signature") ||
+      lower.includes("companyid")
     ) {
       return NextResponse.json(
         { error: "Não autorizado" },

@@ -321,6 +321,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
     Boolean(product.birthdayBenefitEnabled),
   );
 
+  // ✅ se habilitar, sempre existe um nível válido (default DIAMANTE)
   const [birthdayLevel, setBirthdayLevel] = useState<CustomerLevel>(() => {
     return (product.birthdayPriceLevel as CustomerLevel) || "DIAMANTE";
   });
@@ -334,6 +335,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
     return v === null || v === undefined ? "" : String(v);
   });
 
+  // ✅ como birthdayLevel sempre é válido, inválido só se o form estiver bugado
   const birthdayConfigInvalid = birthdayEnabled && !birthdayLevel;
 
   useEffect(() => {
@@ -360,7 +362,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
         const pricing = await getProductPricing(product.id);
         if (cancelled) return;
 
-        // descontos: só aplica se vier pelo menos 1 chave (server agora manda undefined se vazio)
+        // descontos: só aplica se vier pelo menos 1 chave
         if (hasAnyDiscountKey((pricing as any)?.levelDiscounts)) {
           setLevelDiscounts(
             toLevelDiscountState((pricing as any).levelDiscounts),
@@ -378,12 +380,12 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
           );
         }
 
-        // destaque: só aplica se veio boolean mesmo (server manda undefined se não existe)
+        // destaque
         if (typeof (pricing as any)?.isFeatured === "boolean") {
           setIsFeatured((pricing as any).isFeatured);
         }
 
-        // comissão (se veio no retorno)
+        // comissão
         const bp = (pricing as any)?.barberPercentage;
         if (bp !== undefined) {
           setBarberPercentage(bp === null ? "" : String(bp));
@@ -396,7 +398,16 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
     return () => {
       cancelled = true;
     };
-  }, [open, product.id]); // ✅ estável
+  }, [
+    open,
+    product.id,
+    product.price,
+    product.levelDiscounts,
+    product.birthdayBenefitEnabled,
+    product.birthdayPriceLevel,
+    product.isFeatured,
+    product.barberPercentage,
+  ]);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -409,8 +420,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
 
     // ✅ aniversário
     formData.set("birthdayBenefitEnabled", birthdayEnabled ? "true" : "false");
-    if (birthdayEnabled) formData.set("birthdayPriceLevel", birthdayLevel);
-    else formData.set("birthdayPriceLevel", "");
+    formData.set("birthdayPriceLevel", birthdayEnabled ? birthdayLevel : "");
 
     // ✅ regra B: campo vazio = 0% (sempre envia)
     const bronze = clampPct(levelDiscounts.BRONZE) ?? 0;
@@ -491,6 +501,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
               </label>
             </div>
 
+            {/* mantém compatibilidade caso alguém dependa do HTML form */}
             <input
               type="hidden"
               name="isFeatured"
@@ -618,7 +629,7 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
                 <input
                   type="hidden"
                   name="birthdayBenefitEnabled"
-                  value={birthdayEnabled ? "true" : "false"}
+                  value="true"
                 />
                 <input
                   type="hidden"
@@ -627,11 +638,14 @@ export function ProductEditDialog({ product }: ProductEditDialogProps) {
                 />
               </div>
             ) : (
-              <input
-                type="hidden"
-                name="birthdayBenefitEnabled"
-                value="false"
-              />
+              <>
+                <input
+                  type="hidden"
+                  name="birthdayBenefitEnabled"
+                  value="false"
+                />
+                <input type="hidden" name="birthdayPriceLevel" value="" />
+              </>
             )}
           </div>
 

@@ -9,6 +9,7 @@ export const metadata: Metadata = {
 type AdminLoginPageProps = {
   searchParams?: Promise<{
     error?: string;
+    companyId?: string;
   }>;
 };
 
@@ -17,6 +18,7 @@ export default async function AdminLoginPage({
 }: AdminLoginPageProps) {
   const resolvedSearchParams = (await searchParams) ?? {};
   const errorCode = resolvedSearchParams.error;
+  const companyId = resolvedSearchParams.companyId;
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
@@ -26,7 +28,10 @@ export default async function AdminLoginPage({
           <h1 className="text-title text-content-primary">Acesso do admin</h1>
         </header>
 
-        <AdminLoginForm initialErrorCode={errorCode} />
+        <AdminLoginForm
+          initialErrorCode={errorCode}
+          initialCompanyId={companyId}
+        />
       </div>
     </div>
   );

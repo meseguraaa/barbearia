@@ -4,6 +4,7 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { requireAdminForModule } from "@/lib/admin-permissions";
 
 /* ===========================
  * VALIDATORS
@@ -46,6 +47,18 @@ function assertIntervalsValid(
   }
 }
 
+async function requireUnitFromCompanyOrThrow(
+  unitId: string,
+  companyId: string,
+) {
+  const unit = await prisma.unit.findFirst({
+    where: { id: unitId, companyId },
+    select: { id: true },
+  });
+  if (!unit) throw new Error("Unidade não encontrada (company mismatch).");
+  return unit;
+}
+
 /* ===========================
  * CREATE (UPSERT por dia)
  * =========================== */
@@ -53,16 +66,13 @@ function assertIntervalsValid(
 export async function createUnitDailyException(
   input: z.infer<typeof createUnitDailyExceptionSchema>,
 ) {
-  const parsed = createUnitDailyExceptionSchema.parse(input);
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
 
+  const parsed = createUnitDailyExceptionSchema.parse(input);
   const date = new Date(parsed.dateISO);
 
-  // garante que a unidade existe
-  const unit = await prisma.unit.findUnique({
-    where: { id: parsed.unitId },
-    select: { id: true },
-  });
-  if (!unit) throw new Error("Unidade não encontrada.");
+  await requireUnitFromCompanyOrThrow(parsed.unitId, companyId);
 
   if (parsed.mode === "PARTIAL") {
     if (parsed.intervals.length === 0) {
@@ -72,7 +82,6 @@ export async function createUnitDailyException(
   }
 
   await prisma.$transaction(async (tx) => {
-    // cria/atualiza o registro do dia (por unique [unitId, date])
     const daily = await tx.unitDailyAvailability.upsert({
       where: {
         unitId_date: {
@@ -81,9 +90,11 @@ export async function createUnitDailyException(
         },
       },
       update: {
+        companyId,
         isClosed: parsed.mode === "FULL_DAY",
       },
       create: {
+        companyId,
         unitId: parsed.unitId,
         date,
         isClosed: parsed.mode === "FULL_DAY",
@@ -91,15 +102,12 @@ export async function createUnitDailyException(
       select: { id: true },
     });
 
-    // sempre reescreve os intervalos (idempotente)
     await tx.unitDailyTimeInterval.deleteMany({
       where: { dailyAvailabilityId: daily.id },
     });
 
-    // FULL_DAY = fechado, sem intervalos
     if (parsed.mode === "FULL_DAY") return;
 
-    // PARTIAL = salva os intervalos
     await tx.unitDailyTimeInterval.createMany({
       data: parsed.intervals.map((i) => ({
         dailyAvailabilityId: daily.id,
@@ -123,12 +131,17 @@ export async function createUnitDailyException(
 export async function deleteUnitDailyException(
   input: z.infer<typeof deleteUnitDailyExceptionSchema>,
 ) {
-  const parsed = deleteUnitDailyExceptionSchema.parse(input);
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
 
+  const parsed = deleteUnitDailyExceptionSchema.parse(input);
   const date = new Date(parsed.dateISO);
+
+  await requireUnitFromCompanyOrThrow(parsed.unitId, companyId);
 
   await prisma.unitDailyAvailability.deleteMany({
     where: {
+      companyId,
       unitId: parsed.unitId,
       date,
     },

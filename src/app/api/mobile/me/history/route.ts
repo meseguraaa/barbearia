@@ -10,6 +10,7 @@ type MobileTokenPayload = {
   role?: "CLIENT" | "BARBER" | "ADMIN";
   email?: string;
   name?: string | null;
+  companyId: string; // ✅ multi-tenant obrigatório
 };
 
 type HistoryItem = {
@@ -40,14 +41,23 @@ async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
   if (!token) throw new Error("Token ausente");
 
   const { payload } = await jwtVerify(token, getJwtSecretKey());
-  const sub = String(payload.sub || "");
+
+  const sub = String((payload as any)?.sub || "").trim();
   if (!sub) throw new Error("Token inválido");
+
+  const companyId =
+    typeof (payload as any)?.companyId === "string"
+      ? String((payload as any).companyId).trim()
+      : "";
+
+  if (!companyId) throw new Error("companyId ausente no token");
 
   return {
     sub,
     role: (payload as any).role,
     email: (payload as any).email,
     name: (payload as any).name ?? null,
+    companyId,
   };
 }
 
@@ -63,49 +73,91 @@ function safeStars(n: any) {
 }
 
 export async function OPTIONS() {
-  return NextResponse.json({}, { headers: corsHeaders() });
+  return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
 
 export async function GET(req: Request) {
   try {
     const me = await requireMobileAuth(req);
+
+    if (me.role && me.role !== "CLIENT") {
+      return NextResponse.json(
+        { ok: false, error: "Sem permissão" },
+        { status: 403, headers: corsHeaders() },
+      );
+    }
+
     const clientId = me.sub;
+    const companyId = me.companyId;
 
     const TAKE = 50;
 
     const [doneAppointments, canceledAppointments, orders, reviewedAppts] =
       await Promise.all([
         prisma.appointment.findMany({
-          where: { clientId, status: "DONE" },
+          where: { companyId, clientId, status: "DONE" }, // ✅ tenant scope
           orderBy: { scheduleAt: "desc" },
           take: TAKE,
-          include: { barber: true, service: true },
+          select: {
+            id: true,
+            scheduleAt: true,
+            description: true,
+            barber: { select: { name: true } },
+            service: { select: { name: true } },
+          },
         }),
         prisma.appointment.findMany({
-          where: { clientId, status: "CANCELED" },
+          where: { companyId, clientId, status: "CANCELED" }, // ✅ tenant scope
           orderBy: { scheduleAt: "desc" },
           take: TAKE,
-          include: { barber: true, service: true },
+          select: {
+            id: true,
+            scheduleAt: true,
+            description: true,
+            barber: { select: { name: true } },
+            service: { select: { name: true } },
+          },
         }),
         prisma.order.findMany({
-          where: { clientId, status: "COMPLETED" },
+          where: { companyId, clientId, status: "COMPLETED" }, // ✅ tenant scope
           orderBy: { createdAt: "desc" },
           take: TAKE,
-          include: { items: { include: { product: true, service: true } } },
+          select: {
+            id: true,
+            createdAt: true,
+            items: {
+              select: {
+                quantity: true,
+                productId: true,
+                product: { select: { name: true } },
+                service: { select: { name: true } },
+              },
+            },
+          },
         }),
-        // ✅ AVALIAÇÕES FEITAS: DONE e com review
+        // ✅ AVALIAÇÕES FEITAS: DONE e com review (tenant-safe)
         prisma.appointment.findMany({
           where: {
+            companyId, // ✅ tenant scope
             clientId,
             status: "DONE",
             review: { isNot: null },
           },
           orderBy: { updatedAt: "desc" }, // (a gente ordena melhor no JS pela review.createdAt)
           take: TAKE,
-          include: {
-            barber: true,
-            service: true,
-            review: true,
+          select: {
+            id: true,
+            updatedAt: true,
+            description: true,
+            barber: { select: { name: true } },
+            service: { select: { name: true } },
+            review: {
+              select: {
+                rating: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
           },
         }),
       ]);
@@ -197,13 +249,25 @@ export async function GET(req: Request) {
 
     return NextResponse.json(
       { ok: true, reviews, done, canceled, orders: ordersItems },
-      { headers: corsHeaders() },
+      { status: 200, headers: corsHeaders() },
     );
   } catch (err: any) {
     const message = err?.message || "Erro inesperado";
+
+    const lower = String(message).toLowerCase();
+    const isAuth =
+      lower.includes("token") ||
+      lower.includes("jwt") ||
+      lower.includes("signature") ||
+      lower.includes("companyid") ||
+      lower.includes("ausente");
+
     return NextResponse.json(
-      { ok: false, error: message },
-      { status: 401, headers: corsHeaders() },
+      {
+        ok: false,
+        error: isAuth ? "Não autorizado" : "Erro ao carregar histórico",
+      },
+      { status: isAuth ? 401 : 500, headers: corsHeaders() },
     );
   }
 }

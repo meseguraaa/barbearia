@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
-import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
+import { verifyAppJwt } from "@/lib/app-jwt";
 
 type MobileTokenPayload = {
   sub: string;
   role?: "CLIENT" | "BARBER" | "ADMIN";
   email?: string;
   name?: string | null;
+  companyId: string; // ✅ multi-tenant obrigatório
 };
 
 function corsHeaders() {
@@ -17,19 +18,21 @@ function corsHeaders() {
   };
 }
 
-function getJwtSecretKey() {
-  const secret = process.env.APP_JWT_SECRET;
-  if (!secret) throw new Error("APP_JWT_SECRET não definido no .env");
-  return new TextEncoder().encode(secret);
-}
-
 async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
   const auth = req.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!token) throw new Error("Token ausente");
+  if (!token) throw new Error("missing_token");
 
-  const { payload } = await jwtVerify(token, getJwtSecretKey());
-  return payload as unknown as MobileTokenPayload;
+  const payload = (await verifyAppJwt(token)) as any;
+
+  const companyId =
+    typeof payload?.companyId === "string"
+      ? String(payload.companyId).trim()
+      : "";
+
+  if (!companyId) throw new Error("missing_company_id");
+
+  return { ...(payload as any), companyId } as MobileTokenPayload;
 }
 
 function formatPtBrDateTime(date: Date) {
@@ -140,6 +143,7 @@ export async function OPTIONS() {
 export async function GET(req: Request) {
   try {
     const payload = await requireMobileAuth(req);
+    const companyId = payload.companyId;
 
     if (payload.role && payload.role !== "CLIENT") {
       return NextResponse.json(
@@ -159,6 +163,7 @@ export async function GET(req: Request) {
     // ✅ "Próximo" no mobile = o PENDING mais próximo (inclui PENDING no passado até 24h)
     const next = await prisma.appointment.findFirst({
       where: {
+        companyId, // ✅ tenant scope
         clientId: payload.sub,
         status: "PENDING",
         scheduleAt: { gte: lookbackStart },
@@ -229,11 +234,16 @@ export async function GET(req: Request) {
   } catch (err: any) {
     const msg = String(err?.message ?? "Erro");
 
-    if (
-      msg.toLowerCase().includes("token") ||
+    const isAuth =
+      msg === "missing_token" ||
+      msg === "missing_company_id" ||
+      msg.includes("Invalid token payload") ||
       msg.toLowerCase().includes("jwt") ||
-      msg.toLowerCase().includes("signature")
-    ) {
+      msg.toLowerCase().includes("token") ||
+      msg.toLowerCase().includes("signature") ||
+      msg.toLowerCase().includes("companyid");
+
+    if (isAuth) {
       return NextResponse.json(
         { error: "Não autorizado" },
         { status: 401, headers: corsHeaders() },

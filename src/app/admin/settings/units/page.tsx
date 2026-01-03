@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
 import { UnitNewDialog } from "@/components/unit-new-dialog";
+import { requireAdminForModule } from "@/lib/admin-permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -57,14 +58,41 @@ function sortIntervals(intervals: { startTime: string; endTime: string }[]) {
     .sort((a, b) => a.startTime.localeCompare(b.startTime));
 }
 
+function normalizeTimeHHMM(value: string) {
+  const v = String(value ?? "").trim();
+  if (!v) return "";
+  return v.length >= 5 ? v.slice(0, 5) : v;
+}
+
+/* ===========================
+ * TENANT GUARD (Units)
+ * =========================== */
+async function requireUnitFromCompanyOrRedirect(
+  unitId: string,
+  companyId: string,
+) {
+  const unit = await prisma.unit.findFirst({
+    where: { id: unitId, companyId },
+    select: { id: true },
+  });
+
+  if (!unit) redirect("/admin/settings/units?error=unit");
+  return unit;
+}
+
 /* ===========================
  * SERVER ACTIONS (UNITS)
  * =========================== */
 async function saveUnitWeeklyHours(formData: FormData) {
   "use server";
 
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
+
   const unitId = String(formData.get("unitId") || "");
   if (!unitId) return;
+
+  await requireUnitFromCompanyOrRedirect(unitId, companyId);
 
   await prisma.$transaction(async (tx) => {
     for (let weekday = 0; weekday <= 6; weekday++) {
@@ -72,11 +100,12 @@ async function saveUnitWeeklyHours(formData: FormData) {
 
       const weekly = await tx.unitWeeklyAvailability.upsert({
         where: { unitId_weekday: { unitId, weekday } },
-        update: { isActive },
-        create: { unitId, weekday, isActive },
+        update: { isActive, companyId }, // ✅ mantém multi-tenant consistente
+        create: { companyId, unitId, weekday, isActive },
         select: { id: true },
       });
 
+      // sempre refaz intervalos (padrão atual do teu código)
       await tx.unitWeeklyTimeInterval.deleteMany({
         where: { weeklyAvailabilityId: weekly.id },
       });
@@ -91,7 +120,11 @@ async function saveUnitWeeklyHours(formData: FormData) {
       if (!startTime || !endTime) continue;
 
       await tx.unitWeeklyTimeInterval.create({
-        data: { weeklyAvailabilityId: weekly.id, startTime, endTime },
+        data: {
+          weeklyAvailabilityId: weekly.id,
+          startTime,
+          endTime,
+        },
       });
     }
   });
@@ -99,14 +132,19 @@ async function saveUnitWeeklyHours(formData: FormData) {
   revalidatePath("/admin/settings");
   revalidatePath("/admin/settings/units");
   revalidatePath(`/admin/settings/units/${unitId}/hours`);
-  redirect("/admin/settings");
+  redirect("/admin/settings/units");
 }
 
 async function applyDefaultUnitWeeklyHours(formData: FormData) {
   "use server";
 
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
+
   const unitId = String(formData.get("unitId") || "");
   if (!unitId) return;
+
+  await requireUnitFromCompanyOrRedirect(unitId, companyId);
 
   await prisma.$transaction(async (tx) => {
     const presets: Array<{
@@ -114,7 +152,7 @@ async function applyDefaultUnitWeeklyHours(formData: FormData) {
       isActive: boolean;
       intervals: { startTime: string; endTime: string }[];
     }> = [
-      { weekday: 0, isActive: false, intervals: [] }, // Dom
+      { weekday: 0, isActive: false, intervals: [] },
       {
         weekday: 1,
         isActive: true,
@@ -150,8 +188,8 @@ async function applyDefaultUnitWeeklyHours(formData: FormData) {
     for (const p of presets) {
       const weekly = await tx.unitWeeklyAvailability.upsert({
         where: { unitId_weekday: { unitId, weekday: p.weekday } },
-        update: { isActive: p.isActive },
-        create: { unitId, weekday: p.weekday, isActive: p.isActive },
+        update: { isActive: p.isActive, companyId },
+        create: { companyId, unitId, weekday: p.weekday, isActive: p.isActive },
         select: { id: true },
       });
 
@@ -174,21 +212,26 @@ async function applyDefaultUnitWeeklyHours(formData: FormData) {
   revalidatePath("/admin/settings");
   revalidatePath("/admin/settings/units");
   revalidatePath(`/admin/settings/units/${unitId}/hours`);
-  redirect("/admin/settings");
+  redirect("/admin/settings/units");
 }
 
 async function clearUnitWeeklyHours(formData: FormData) {
   "use server";
 
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
+
   const unitId = String(formData.get("unitId") || "");
   if (!unitId) return;
+
+  await requireUnitFromCompanyOrRedirect(unitId, companyId);
 
   await prisma.$transaction(async (tx) => {
     for (let weekday = 0; weekday <= 6; weekday++) {
       const weekly = await tx.unitWeeklyAvailability.upsert({
         where: { unitId_weekday: { unitId, weekday } },
-        update: { isActive: false },
-        create: { unitId, weekday, isActive: false },
+        update: { isActive: false, companyId },
+        create: { companyId, unitId, weekday, isActive: false },
         select: { id: true },
       });
 
@@ -201,7 +244,7 @@ async function clearUnitWeeklyHours(formData: FormData) {
   revalidatePath("/admin/settings");
   revalidatePath("/admin/settings/units");
   revalidatePath(`/admin/settings/units/${unitId}/hours`);
-  redirect("/admin/settings");
+  redirect("/admin/settings/units");
 }
 
 /* ===========================
@@ -225,68 +268,96 @@ type AdminRow = {
     canAccessReviews: boolean;
     canAccessProducts: boolean;
     canAccessClients: boolean;
-    canAccessClientLevels: boolean; // ✅ ADD
+    canAccessClientLevels: boolean;
     canAccessFinance: boolean;
   };
 };
 
-export default async function SettingsPage() {
-  const [units, admins] = await Promise.all([
+export default async function SettingsUnitsPage() {
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
+
+  const [units, members] = await Promise.all([
     prisma.unit.findMany({
+      where: { companyId },
       orderBy: { createdAt: "asc" },
       include: {
         weeklyAvailabilities: {
-          include: { intervals: true },
+          where: { companyId },
+          orderBy: { weekday: "asc" },
+          include: { intervals: { orderBy: { startTime: "asc" } } },
         },
       },
     }),
-    prisma.user.findMany({
-      where: { role: "ADMIN" },
-      include: { adminAccess: true },
-      orderBy: { name: "asc" },
+
+    prisma.companyMember.findMany({
+      where: {
+        companyId,
+        isActive: true,
+        role: { in: ["OWNER", "ADMIN"] },
+      },
+      orderBy: { createdAt: "asc" },
+      select: {
+        role: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            birthday: true,
+            createdAt: true,
+            isActive: true,
+          },
+        },
+      },
     }),
   ]);
 
-  // ✅ formato que o AdminNewAdminDialog espera
   const unitOptions = units.map((u) => ({
     id: u.id,
     name: u.name,
     isActive: u.isActive,
   }));
 
-  const adminRows: AdminRow[] = admins.map((admin) => {
-    const phone = (admin as any).phone as string | null | undefined;
+  const userIds = members.map((m) => m.user.id);
+
+  const accesses = await prisma.adminAccess.findMany({
+    where: { companyId, userId: { in: userIds } },
+  });
+
+  const accessByUserId = new Map(accesses.map((a) => [a.userId, a]));
+
+  const adminRows: AdminRow[] = members.map((m) => {
+    const u = m.user;
+    const access = accessByUserId.get(u.id);
 
     return {
-      id: admin.id,
-      name: admin.name ?? "Admin sem nome",
-      email: admin.email ?? "",
-      phone: phone || "—",
-      birthday: (admin as any).birthday ?? null,
-      createdAt: admin.createdAt,
-      isOwner: (admin as any).isOwner ?? false,
-      isActive: (admin as any).isActive ?? true,
+      id: u.id,
+      name: u.name ?? "Admin sem nome",
+      email: u.email ?? "",
+      phone: u.phone || "—",
+      birthday: u.birthday ?? null,
+      createdAt: u.createdAt,
+      isOwner: m.role === "OWNER",
+      isActive: u.isActive ?? true,
       permissions: {
-        canAccessDashboard: admin.adminAccess?.canAccessDashboard ?? false,
-        canAccessCheckout: admin.adminAccess?.canAccessCheckout ?? false,
-        canAccessAppointments:
-          admin.adminAccess?.canAccessAppointments ?? false,
-        canAccessProfessionals:
-          admin.adminAccess?.canAccessProfessionals ?? false,
-        canAccessServices: admin.adminAccess?.canAccessServices ?? false,
-        canAccessReviews: admin.adminAccess?.canAccessReviews ?? false,
-        canAccessProducts: admin.adminAccess?.canAccessProducts ?? false,
-        canAccessClients: admin.adminAccess?.canAccessClients ?? false,
-        canAccessClientLevels:
-          (admin.adminAccess as any)?.canAccessClientLevels ?? false, // ✅ ADD (safe)
-        canAccessFinance: admin.adminAccess?.canAccessFinance ?? false,
+        canAccessDashboard: access?.canAccessDashboard ?? false,
+        canAccessCheckout: access?.canAccessCheckout ?? false,
+        canAccessAppointments: access?.canAccessAppointments ?? false,
+        canAccessProfessionals: access?.canAccessProfessionals ?? false,
+        canAccessServices: access?.canAccessServices ?? false,
+        canAccessReviews: access?.canAccessReviews ?? false,
+        canAccessProducts: access?.canAccessProducts ?? false,
+        canAccessClients: access?.canAccessClients ?? false,
+        canAccessClientLevels: access?.canAccessClientLevels ?? false,
+        canAccessFinance: access?.canAccessFinance ?? false,
       },
     };
   });
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      {/* HEADER GERAL */}
       <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-title text-content-primary">Configurações</h1>
@@ -298,7 +369,7 @@ export default async function SettingsPage() {
       </header>
 
       {/* =========================
-       * UNIDADES (ACCORDION + HORÁRIO DENTRO)
+       * UNIDADES
        * ========================= */}
       <section className="space-y-3">
         <div className="flex items-center justify-between gap-3">
@@ -340,20 +411,19 @@ export default async function SettingsPage() {
                 weeklyByDay.set(w.weekday, {
                   isActive: w.isActive,
                   intervals: w.intervals.map((i) => ({
-                    startTime: i.startTime,
-                    endTime: i.endTime,
+                    startTime: normalizeTimeHHMM(i.startTime),
+                    endTime: normalizeTimeHHMM(i.endTime),
                   })),
                 });
               }
 
               const days = Array.from({ length: 7 }).map((_, weekday) => {
-                const stored =
-                  weeklyByDay.get(weekday) ??
-                  ({ isActive: false, intervals: [] } as const);
-
+                const stored = weeklyByDay.get(weekday) ?? {
+                  isActive: false,
+                  intervals: [],
+                };
                 const intervals = sortIntervals(stored.intervals);
                 const first = intervals[0] ?? { startTime: "", endTime: "" };
-
                 const isOpen = stored.isActive && intervals.length > 0;
 
                 return {
@@ -375,7 +445,6 @@ export default async function SettingsPage() {
                   value={unit.id}
                   className="border border-border-primary rounded-xl bg-background-tertiary"
                 >
-                  {/* Cabeçalho: resumo da unidade */}
                   <div className="flex items-center justify-between gap-4 px-4 py-3">
                     <AccordionTrigger className="flex flex-1 items-center gap-6 hover:no-underline px-0 py-0">
                       <div className="flex flex-col text-left min-w-60 flex-1">
@@ -383,7 +452,7 @@ export default async function SettingsPage() {
                           {unit.name}
                         </p>
 
-                        <p className="text-xs text-content-secondary truncate max-w-[620px]">
+                        <p className="text-xs text-content-secondary truncate max-w-155">
                           Telefone:{" "}
                           <span className="text-content-primary">
                             {unit.phone || "—"}
@@ -420,49 +489,29 @@ export default async function SettingsPage() {
                         </Badge>
                       </div>
                     </AccordionTrigger>
-
-                    {/* Ações rápidas */}
-                    <div className="flex items-center gap-2">
-                      <form action={applyDefaultUnitWeeklyHours}>
-                        <input type="hidden" name="unitId" value={unit.id} />
-                        <Button type="submit" variant="outline" size="sm">
-                          Aplicar padrão
-                        </Button>
-                      </form>
-
-                      <form action={clearUnitWeeklyHours}>
-                        <input type="hidden" name="unitId" value={unit.id} />
-                        <Button type="submit" variant="destructive" size="sm">
-                          Fechar semana
-                        </Button>
-                      </form>
-                    </div>
                   </div>
 
-                  {/* Conteúdo: editor de horário (layout da disponibilidade) */}
                   <AccordionContent className="border-t border-border-primary px-4 py-4">
                     <div className="rounded-2xl border border-border-primary bg-background-secondary p-4 space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div>
-                          <h3 className="text-label-small text-content-primary">
-                            Disponibilidade da unidade
-                          </h3>
-                          <p className="text-paragraph-small text-content-secondary">
-                            Ajuste o padrão semanal de atendimento desta
-                            unidade.
-                          </p>
-                        </div>
+                      {/* ✅ um form só */}
+                      <form action={saveUnitWeeklyHours} className="space-y-4">
+                        <input type="hidden" name="unitId" value={unit.id} />
 
-                        <form action={saveUnitWeeklyHours}>
-                          <input type="hidden" name="unitId" value={unit.id} />
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div>
+                            <h3 className="text-label-small text-content-primary">
+                              Disponibilidade da unidade
+                            </h3>
+                            <p className="text-paragraph-small text-content-secondary">
+                              Ajuste o padrão semanal de atendimento desta
+                              unidade.
+                            </p>
+                          </div>
+
                           <Button type="submit" variant="brand">
                             Salvar padrão semanal
                           </Button>
-                        </form>
-                      </div>
-
-                      <form action={saveUnitWeeklyHours} className="space-y-4">
-                        <input type="hidden" name="unitId" value={unit.id} />
+                        </div>
 
                         <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
                           {days.map((d) => (
@@ -536,14 +585,6 @@ export default async function SettingsPage() {
                       </form>
 
                       <div className="pt-2">
-                        <p className="text-[11px] text-content-secondary">
-                          Exceções por dia (folgas/eventos) entram no próximo
-                          passo, quando criarmos a tabela de exceções da
-                          unidade.
-                        </p>
-                      </div>
-
-                      <div className="pt-2">
                         <Button asChild variant="outline" size="sm">
                           <Link href={`/admin/settings/units/${unit.id}`}>
                             Ajustar dados da unidade
@@ -603,29 +644,9 @@ export default async function SettingsPage() {
                         {row.name}
                       </p>
 
-                      <p className="text-xs text-content-secondary truncate max-w-[260px]">
+                      <p className="text-xs text-content-secondary truncate max-w-65">
                         {row.email || "Sem e-mail"}
                       </p>
-                    </div>
-
-                    <div className="hidden md:flex flex-col text-left w-[140px]">
-                      <span className="text-[11px] text-content-secondary">
-                        Telefone
-                      </span>
-                      <span className="text-xs text-content-primary">
-                        {row.phone}
-                      </span>
-                    </div>
-
-                    <div className="hidden sm:flex flex-col text-left w-[180px]">
-                      <span className="text-[11px] text-content-secondary">
-                        Tipo
-                      </span>
-                      <span className="text-xs text-content-primary">
-                        {row.isOwner
-                          ? "Dono (acesso total)"
-                          : "Admin configurável"}
-                      </span>
                     </div>
                   </AccordionTrigger>
 
@@ -669,44 +690,6 @@ export default async function SettingsPage() {
                             {row.email || "—"}
                           </span>
                         </p>
-                        <p>
-                          <span className="text-content-secondary">
-                            Telefone:{" "}
-                          </span>
-                          <span className="text-content-primary">
-                            {row.phone}
-                          </span>
-                        </p>
-                        <p>
-                          <span className="text-content-secondary">
-                            Nascimento:{" "}
-                          </span>
-                          <span className="text-content-primary">
-                            {row.birthday
-                              ? format(row.birthday, "dd/MM/yyyy", {
-                                  locale: ptBR,
-                                })
-                              : "Não informado"}
-                          </span>
-                        </p>
-                        <p>
-                          <span className="text-content-secondary">
-                            Cadastrado em:{" "}
-                          </span>
-                          <span className="text-content-primary">
-                            {format(row.createdAt, "dd/MM/yyyy HH:mm", {
-                              locale: ptBR,
-                            })}
-                          </span>
-                        </p>
-                        <p>
-                          <span className="text-content-secondary">
-                            Status:{" "}
-                          </span>
-                          <span className="text-content-primary font-medium">
-                            {row.isActive ? "Ativo" : "Inativo"}
-                          </span>
-                        </p>
                       </div>
                     </div>
 
@@ -717,9 +700,8 @@ export default async function SettingsPage() {
 
                       {row.isOwner ? (
                         <p className="text-paragraph-small text-content-secondary">
-                          Este usuário é o <strong>dono</strong> do
-                          estabelecimento e possui acesso total a todos os
-                          módulos.
+                          Este usuário é o <strong>dono</strong> e possui acesso
+                          total.
                         </p>
                       ) : (
                         <AdminPermissionsForm

@@ -10,15 +10,10 @@ import { UnitFilter } from "@/components/unit-filter";
 import { CompareWithFilter } from "@/components/compare-with-filter";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import {
-  parse,
-  subMonths,
-  subYears,
-  format,
-  differenceInCalendarDays,
-} from "date-fns";
+import { parse, subMonths, subYears, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { AppointmentStatus } from "@prisma/client";
+import type { AppointmentStatus } from "@prisma/client";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +32,46 @@ type AdminReportsFunnelPageProps = {
 const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
 const UNIT_COOKIE_NAME = "admin_unit_context";
 const UNIT_ALL_VALUE = "all";
+const COMPANY_COOKIE_NAME = "admin_company_context";
+
+// ===============================
+// ✅ Company resolver (sem te jogar pro login)
+// ===============================
+async function resolveCompanyIdOrThrow(admin: any): Promise<string> {
+  const cookieStore = await cookies();
+  const fromCookie = cookieStore.get(COMPANY_COOKIE_NAME)?.value;
+  if (fromCookie) return fromCookie;
+
+  const fromAdmin =
+    (typeof admin?.companyId === "string" && admin.companyId) ||
+    (typeof admin?.company?.id === "string" && admin.company.id);
+  if (fromAdmin) return fromAdmin;
+
+  const userId =
+    (typeof admin?.userId === "string" && admin.userId) ||
+    (typeof admin?.id === "string" && admin.id) ||
+    (typeof admin?.sub === "string" && admin.sub);
+
+  if (!userId) {
+    throw new Error(
+      "Não consegui resolver o userId do admin para achar a company.",
+    );
+  }
+
+  const membership = await prisma.companyMember.findFirst({
+    where: { userId, isActive: true },
+    select: { companyId: true },
+    orderBy: { createdAt: "asc" } as any,
+  });
+
+  if (!membership?.companyId) {
+    throw new Error(
+      `Company não definida para este admin. (cookie "${COMPANY_COOKIE_NAME}" ausente e sem membership ativa).`,
+    );
+  }
+
+  return membership.companyId;
+}
 
 // ===============================
 // Timezone helpers (SP)
@@ -188,13 +223,17 @@ export default async function AdminReportsFunnelPage({
 }: AdminReportsFunnelPageProps) {
   const admin = (await requireAdminPermission("canAccessDashboard")) as any;
 
+  // ✅ resolve companyId sem depender do cookie (não redireciona pro login)
+  const companyId = await resolveCompanyIdOrThrow(admin);
+
+  const cookieStore = await cookies();
+
   if (!admin?.canSeeAllUnits && !admin?.unitId) {
     throw new Error(
       "Admin de unidade sem unitId definido. Vincule este admin a uma unidade.",
     );
   }
 
-  const cookieStore = await cookies();
   const unitCookieValue =
     cookieStore.get(UNIT_COOKIE_NAME)?.value ?? UNIT_ALL_VALUE;
 
@@ -206,6 +245,17 @@ export default async function AdminReportsFunnelPage({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
   });
+
+  // 🔒 sanity check: unidade pertence à empresa
+  if (activeUnitId) {
+    const ok = await prisma.unit.findFirst({
+      where: { id: activeUnitId, companyId, isActive: true },
+      select: { id: true },
+    });
+    if (!ok) {
+      redirect("/admin/reports");
+    }
+  }
 
   const { month: monthParam, barberId, compare } = await searchParams;
 
@@ -228,19 +278,19 @@ export default async function AdminReportsFunnelPage({
 
   const monthLabel = format(referenceDate, "MMMM 'de' yyyy", { locale: ptBR });
 
-  // ===== Unidades (para filtro)
+  // ===== Unidades (para filtro) ✅ companyId
   let units: UnitOption[] = [];
   let fixedUnitName: string | null = null;
 
   if (admin?.canSeeAllUnits) {
     units = await prisma.unit.findMany({
-      where: { isActive: true },
+      where: { companyId, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
   } else if (admin?.unitId) {
-    const u = await prisma.unit.findUnique({
-      where: { id: admin.unitId },
+    const u = await prisma.unit.findFirst({
+      where: { id: admin.unitId, companyId },
       select: { name: true },
     });
     fixedUnitName = u?.name ?? null;
@@ -254,10 +304,11 @@ export default async function AdminReportsFunnelPage({
     ? (ownerSingleUnitName ?? "Todas as unidades")
     : (fixedUnitName ?? "");
 
-  // ===== Barbeiros
+  // ===== Barbeiros ✅ companyId
   const barbers = activeUnitId
     ? await prisma.barber.findMany({
         where: {
+          companyId,
           isActive: true,
           units: { some: { unitId: activeUnitId, isActive: true } },
         },
@@ -265,7 +316,7 @@ export default async function AdminReportsFunnelPage({
         orderBy: { name: "asc" },
       })
     : await prisma.barber.findMany({
-        where: { isActive: true },
+        where: { companyId, isActive: true },
         select: { id: true, name: true },
         orderBy: { name: "asc" },
       });
@@ -278,21 +329,24 @@ export default async function AdminReportsFunnelPage({
     : null;
 
   // ===============================
-  // Dados (PENDING | DONE | CANCELED)
+  // Dados (PENDING | DONE | CANCELED) ✅ companyId
   // ===============================
   const baseWhere = {
+    companyId,
     scheduleAt: { gte: monthStart, lte: monthEnd },
     ...whereAppointmentUnit(activeUnitId),
     ...(barberIdSafe ? { barberId: barberIdSafe } : {}),
   };
 
   const compareWhere = {
+    companyId,
     scheduleAt: { gte: compareStart, lte: compareEnd },
     ...whereAppointmentUnit(activeUnitId),
     ...(barberIdSafe ? { barberId: barberIdSafe } : {}),
   };
 
   const unitOnlyBaseWhere = {
+    companyId,
     scheduleAt: { gte: monthStart, lte: monthEnd },
     ...whereAppointmentUnit(activeUnitId),
   };
@@ -317,11 +371,9 @@ export default async function AdminReportsFunnelPage({
     pendingFutureCountBase,
     pendingOverdueCountBase,
 
-    // tempo até “perder” (cancelado) e tempo de antecedência (criados)
     canceledBaseRows,
     createdBaseRows,
 
-    // ranking (barberId x status) no escopo da unidade
     groupByBarberStatus,
   ] = await Promise.all([
     prisma.appointment.count({ where: baseWhere }),
@@ -402,7 +454,7 @@ export default async function AdminReportsFunnelPage({
       ? leadTimesAllDays.reduce((a, b) => a + b, 0) / leadTimesAllDays.length
       : NaN;
 
-  // “Tempo até perder”: quanto tempo em média as pessoas demoram entre criar e a data agendada (nos cancelados)
+  // “Tempo até perder”: antecedência nos cancelados (criação → data agendada)
   const leadTimesCancelDays = canceledBaseRows
     .map((r) => (r.scheduleAt.getTime() - r.createdAt.getTime()) / 86400000)
     .filter((v) => Number.isFinite(v));
@@ -449,7 +501,6 @@ export default async function AdminReportsFunnelPage({
 
   const barberNameById = new Map(barbers.map((b) => [b.id, b.name]));
 
-  // agrega counts do groupBy (barberId x status)
   const countsByBarber = new Map<
     string,
     { created: number; done: number; canceled: number; pending: number }
@@ -477,8 +528,7 @@ export default async function AdminReportsFunnelPage({
     countsByBarber.set(bId, curr);
   }
 
-  // pendentes vencidos por barbeiro (pra ficar útil de verdade)
-  // (query única, depois agrega em JS)
+  // pendentes vencidos por barbeiro (query única, agrega em JS)
   const overduePendingByBarber =
     (await prisma.appointment.findMany({
       where: {
@@ -501,7 +551,6 @@ export default async function AdminReportsFunnelPage({
 
   let rankingRows: BarberRankRow[] = [];
 
-  // se tiver filtro, mostra só 1 (mas mantém coerência)
   if (barberIdSafe) {
     const base = countsByBarber.get(barberIdSafe) ?? {
       created: 0,
@@ -555,7 +604,6 @@ export default async function AdminReportsFunnelPage({
       };
     });
 
-    // ordena por pior conversão, depois por mais “pendente vencido”
     rankingRows.sort((a, b) => {
       const aHas = a.created > 0;
       const bHas = b.created > 0;
@@ -992,7 +1040,10 @@ export default async function AdminReportsFunnelPage({
           </div>
           <div className="text-[11px] text-content-tertiary text-right">
             <div>Unidade: {unitLabel}</div>
-            <div>Mês: {monthLabel}</div>
+            <div>
+              {selectedBarberName ? `Filtro: ${selectedBarberName} • ` : ""}
+              Mês: {monthLabel}
+            </div>
           </div>
         </div>
 

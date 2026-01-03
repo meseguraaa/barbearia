@@ -1,4 +1,3 @@
-// components/professional-row.tsx
 "use client";
 
 import type { Barber } from "@prisma/client";
@@ -61,7 +60,7 @@ export function ProfessionalRow({ row, units = [] }: ProfessionalRowProps) {
                 className="h-full w-full object-cover"
               />
             ) : (
-              <span>{row.name.charAt(0).toUpperCase()}</span>
+              <span>{(row.name || "?").charAt(0).toUpperCase()}</span>
             )}
           </div>
 
@@ -104,7 +103,7 @@ export function ProfessionalRow({ row, units = [] }: ProfessionalRowProps) {
               id: row.id,
               name: row.name,
               email: row.email,
-              phone: row.phone,
+              phone: row.phone ?? null,
               isActive: row.isActive,
               createdAt: row.createdAt,
               updatedAt: row.updatedAt,

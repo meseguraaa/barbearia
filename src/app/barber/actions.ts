@@ -42,21 +42,28 @@ async function getCurrentBarber() {
     throw new Error("FORBIDDEN");
   }
 
-  const barber = await prisma.barber.findUnique({
+  // ✅ Multi-tenant: sempre precisamos do companyId do barbeiro para scoping
+  const barber = await prisma.barber.findFirst({
     where: { email: payload.email },
+    select: { id: true, email: true, companyId: true },
   });
 
   if (!barber) throw new Error("BARBER_NOT_LINKED");
+  if (!barber.companyId) throw new Error("BARBER_WITHOUT_COMPANY");
 
   return barber;
 }
 
 /* ----------------------------------------------------------
    🧮 Recalcula snapshots quando status muda para DONE
+   ✅ Multi-tenant: scoped por companyId
 ---------------------------------------------------------- */
-async function ensureEarningsSnapshot(appointmentId: string) {
-  const appointment = await prisma.appointment.findUnique({
-    where: { id: appointmentId },
+async function ensureEarningsSnapshot(
+  companyId: string,
+  appointmentId: string,
+) {
+  const appointment = await prisma.appointment.findFirst({
+    where: { id: appointmentId, companyId },
     include: { service: true },
   });
 
@@ -79,28 +86,36 @@ async function ensureEarningsSnapshot(appointmentId: string) {
 
   const earning = (price * percent) / 100;
 
-  await prisma.appointment.update({
-    where: { id: appointmentId },
+  // ✅ Multi-tenant: updateMany com companyId no where (evita update cross-tenant)
+  const updated = await prisma.appointment.updateMany({
+    where: { id: appointmentId, companyId },
     data: {
       servicePriceAtTheTime: new Prisma.Decimal(price),
       barberPercentageAtTheTime: new Prisma.Decimal(percent),
       barberEarningValue: new Prisma.Decimal(earning),
     },
   });
+
+  if (updated.count === 0) {
+    // se alguém tentar forçar id de outro tenant, não atualiza
+    return;
+  }
 }
 
 /* ----------------------------------------------------------
    🧾 Garante que o Order do atendimento apareça no Checkout
    O checkout lista serviços com: status=PENDING + item.serviceId != null
+   ✅ Multi-tenant: scoped por companyId
 ---------------------------------------------------------- */
 async function ensureOrderVisibleInCheckout(
+  companyId: string,
   appointmentId: string,
   barberId: string,
   unitId: string,
 ) {
-  // Order é 1:1 com appointment via Order.appointmentId (unique)
-  const order = await prisma.order.findUnique({
-    where: { appointmentId: appointmentId },
+  // ✅ Multi-tenant: findFirst com companyId
+  const order = await prisma.order.findFirst({
+    where: { appointmentId, companyId },
     select: { id: true, status: true, unitId: true, barberId: true },
   });
 
@@ -108,8 +123,9 @@ async function ensureOrderVisibleInCheckout(
 
   // Coloca exatamente no status que o /admin/checkout está buscando
   if (order.status !== OrderStatus.PENDING) {
-    await prisma.order.update({
-      where: { id: order.id },
+    // ✅ Multi-tenant: updateMany com companyId
+    await prisma.order.updateMany({
+      where: { id: order.id, companyId },
       data: {
         status: OrderStatus.PENDING,
         // reforços de coerência (evita “sumir por filtro de unidade/barbeiro”)
@@ -125,6 +141,7 @@ async function ensureOrderVisibleInCheckout(
 
 /* ----------------------------------------------------------
    🔧 Atualiza status + snapshots + sincroniza Order p/ checkout
+   ✅ Multi-tenant: scoped por companyId
 ---------------------------------------------------------- */
 async function updateAppointmentStatus(
   formData: FormData,
@@ -134,10 +151,12 @@ async function updateAppointmentStatus(
   if (!appointmentId) return;
 
   const barber = await getCurrentBarber();
+  const companyId = barber.companyId;
 
   // Pegamos unitId também porque o checkout filtra por unidade
-  const appt = await prisma.appointment.findUnique({
-    where: { id: appointmentId },
+  // ✅ Multi-tenant: scoped por companyId
+  const appt = await prisma.appointment.findFirst({
+    where: { id: appointmentId, companyId },
     select: { id: true, barberId: true, unitId: true, status: true },
   });
 
@@ -152,8 +171,9 @@ async function updateAppointmentStatus(
     throw new Error("CANNOT_CANCEL_DONE");
   }
 
+  // ✅ Multi-tenant: updateMany com companyId
   const updated = await prisma.appointment.updateMany({
-    where: { id: appointmentId, barberId: barber.id },
+    where: { id: appointmentId, barberId: barber.id, companyId },
     data: {
       status: newStatus,
       concludedByRole:
@@ -168,8 +188,13 @@ async function updateAppointmentStatus(
   }
 
   if (newStatus === AppointmentStatus.DONE) {
-    await ensureEarningsSnapshot(appointmentId);
-    await ensureOrderVisibleInCheckout(appointmentId, barber.id, appt.unitId);
+    await ensureEarningsSnapshot(companyId, appointmentId);
+    await ensureOrderVisibleInCheckout(
+      companyId,
+      appointmentId,
+      barber.id,
+      appt.unitId,
+    );
   }
 
   // ✅ revalida as rotas certas

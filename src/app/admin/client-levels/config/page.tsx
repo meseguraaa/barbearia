@@ -2,6 +2,7 @@
 import { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,13 @@ export const metadata: Metadata = {
 const UNIT_COOKIE_NAME = "admin_unit_context";
 const UNIT_ALL_VALUE = "all";
 
+// ✅ Multi-tenant cookie
+const COMPANY_COOKIE_NAME = "admin_company_context";
+const COMPANY_COOKIE_FALLBACK = "companyId";
+
+// ✅ sessão do painel (mesmo padrão das outras telas)
+const SESSION_COOKIE_NAME = "painel_session";
+
 const LEVELS: CustomerLevel[] = ["BRONZE", "PRATA", "OURO", "DIAMANTE"];
 
 function levelLabel(level: CustomerLevel) {
@@ -34,9 +42,81 @@ function levelLabel(level: CustomerLevel) {
   }
 }
 
-function pickUnitIdFromCookieFallback(): string | null {
-  // cookies() é server-only; essa função existe só pra clareza
-  return null;
+type PainelSessionPayload = {
+  sub: string;
+  role: "CLIENT" | "BARBER" | "ADMIN";
+  email: string;
+  name?: string | null;
+  companyId?: string;
+};
+
+function getJwtSecretKey() {
+  const secret = process.env.PAINEL_JWT_SECRET;
+  if (!secret) {
+    throw new Error("PAINEL_JWT_SECRET não definido no .env");
+  }
+  return new TextEncoder().encode(secret);
+}
+
+async function readSessionPayloadOrNull(): Promise<PainelSessionPayload | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return null;
+
+  try {
+    const { payload } = await jwtVerify(token, getJwtSecretKey());
+    return payload as unknown as PainelSessionPayload;
+  } catch {
+    return null;
+  }
+}
+
+async function requireCompanyId(): Promise<string> {
+  const cookieStore = await cookies();
+
+  // 1) ✅ cookie de contexto
+  const fromCookie =
+    cookieStore.get(COMPANY_COOKIE_NAME)?.value ??
+    cookieStore.get(COMPANY_COOKIE_FALLBACK)?.value ??
+    "";
+
+  const normalizedCookie = String(fromCookie).trim();
+  if (normalizedCookie) return normalizedCookie;
+
+  // 2) ✅ token (se tiver companyId no payload)
+  const session = await readSessionPayloadOrNull();
+  const fromToken = String(session?.companyId ?? "").trim();
+  if (fromToken) return fromToken;
+
+  // 3) ✅ membership fallback
+  if (!session?.sub) {
+    throw new Error(
+      "Contexto de empresa ausente (companyId). Faça login novamente e selecione uma empresa.",
+    );
+  }
+
+  const memberships = await prisma.companyMember.findMany({
+    where: {
+      userId: session.sub,
+      isActive: true,
+      company: { isActive: true },
+    },
+    select: { companyId: true },
+    orderBy: { createdAt: "asc" },
+    take: 20,
+  });
+
+  const uniqueCompanyIds = Array.from(
+    new Set(memberships.map((m) => m.companyId).filter(Boolean)),
+  );
+
+  if (uniqueCompanyIds.length === 1) {
+    return uniqueCompanyIds[0]!;
+  }
+
+  throw new Error(
+    "Contexto de empresa ausente (companyId). Selecione uma empresa antes de acessar esta tela.",
+  );
 }
 
 export default async function ClientLevelsConfigPage({
@@ -44,7 +124,10 @@ export default async function ClientLevelsConfigPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireAdminPermission("canAccessClients");
+  // ✅ permissão correta para esta área
+  await requireAdminPermission("canAccessClientLevels");
+
+  const companyId = await requireCompanyId();
 
   const resolved = await searchParams;
 
@@ -56,7 +139,6 @@ export default async function ClientLevelsConfigPage({
   const cookieStore = await cookies();
   const cookieUnit = cookieStore.get(UNIT_COOKIE_NAME)?.value;
 
-  // se unitId vier na URL, usa ele; senão tenta cookie; se cookie for "all", deixa null (mostra seletor)
   const preferredUnitId =
     unitIdParam && unitIdParam !== UNIT_ALL_VALUE
       ? unitIdParam
@@ -64,8 +146,9 @@ export default async function ClientLevelsConfigPage({
         ? cookieUnit
         : null;
 
+  // ✅ units sempre por companyId
   const units = await prisma.unit.findMany({
-    where: { isActive: true },
+    where: { companyId, isActive: true },
     orderBy: { name: "asc" },
     select: { id: true, name: true, isActive: true },
   });
@@ -89,9 +172,13 @@ export default async function ClientLevelsConfigPage({
   }
 
   const unit = units.find((u) => u.id === activeUnitId) ?? null;
+  if (!unit) {
+    // ✅ evita unitId de outra empresa via URL
+    throw new Error("Unidade inválida para a empresa atual (companyId).");
+  }
 
   const configs = await prisma.customerLevelConfig.findMany({
-    where: { unitId: activeUnitId },
+    where: { companyId, unitId: activeUnitId },
     orderBy: { level: "asc" },
   });
 
@@ -120,13 +207,12 @@ export default async function ClientLevelsConfigPage({
           </div>
         </div>
 
-        {/* Seletor de unidade (server-rendered com GET) */}
         <section className="rounded-xl border border-border-primary bg-background-tertiary p-4">
           <form
             method="GET"
             className="flex flex-col md:flex-row gap-3 md:items-end"
           >
-            <div className="w-full md:w-[360px]">
+            <div className="w-full md:w-90">
               <label className="text-[11px] text-content-secondary">
                 Unidade
               </label>
@@ -150,10 +236,8 @@ export default async function ClientLevelsConfigPage({
         </section>
       </header>
 
-      {/* FORM PRINCIPAL */}
       <section className="rounded-xl border border-border-primary bg-background-tertiary p-4 space-y-4">
         <form action={upsertCustomerLevelConfigsAction} className="space-y-4">
-          {/* unitId obrigatório para action */}
           <input type="hidden" name="unitId" value={activeUnitId} />
 
           <div className="grid gap-3 md:grid-cols-2">

@@ -2,7 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getToken } from "next-auth/jwt";
 import { prisma } from "@/lib/prisma";
-import { jwtVerify } from "jose";
+import { verifyAppJwt } from "@/lib/app-jwt";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +60,10 @@ function pickUnitIdFromContextOrPayload(
   return null;
 }
 
-async function inferUnitIdFromProduct(payload: Record<string, any>) {
+async function inferUnitIdFromProduct(
+  companyId: string,
+  payload: Record<string, any>,
+) {
   const productId =
     typeof (payload as any)?.productId === "string"
       ? String((payload as any).productId).trim()
@@ -69,8 +72,9 @@ async function inferUnitIdFromProduct(payload: Record<string, any>) {
   if (!productId) return null;
 
   try {
-    const p = await prisma.product.findUnique({
-      where: { id: productId },
+    // ✅ multi-tenant REAL: sempre filtra por companyId
+    const p = await prisma.product.findFirst({
+      where: { id: productId, companyId },
       select: { unitId: true },
     });
     return p?.unitId ?? null;
@@ -91,33 +95,6 @@ function getBearerToken(req: NextRequest): string | null {
   return null;
 }
 
-function getSecretKey() {
-  const secret = process.env.NEXTAUTH_SECRET || "";
-  if (!secret) return null;
-  return new TextEncoder().encode(secret);
-}
-
-async function userIdFromBearerJWT(bearer: string): Promise<string | null> {
-  try {
-    const key = getSecretKey();
-    if (!key) return null;
-
-    const { payload } = await jwtVerify(bearer, key);
-
-    const id =
-      typeof (payload as any)?.id === "string"
-        ? String((payload as any).id)
-        : typeof (payload as any)?.sub === "string"
-          ? String((payload as any).sub)
-          : null;
-
-    const trimmed = (id || "").trim();
-    return trimmed ? trimmed : null;
-  } catch {
-    return null;
-  }
-}
-
 // ✅ evita flood de log se o Prisma Client estiver desatualizado
 let didWarnMissingDelegate = false;
 
@@ -130,18 +107,34 @@ export async function POST(req: NextRequest) {
 
   let userId =
     typeof (sessionToken as any)?.id === "string"
-      ? (sessionToken as any).id
+      ? String((sessionToken as any).id)
       : typeof (sessionToken as any)?.sub === "string"
-        ? (sessionToken as any).sub
+        ? String((sessionToken as any).sub)
         : null;
 
-  // ✅ 2) tenta Bearer (mobile), se existir
-  if (!userId) {
+  let companyId =
+    typeof (sessionToken as any)?.companyId === "string"
+      ? String((sessionToken as any).companyId)
+      : null;
+
+  userId = (userId || "").trim() || null;
+  companyId = (companyId || "").trim() || null;
+
+  // ✅ 2) tenta Bearer (mobile), se existir (AGORA usando verifyAppJwt)
+  if (!userId || !companyId) {
     const bearer = getBearerToken(req);
-    if (bearer) userId = await userIdFromBearerJWT(bearer);
+    if (bearer) {
+      try {
+        const decoded = await verifyAppJwt(bearer);
+        if (!userId) userId = decoded.sub?.trim() || null;
+        if (!companyId) companyId = decoded.companyId?.trim() || null;
+      } catch {
+        // analytics nunca pode quebrar UX
+      }
+    }
   }
 
-  // ✅ analytics nunca pode quebrar UX: se não tem userId, segue anônimo
+  // ✅ analytics nunca pode quebrar UX
   let body: AnalyticsEventBody | null = null;
   try {
     body = (await req.json()) as AnalyticsEventBody;
@@ -165,10 +158,6 @@ export async function POST(req: NextRequest) {
     payload,
   }).length;
   if (approxSize > 25_000) return jsonError(413, "Payload too large");
-
-  // ✅ unitId: 1) tenta do body 2) tenta inferir via productId
-  let unitId = pickUnitIdFromContextOrPayload(context, payload);
-  if (!unitId) unitId = await inferUnitIdFromProduct(payload);
 
   const source = safeString((context as any)?.source, 30) || null;
   const pushId = safeString((context as any)?.pushId, 120) || null;
@@ -200,9 +189,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
+  // ✅ multi-tenant REAL: se não temos companyId confiável, NÃO escreve no banco.
+  // (analytics não pode quebrar UX, então respondemos ok=true)
+  if (!companyId) {
+    return NextResponse.json({ ok: true });
+  }
+
+  // ✅ unitId: 1) tenta do body 2) tenta inferir via productId (sempre com companyId)
+  let unitId = pickUnitIdFromContextOrPayload(context, payload);
+  if (!unitId) unitId = await inferUnitIdFromProduct(companyId, payload);
+
   try {
     await analyticsDelegate.create({
       data: {
+        companyId, // ✅ obrigatório em multi-tenant
         userId: userId ? String(userId) : null,
         unitId: unitId ? String(unitId) : null,
 

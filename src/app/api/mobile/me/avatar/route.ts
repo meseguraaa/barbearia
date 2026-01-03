@@ -6,6 +6,12 @@ import { verifyAppJwt } from "@/lib/app-jwt";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type MobileTokenPayload = {
+  sub: string;
+  role?: "CLIENT" | "BARBER" | "ADMIN";
+  companyId: string; // ✅ multi-tenant obrigatório
+};
+
 function getBearerToken(req: Request): string | null {
   const auth =
     req.headers.get("authorization") || req.headers.get("Authorization");
@@ -20,6 +26,7 @@ function getBearerToken(req: Request): string | null {
 function selectUser() {
   return {
     id: true,
+    // ⚠️ user.companyId pode NÃO existir no schema. Não selecione se não existir.
     name: true,
     email: true,
     role: true,
@@ -59,19 +66,56 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "missing_token" }, { status: 401 });
   }
 
-  let userId: string;
+  let auth: MobileTokenPayload;
   try {
     const payload = await verifyAppJwt(bearer);
-    userId = payload.sub;
+
+    const companyId =
+      typeof (payload as any)?.companyId === "string"
+        ? String((payload as any).companyId).trim()
+        : "";
+
+    if (!companyId) {
+      return NextResponse.json(
+        { error: "missing_company_id" },
+        { status: 401 },
+      );
+    }
+
+    auth = {
+      sub: payload.sub,
+      role: (payload as any)?.role,
+      companyId,
+    };
   } catch (err) {
     console.error("[avatar] verifyAppJwt error:", err);
     return NextResponse.json({ error: "invalid_token" }, { status: 401 });
   }
 
+  const userId = auth.sub;
+  const companyId = auth.companyId;
+
   /* ===========================
-   * 2) User
+   * 2) Membership (tenant-safe REAL)
    * ===========================*/
-  const existing = await prisma.user.findUnique({
+  const membership = await prisma.companyMember.findFirst({
+    where: {
+      userId,
+      companyId,
+      isActive: true,
+    },
+    select: { id: true },
+  });
+
+  if (!membership) {
+    // não pertence a esta empresa no app
+    return NextResponse.json({ error: "company_not_allowed" }, { status: 403 });
+  }
+
+  /* ===========================
+   * 3) User (não filtra por companyId)
+   * ===========================*/
+  const existing = await prisma.user.findFirst({
     where: { id: userId },
     select: { id: true, isActive: true },
   });
@@ -85,7 +129,7 @@ export async function POST(req: Request) {
   }
 
   /* ===========================
-   * 3) FormData
+   * 4) FormData
    * ===========================*/
   let rawForm: unknown;
   try {
@@ -109,7 +153,7 @@ export async function POST(req: Request) {
   }
 
   /* ===========================
-   * 4) Buffer
+   * 5) Buffer
    * ===========================*/
   let buf: Buffer;
   try {
@@ -129,20 +173,33 @@ export async function POST(req: Request) {
   }
 
   /* ===========================
-   * 5) Persist (Data URL – MVP)
+   * 6) Persist (Data URL – MVP)
    * ===========================*/
   const base64 = buf.toString("base64");
   const dataUrl = `data:${mime};base64,${base64}`;
 
   try {
-    const user = await prisma.user.update({
+    // ✅ update por id (avatar é do user), mas já validamos tenant via membership
+    await prisma.user.update({
       where: { id: userId },
       data: { image: dataUrl },
+    });
+
+    const user = await prisma.user.findFirst({
+      where: { id: userId },
       select: selectUser(),
     });
 
+    if (!user) {
+      return NextResponse.json({ error: "user_not_found" }, { status: 401 });
+    }
+
     return NextResponse.json({
-      user,
+      user: {
+        ...user,
+        // ✅ devolve o tenant atual para o app (sem depender do schema do User)
+        companyId,
+      },
       imageUrl: user.image,
       image: user.image,
     });

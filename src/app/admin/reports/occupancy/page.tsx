@@ -1,5 +1,6 @@
 // app/admin/reports/occupancy/page.tsx
 import type { Metadata } from "next";
+import type React from "react";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
@@ -49,7 +50,6 @@ function getSaoPauloYMD(date: Date): { y: number; m: number; d: number } {
   return { y, m, d };
 }
 
-// 00:00 em SP (UTC-03) = 03:00 UTC
 function startOfMonthSP(date: Date): Date {
   const { y, m } = getSaoPauloYMD(date);
   return new Date(Date.UTC(y, m - 1, 1, 3, 0, 0));
@@ -62,7 +62,7 @@ function endOfMonthSP(date: Date): Date {
 }
 
 // ===============================
-// Unidade (mesma regra dos outros)
+// Unidade
 // ===============================
 async function resolveUnitScope(admin: {
   unitId: string | null;
@@ -83,7 +83,7 @@ function whereAppointmentUnit(unitId: string | null) {
 }
 
 // ===============================
-// SP date parts from scheduleAt
+// SP date helpers
 // ===============================
 function getSaoPauloHour(scheduleAt: Date): number {
   const formatter = new Intl.DateTimeFormat("pt-BR", {
@@ -110,12 +110,11 @@ function getSaoPauloWeekdayIndex(scheduleAt: Date): number {
   const m = Number(parts.find((p) => p.type === "month")?.value ?? "1");
   const y = Number(parts.find((p) => p.type === "year")?.value ?? "1970");
 
-  const calendarDate = new Date(y, m - 1, d);
-  return calendarDate.getDay(); // 0=Dom ... 6=Sáb
+  return new Date(y, m - 1, d).getDay();
 }
 
 // ===============================
-// Heatmap utilities
+// Heatmap utils
 // ===============================
 const WEEKDAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"] as const;
 
@@ -191,12 +190,12 @@ function buildHeatmap(appts: { scheduleAt: Date }[], hoursRange: number[]) {
   return { heatmap, totalCount, maxCell, bestSlotLabel };
 }
 
-type UnitOption = { id: string; name: string };
-
 export default async function AdminReportsOccupancyPage({
   searchParams,
 }: AdminReportsOccupancyPageProps) {
+  // ✅ fonte única do tenant
   const admin = (await requireAdminPermission("canAccessDashboard")) as any;
+  const companyId = String(admin.companyId);
 
   if (!admin?.canSeeAllUnits && !admin?.unitId) {
     throw new Error(
@@ -204,8 +203,8 @@ export default async function AdminReportsOccupancyPage({
     );
   }
 
-  // Cookie atual (para pintar o filtro de unidade)
   const cookieStore = await cookies();
+
   const unitCookieValue =
     cookieStore.get(UNIT_COOKIE_NAME)?.value ?? UNIT_ALL_VALUE;
 
@@ -227,19 +226,19 @@ export default async function AdminReportsOccupancyPage({
   const monthStart = startOfMonthSP(referenceDate);
   const monthEnd = endOfMonthSP(referenceDate);
 
-  // ===== Unidades (para filtro)
-  let units: UnitOption[] = [];
+  // ===== Unidades
+  let units: { id: string; name: string }[] = [];
   let fixedUnitName: string | null = null;
 
   if (admin?.canSeeAllUnits) {
     units = await prisma.unit.findMany({
-      where: { isActive: true },
+      where: { companyId, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
   } else if (admin?.unitId) {
-    const u = await prisma.unit.findUnique({
-      where: { id: admin.unitId },
+    const u = await prisma.unit.findFirst({
+      where: { id: admin.unitId, companyId },
       select: { name: true },
     });
     fixedUnitName = u?.name ?? null;
@@ -253,10 +252,11 @@ export default async function AdminReportsOccupancyPage({
     ? (ownerSingleUnitName ?? "Todas as unidades")
     : (fixedUnitName ?? "");
 
-  // ===== Barbeiros (já respeita unidade selecionada)
+  // ===== Barbeiros
   const barbers = activeUnitId
     ? await prisma.barber.findMany({
         where: {
+          companyId,
           isActive: true,
           units: { some: { unitId: activeUnitId, isActive: true } },
         },
@@ -264,7 +264,7 @@ export default async function AdminReportsOccupancyPage({
         orderBy: { name: "asc" },
       })
     : await prisma.barber.findMany({
-        where: { isActive: true },
+        where: { companyId, isActive: true },
         select: { id: true, name: true },
         orderBy: { name: "asc" },
       });
@@ -272,14 +272,11 @@ export default async function AdminReportsOccupancyPage({
   const barberIdSafe =
     barberId && barbers.some((b) => b.id === barberId) ? barberId : null;
 
-  const compareBarberIdSafeRaw =
-    compareBarberId && barbers.some((b) => b.id === compareBarberId)
-      ? compareBarberId
-      : null;
-
   const compareBarberIdSafe =
-    compareBarberIdSafeRaw && compareBarberIdSafeRaw !== barberIdSafe
-      ? compareBarberIdSafeRaw
+    compareBarberId &&
+    compareBarberId !== barberIdSafe &&
+    barbers.some((b) => b.id === compareBarberId)
+      ? compareBarberId
       : null;
 
   const OCCUPANCY_STATUSES: AppointmentStatus[] = ["PENDING", "DONE"];
@@ -287,6 +284,7 @@ export default async function AdminReportsOccupancyPage({
   const [apptsA, apptsB] = await Promise.all([
     prisma.appointment.findMany({
       where: {
+        companyId,
         scheduleAt: { gte: monthStart, lte: monthEnd },
         status: { in: OCCUPANCY_STATUSES },
         ...whereAppointmentUnit(activeUnitId),
@@ -298,6 +296,7 @@ export default async function AdminReportsOccupancyPage({
     compareBarberIdSafe
       ? prisma.appointment.findMany({
           where: {
+            companyId,
             scheduleAt: { gte: monthStart, lte: monthEnd },
             status: { in: OCCUPANCY_STATUSES },
             ...whereAppointmentUnit(activeUnitId),
@@ -370,10 +369,7 @@ export default async function AdminReportsOccupancyPage({
     }
 
     if (!best || best.count <= 0) return "—";
-    return `${WEEKDAYS_PT[best.wd]} · ${String(best.h).padStart(
-      2,
-      "0",
-    )}:00 (${best.count})`;
+    return `${WEEKDAYS_PT[best.wd]} · ${String(best.h).padStart(2, "0")}:00 (${best.count})`;
   })();
 
   function HeatmapTable({
@@ -384,7 +380,7 @@ export default async function AdminReportsOccupancyPage({
   }: {
     title: string;
     subtitle?: string | null;
-    heatmap: Map<number, Map<number, number>>;
+    heatmap: HeatmapBuildResult["heatmap"];
     maxCell: number;
   }) {
     return (
@@ -447,10 +443,7 @@ export default async function AdminReportsOccupancyPage({
                               "transition-colors",
                               intensity,
                             )}
-                            title={`${label} · ${String(h).padStart(
-                              2,
-                              "0",
-                            )}:00 → ${count}`}
+                            title={`${label} · ${String(h).padStart(2, "0")}:00 → ${count}`}
                           >
                             <span className="tabular-nums">
                               {count > 0 ? count : "·"}
@@ -472,30 +465,24 @@ export default async function AdminReportsOccupancyPage({
   return (
     <div className="space-y-6 max-w-7xl">
       <header className="space-y-3">
-        {/* Linha 1: título + descrição | botão voltar */}
         <div className="flex items-start justify-between gap-3">
-          {/* Título + texto */}
           <div className="space-y-1">
             <h1 className="text-title text-content-primary">
               Ocupação da agenda
             </h1>
           </div>
 
-          {/* Botão voltar */}
           <Button variant="outline" asChild>
             <Link href="/admin/reports">Voltar</Link>
           </Button>
         </div>
 
-        {/* Linha 2: filtros */}
         <div
           className={cn(
             "rounded-xl border border-border-primary bg-background-tertiary p-3",
           )}
         >
-          {/* ✅ ordem: unidade - profissional - comparar com - mês */}
           <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
-            {/* UNIDADE */}
             <div className="w-full [&_select]:h-12 [&_select]:min-h-12 [&_select]:py-2">
               {ownerHasMultipleUnits ? (
                 <UnitFilter units={units} value={selectedUnitValue} />
@@ -519,12 +506,10 @@ export default async function AdminReportsOccupancyPage({
               )}
             </div>
 
-            {/* PROFISSIONAL */}
             <div className="w-full [&_select]:h-12 [&_select]:min-h-12 [&_select]:py-2">
               <BarberFilter barbers={barbers} value={barberIdSafe} />
             </div>
 
-            {/* COMPARAR */}
             <div className="w-full [&_select]:h-12 [&_select]:min-h-12 [&_select]:py-2">
               <BarberFilter
                 barbers={barbers}
@@ -534,7 +519,6 @@ export default async function AdminReportsOccupancyPage({
               />
             </div>
 
-            {/* MÊS */}
             <div className="justify-self-end">
               <MonthPicker />
             </div>

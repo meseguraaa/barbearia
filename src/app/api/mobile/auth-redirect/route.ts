@@ -4,6 +4,16 @@ import { getToken } from "next-auth/jwt";
 import { prisma } from "@/lib/prisma";
 import { signAppJwt } from "@/lib/app-jwt";
 
+type AppRole = "CLIENT" | "BARBER" | "ADMIN";
+type MemberRole = "OWNER" | "ADMIN" | "STAFF" | "CLIENT";
+
+function mapMemberRoleToAppRole(role: MemberRole): AppRole {
+  if (role === "OWNER") return "ADMIN";
+  if (role === "ADMIN") return "ADMIN";
+  if (role === "STAFF") return "BARBER";
+  return "CLIENT";
+}
+
 function mapOauthError(code: string) {
   const c = String(code || "").trim();
 
@@ -17,6 +27,10 @@ function mapOauthError(code: string) {
   if (c === "user_not_found") return "Usuário não encontrado.";
   if (c === "not_authenticated") return "Não autenticado.";
   if (c === "missing_user_id") return "Falha ao identificar usuário.";
+  if (c === "missing_company_id") return "Falha ao identificar empresa.";
+  if (c === "company_not_allowed")
+    return "Você não tem acesso a esta empresa neste app.";
+  if (c === "company_inactive") return "Empresa inativa.";
   if (c === "server_error") return "Erro no servidor.";
 
   return "Não foi possível autenticar. Tente novamente.";
@@ -32,38 +46,60 @@ function computeProfileComplete(u: {
   return phoneOk && birthdayOk;
 }
 
+function readCompanyId(url: URL): string {
+  const raw =
+    url.searchParams.get("companyId") ??
+    url.searchParams.get("company_id") ??
+    "";
+  return String(raw).trim();
+}
+
+/** Monta URL final anexando params sem quebrar ?/& */
+function withParams(baseUrl: string, params: Record<string, string>) {
+  const sep = baseUrl.includes("?") ? "&" : "?";
+  const qs = Object.entries(params)
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+    .join("&");
+  return `${baseUrl}${sep}${qs}`;
+}
+
+/** Redirect 302 + no-store (mobile deep link friendly) */
+function redirect302(target: string) {
+  const res = NextResponse.redirect(target, { status: 302 });
+  res.headers.set(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, proxy-revalidate",
+  );
+  res.headers.set("Pragma", "no-cache");
+  res.headers.set("Expires", "0");
+  return res;
+}
+
 /**
  * Ponte OAuth (NextAuth Web -> Mobile deep link)
- *
- * Mobile abre:
- *   /api/auth/signin/:provider?callbackUrl=/api/mobile/auth-redirect?redirect_uri=...
- *
- * NextAuth redireciona pra cá com cookie setado.
- * Aqui:
- * - Lemos o token do NextAuth (cookie)
- * - Validamos usuário no banco (isActive)
- * - Geramos JWT próprio do app (Bearer) com claim profile_complete
- * - Voltamos pro app via redirect_uri com ?token=<json>
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
-  const redirectUri = url.searchParams.get("redirect_uri");
 
-  if (!redirectUri) {
+  const redirectUriRaw = url.searchParams.get("redirect_uri");
+  if (!redirectUriRaw) {
     return NextResponse.json(
       { error: "redirect_uri ausente" },
       { status: 400 },
     );
   }
 
-  // ✅ Se NextAuth mandou erro no callback, repassa pro app com mensagem amigável
+  // IMPORTANT: no seu fluxo ele vem url-encoded (exp%3A%2F%2F...)
+  const redirectUri = decodeURIComponent(redirectUriRaw);
+
   const oauthError = url.searchParams.get("error");
   if (oauthError) {
     const message = mapOauthError(oauthError);
-    return NextResponse.redirect(
-      `${redirectUri}?error=${encodeURIComponent(oauthError)}&message=${encodeURIComponent(
+    return redirect302(
+      withParams(redirectUri, {
+        error: String(oauthError),
         message,
-      )}`,
+      }),
     );
   }
 
@@ -74,76 +110,133 @@ export async function GET(req: Request) {
     });
 
     if (!token) {
-      return NextResponse.redirect(`${redirectUri}?error=not_authenticated`);
+      return redirect302(
+        withParams(redirectUri, { error: "not_authenticated" }),
+      );
     }
 
     const userId =
       typeof (token as any).id === "string"
-        ? ((token as any).id as string)
-        : "";
+        ? String((token as any).id).trim()
+        : typeof (token as any).sub === "string"
+          ? String((token as any).sub).trim()
+          : "";
 
     if (!userId) {
-      return NextResponse.redirect(`${redirectUri}?error=missing_user_id`);
+      return redirect302(withParams(redirectUri, { error: "missing_user_id" }));
     }
 
-    const dbUser = await prisma.user.findUnique({
+    // companyId fixo do app (preferência total)
+    const requestedCompanyId = readCompanyId(url);
+
+    // fallback compat (não ideal, mas ok)
+    const tokenCompanyId =
+      typeof (token as any).companyId === "string"
+        ? String((token as any).companyId).trim()
+        : "";
+
+    const companyId = requestedCompanyId || tokenCompanyId;
+
+    if (!companyId) {
+      return redirect302(
+        withParams(redirectUri, { error: "missing_company_id" }),
+      );
+    }
+
+    // ✅ valida se a empresa existe e está ativa (evita token pra tenant desligado)
+    const company = await prisma.company.findFirst({
+      where: { id: companyId, isActive: true },
+      select: { id: true },
+    });
+
+    if (!company) {
+      return redirect302(
+        withParams(redirectUri, { error: "company_inactive" }),
+      );
+    }
+
+    // ✅ valida user (existência + isActive + dados necessários)
+    const dbUser = await prisma.user.findFirst({
       where: { id: userId },
       select: {
         id: true,
         name: true,
         email: true,
-        role: true,
         image: true,
         phone: true,
-        birthday: true, // ✅ novo (pra calcular profileComplete)
+        birthday: true,
         isOwner: true,
         isActive: true,
-        adminAccess: true,
+        role: true, // compat (não é fonte principal)
       },
     });
 
     if (!dbUser) {
-      return NextResponse.redirect(`${redirectUri}?error=user_not_found`);
+      return redirect302(withParams(redirectUri, { error: "user_not_found" }));
     }
 
     if (!dbUser.isActive) {
-      return NextResponse.redirect(`${redirectUri}?error=user_inactive`);
+      return redirect302(withParams(redirectUri, { error: "user_inactive" }));
+    }
+
+    // ✅ valida membership ativo nessa company
+    const membership = await prisma.companyMember.findFirst({
+      where: {
+        userId: dbUser.id,
+        companyId,
+        isActive: true,
+      },
+      select: {
+        role: true,
+        companyId: true,
+        lastUnitId: true,
+      },
+    });
+
+    if (!membership) {
+      return redirect302(
+        withParams(redirectUri, { error: "company_not_allowed" }),
+      );
     }
 
     const profileComplete = computeProfileComplete({
       phone: dbUser.phone ?? null,
-      birthday: (dbUser as any).birthday ?? null,
+      birthday: dbUser.birthday ?? null,
     });
+
+    const derivedRole = mapMemberRoleToAppRole(membership.role as MemberRole);
 
     const appToken = await signAppJwt({
       sub: dbUser.id,
-      role: dbUser.role,
-      profile_complete: profileComplete, // ✅ claim no JWT
+      role: derivedRole,
+      companyId: membership.companyId,
+      profile_complete: profileComplete,
     });
 
+    // ⚠️ Nota: JSON no query pode ficar grande. Mantive seu formato,
+    // mas se começar a estourar URL, trocamos por só appToken + campos mínimos.
     const payload = {
       appToken,
       user: {
         id: dbUser.id,
+        companyId: membership.companyId,
         name: dbUser.name,
         email: dbUser.email,
-        role: dbUser.role,
+        role: derivedRole,
         image: dbUser.image,
         phone: dbUser.phone,
         isOwner: dbUser.isOwner,
-        adminAccess: dbUser.adminAccess,
-
-        // ✅ novo: ajuda o app a decidir instantaneamente
         profileComplete,
+        lastUnitId: membership.lastUnitId,
       },
     };
 
     const encoded = encodeURIComponent(JSON.stringify(payload));
 
-    // ✅ limpo: mantém apenas token= (o app já aceita token)
-    return NextResponse.redirect(`${redirectUri}?token=${encoded}`);
+    // ✅ 302 (não 307) pro mobile abrir o deep link corretamente
+    return redirect302(withParams(redirectUri, { token: encoded }));
   } catch (err) {
     console.error("[mobile auth-redirect] error:", err);
-    return NextResponse.redirect(`${redirectUri}?error=server_error`);
+    return redirect302(withParams(redirectUri, { error: "server_error" }));
   }
 }

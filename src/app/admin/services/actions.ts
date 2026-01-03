@@ -1,8 +1,33 @@
-// app/admin/services/actions.ts
+// src/app/admin/services/actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import {
+  requireAdminPermission,
+  requireAdminWithPermissions,
+} from "@/lib/admin-permissions";
+
+/* =====================================================================
+ * TENANT CONTEXT (fonte da verdade: admin logado)
+ * ===================================================================== */
+
+type AdminContext = {
+  companyId?: string;
+};
+
+async function getAdminCompanyIdOrThrow(): Promise<string> {
+  const currentAdmin = (await requireAdminWithPermissions()) as AdminContext;
+  const companyId = currentAdmin.companyId?.trim();
+
+  if (!companyId) {
+    throw new Error(
+      "[admin/services/actions] ADMIN sem companyId. Este painel é multi-tenant: vincule o admin a uma empresa (companyId).",
+    );
+  }
+
+  return companyId;
+}
 
 /* =====================================================================
  * HELPERS
@@ -24,25 +49,34 @@ function revalidateAll() {
   revalidatePath("/admin/services");
 }
 
-/**
- * Resolve um unitId:
- * - tenta pegar do form (se existir)
- * - senão, pega a primeira unit (prioriza ativa)
- *
- * Isso evita quebrar fluxo antigo enquanto você não pluga unitId na UI.
- */
-async function getUnitIdFromFormOrDefault(formData: FormData): Promise<string> {
+async function getUnitIdFromFormOrDefault(
+  formData: FormData,
+  companyId: string,
+): Promise<string> {
   const raw = formData.get("unitId");
   const fromForm = String(raw ?? "").trim();
-  if (fromForm) return fromForm;
+
+  if (fromForm) {
+    const exists = await prisma.unit.findFirst({
+      where: { id: fromForm, companyId },
+      select: { id: true },
+    });
+
+    if (!exists) {
+      throw new Error("Unidade inválida para esta empresa.");
+    }
+
+    return fromForm;
+  }
 
   const unit =
     (await prisma.unit.findFirst({
-      where: { isActive: true },
+      where: { companyId, isActive: true },
       select: { id: true },
       orderBy: { createdAt: "asc" },
     })) ??
     (await prisma.unit.findFirst({
+      where: { companyId },
       select: { id: true },
       orderBy: { createdAt: "asc" },
     }));
@@ -60,10 +94,10 @@ async function getUnitIdFromFormOrDefault(formData: FormData): Promise<string> {
  * SERVIÇOS
  * ===================================================================== */
 
-/**
- * Cria um novo serviço
- */
 export async function createService(formData: FormData) {
+  await requireAdminPermission("canAccessServices");
+  const companyId = await getAdminCompanyIdOrThrow();
+
   const name = String(formData.get("name") ?? "").trim();
 
   const price = toNumber(formData.get("price"));
@@ -75,7 +109,6 @@ export async function createService(formData: FormData) {
     true,
   );
 
-  // IDs dos profissionais que realizam o serviço (checkboxes)
   const rawProfessionalIds = formData.getAll("professionalIds");
   const professionalIds = rawProfessionalIds
     .map((v) => String(v ?? "").trim())
@@ -115,10 +148,27 @@ export async function createService(formData: FormData) {
     }
   }
 
-  const unitId = await getUnitIdFromFormOrDefault(formData);
+  const unitId = await getUnitIdFromFormOrDefault(formData, companyId);
+
+  if (professionalIds.length > 0) {
+    const found = await prisma.barber.findMany({
+      where: { id: { in: professionalIds }, companyId },
+      select: { id: true },
+    });
+
+    const foundIds = new Set(found.map((p) => p.id));
+    const invalid = professionalIds.filter((id) => !foundIds.has(id));
+
+    if (invalid.length) {
+      throw new Error("Profissional inválido para esta empresa.");
+    }
+  }
 
   await prisma.service.create({
     data: {
+      // ✅ checked create input (evita UncheckedCreateInput)
+      company: { connect: { id: companyId } },
+
       name,
       price,
       durationMinutes,
@@ -127,17 +177,12 @@ export async function createService(formData: FormData) {
       cancelLimitHours: cancelLimitHours ?? null,
       cancelFeePercentage: cancelFeePercentage ?? null,
 
-      // ✅ obrigatório agora
-      unit: {
-        connect: { id: unitId },
-      },
+      unit: { connect: { id: unitId } },
 
-      // vincula os profissionais (se vierem)
       professionals: {
         create: professionalIds.map((barberId) => ({
-          barber: {
-            connect: { id: barberId },
-          },
+          company: { connect: { id: companyId } },
+          barber: { connect: { id: barberId } },
         })),
       },
     },
@@ -146,18 +191,15 @@ export async function createService(formData: FormData) {
   revalidateAll();
 }
 
-/**
- * Ativa / desativa um serviço
- */
 export async function toggleServiceStatus(formData: FormData) {
+  await requireAdminPermission("canAccessServices");
+  const companyId = await getAdminCompanyIdOrThrow();
+
   const id = String(formData.get("serviceId") ?? "").trim();
+  if (!id) throw new Error("ID do serviço é obrigatório.");
 
-  if (!id) {
-    throw new Error("ID do serviço é obrigatório.");
-  }
-
-  const service = await prisma.service.findUnique({
-    where: { id },
+  const service = await prisma.service.findFirst({
+    where: { id, companyId },
     select: { id: true, isActive: true },
   });
 
@@ -165,20 +207,22 @@ export async function toggleServiceStatus(formData: FormData) {
     throw new Error("Serviço não encontrado.");
   }
 
-  await prisma.service.update({
-    where: { id },
-    data: {
-      isActive: !service.isActive,
-    },
+  const res = await prisma.service.updateMany({
+    where: { id, companyId },
+    data: { isActive: !service.isActive },
   });
+
+  if (res.count === 0) {
+    throw new Error("Falha ao atualizar o serviço (escopo inválido).");
+  }
 
   revalidateAll();
 }
 
-/**
- * Atualiza um serviço existente
- */
 export async function updateService(id: string, formData: FormData) {
+  await requireAdminPermission("canAccessServices");
+  const companyId = await getAdminCompanyIdOrThrow();
+
   const name = String(formData.get("name") ?? "").trim();
 
   const price = toNumber(formData.get("price"));
@@ -190,15 +234,12 @@ export async function updateService(id: string, formData: FormData) {
     true,
   );
 
-  // IDs dos profissionais selecionados no form
   const rawProfessionalIds = formData.getAll("professionalIds");
   const professionalIds = rawProfessionalIds
     .map((v) => String(v ?? "").trim())
     .filter(Boolean);
 
-  if (!id) {
-    throw new Error("ID do serviço é obrigatório.");
-  }
+  if (!id) throw new Error("ID do serviço é obrigatório.");
 
   if (!name || name.length < 2) {
     throw new Error("O nome do serviço deve ter pelo menos 2 caracteres.");
@@ -234,10 +275,29 @@ export async function updateService(id: string, formData: FormData) {
     }
   }
 
+  const exists = await prisma.service.findFirst({
+    where: { id, companyId },
+    select: { id: true },
+  });
+  if (!exists) throw new Error("Serviço não encontrado.");
+
+  if (professionalIds.length > 0) {
+    const found = await prisma.barber.findMany({
+      where: { id: { in: professionalIds }, companyId },
+      select: { id: true },
+    });
+
+    const foundIds = new Set(found.map((p) => p.id));
+    const invalid = professionalIds.filter((pid) => !foundIds.has(pid));
+
+    if (invalid.length) {
+      throw new Error("Profissional inválido para esta empresa.");
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
-    // Atualiza os dados do serviço
-    await tx.service.update({
-      where: { id },
+    const updated = await tx.service.updateMany({
+      where: { id, companyId },
       data: {
         name,
         price,
@@ -246,18 +306,20 @@ export async function updateService(id: string, formData: FormData) {
         cancelLimitHours: cancelLimitHours ?? null,
         cancelFeePercentage: cancelFeePercentage ?? null,
       },
-      select: { id: true },
     });
 
-    // Reseta vínculos antigos
+    if (updated.count === 0) {
+      throw new Error("Falha ao atualizar o serviço (escopo inválido).");
+    }
+
     await tx.serviceProfessional.deleteMany({
-      where: { serviceId: id },
+      where: { serviceId: id, companyId },
     });
 
-    // Cria vínculos novos (se tiver)
     if (professionalIds.length > 0) {
       await tx.serviceProfessional.createMany({
         data: professionalIds.map((barberId) => ({
+          companyId,
           serviceId: id,
           barberId,
         })),
@@ -273,19 +335,18 @@ export async function updateService(id: string, formData: FormData) {
  * PLANOS
  * ===================================================================== */
 
-/**
- * Cria um novo plano de assinatura
- */
 export async function createPlan(formData: FormData) {
+  await requireAdminPermission("canAccessServices");
+  const companyId = await getAdminCompanyIdOrThrow();
+
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
 
   const price = toNumber(formData.get("price"));
   const commissionPercent = toNumber(formData.get("commissionPercent"));
 
-  // esses vêm escondidos no form, mas validamos mesmo assim
-  const durationDays = toNumber(formData.get("durationDays")) ?? 30; // default 30
-  const totalBookings = toNumber(formData.get("totalBookings")) ?? 4; // default 4
+  const durationDays = toNumber(formData.get("durationDays")) ?? 30;
+  const totalBookings = toNumber(formData.get("totalBookings")) ?? 4;
 
   if (!name || name.length < 2) {
     throw new Error("O nome do plano deve ter pelo menos 2 caracteres.");
@@ -312,8 +373,24 @@ export async function createPlan(formData: FormData) {
     .map((v) => String(v ?? "").trim())
     .filter(Boolean);
 
+  if (serviceIds.length > 0) {
+    const found = await prisma.service.findMany({
+      where: { id: { in: serviceIds }, companyId },
+      select: { id: true },
+    });
+
+    const foundIds = new Set(found.map((s) => s.id));
+    const invalid = serviceIds.filter((sid) => !foundIds.has(sid));
+
+    if (invalid.length) {
+      throw new Error("Serviço inválido para esta empresa.");
+    }
+  }
+
   const plan = await prisma.plan.create({
     data: {
+      company: { connect: { id: companyId } },
+
       name,
       description,
       price,
@@ -321,68 +398,61 @@ export async function createPlan(formData: FormData) {
       durationDays,
       totalBookings,
       isActive: true,
+
       services: {
         create: serviceIds.map((serviceId) => ({
-          service: {
-            connect: { id: serviceId },
-          },
+          company: { connect: { id: companyId } },
+          service: { connect: { id: serviceId } },
         })),
       },
     },
   });
 
-  if (!plan) {
-    throw new Error("Falha ao criar o plano.");
-  }
+  if (!plan) throw new Error("Falha ao criar o plano.");
 
   revalidateAll();
 }
 
-/**
- * Ativa / desativa um plano
- */
 export async function togglePlanStatus(formData: FormData) {
+  await requireAdminPermission("canAccessServices");
+  const companyId = await getAdminCompanyIdOrThrow();
+
   const id = String(formData.get("planId") ?? "").trim();
+  if (!id) throw new Error("ID do plano é obrigatório.");
 
-  if (!id) {
-    throw new Error("ID do plano é obrigatório.");
-  }
-
-  const plan = await prisma.plan.findUnique({
-    where: { id },
+  const plan = await prisma.plan.findFirst({
+    where: { id, companyId },
     select: { id: true, isActive: true },
   });
 
-  if (!plan) {
-    throw new Error("Plano não encontrado.");
-  }
+  if (!plan) throw new Error("Plano não encontrado.");
 
-  await prisma.plan.update({
-    where: { id },
-    data: {
-      isActive: !plan.isActive,
-    },
+  const res = await prisma.plan.updateMany({
+    where: { id, companyId },
+    data: { isActive: !plan.isActive },
   });
+
+  if (res.count === 0) {
+    throw new Error("Falha ao atualizar o plano (escopo inválido).");
+  }
 
   revalidateAll();
 }
 
-/**
- * Atualiza um plano existente
- */
 export async function updatePlan(id: string, formData: FormData) {
+  await requireAdminPermission("canAccessServices");
+  const companyId = await getAdminCompanyIdOrThrow();
+
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
 
   const price = toNumber(formData.get("price"));
   const commissionPercent = toNumber(formData.get("commissionPercent"));
 
-  const durationDays = toNumber(formData.get("durationDays")) ?? 30; // vindo hidden
-  const totalBookings = toNumber(formData.get("totalBookings")) ?? 4; // vindo hidden
+  const durationDays = toNumber(formData.get("durationDays")) ?? 30;
+  const totalBookings = toNumber(formData.get("totalBookings")) ?? 4;
 
-  if (!id) {
-    throw new Error("ID do plano é obrigatório.");
-  }
+  if (!id) throw new Error("ID do plano é obrigatório.");
 
   if (!name || name.length < 2) {
     throw new Error("O nome do plano deve ter pelo menos 2 caracteres.");
@@ -409,9 +479,28 @@ export async function updatePlan(id: string, formData: FormData) {
     .map((v) => String(v ?? "").trim())
     .filter(Boolean);
 
-  // Atualiza dados básicos
-  await prisma.plan.update({
-    where: { id },
+  const exists = await prisma.plan.findFirst({
+    where: { id, companyId },
+    select: { id: true },
+  });
+  if (!exists) throw new Error("Plano não encontrado.");
+
+  if (serviceIds.length > 0) {
+    const found = await prisma.service.findMany({
+      where: { id: { in: serviceIds }, companyId },
+      select: { id: true },
+    });
+
+    const foundIds = new Set(found.map((s) => s.id));
+    const invalid = serviceIds.filter((sid) => !foundIds.has(sid));
+
+    if (invalid.length) {
+      throw new Error("Serviço inválido para esta empresa.");
+    }
+  }
+
+  const updated = await prisma.plan.updateMany({
+    where: { id, companyId },
     data: {
       name,
       description,
@@ -422,14 +511,18 @@ export async function updatePlan(id: string, formData: FormData) {
     },
   });
 
-  // Reseta e recria os vínculos de serviços
+  if (updated.count === 0) {
+    throw new Error("Falha ao atualizar o plano (escopo inválido).");
+  }
+
   await prisma.planService.deleteMany({
-    where: { planId: id },
+    where: { planId: id, companyId },
   });
 
   if (serviceIds.length > 0) {
     await prisma.planService.createMany({
       data: serviceIds.map((serviceId) => ({
+        companyId,
         planId: id,
         serviceId,
       })),
@@ -444,10 +537,10 @@ export async function updatePlan(id: string, formData: FormData) {
  * CLIENTE x PLANO
  * ===================================================================== */
 
-/**
- * Atribui um plano a um cliente (cria ClientPlan)
- */
 export async function createClientPlanForClient(formData: FormData) {
+  await requireAdminPermission("canAccessServices");
+  const companyId = await getAdminCompanyIdOrThrow();
+
   const planId = String(formData.get("planId") ?? "").trim();
   const clientId = String(formData.get("clientId") ?? "").trim();
 
@@ -455,8 +548,8 @@ export async function createClientPlanForClient(formData: FormData) {
     throw new Error("Plano e cliente são obrigatórios.");
   }
 
-  const plan = await prisma.plan.findUnique({
-    where: { id: planId },
+  const plan = await prisma.plan.findFirst({
+    where: { id: planId, companyId },
     select: { id: true, durationDays: true },
   });
 
@@ -464,12 +557,16 @@ export async function createClientPlanForClient(formData: FormData) {
     throw new Error("Plano não encontrado.");
   }
 
-  // Regra: 1 plano ativo por cliente
+  const client = await prisma.user.findFirst({
+    where: { id: clientId, companyId, role: "CLIENT" },
+    select: { id: true },
+  });
+  if (!client) {
+    throw new Error("Cliente não encontrado.");
+  }
+
   const existingActivePlan = await prisma.clientPlan.findFirst({
-    where: {
-      clientId,
-      status: "ACTIVE",
-    },
+    where: { companyId, clientId, status: "ACTIVE" },
     select: { id: true },
   });
 
@@ -483,6 +580,7 @@ export async function createClientPlanForClient(formData: FormData) {
 
   await prisma.clientPlan.create({
     data: {
+      companyId,
       clientId,
       planId,
       startDate,
@@ -495,18 +593,17 @@ export async function createClientPlanForClient(formData: FormData) {
   revalidateAll();
 }
 
-/**
- * Marca um ClientPlan como EXPIRADO
- */
 export async function expireClientPlan(formData: FormData) {
-  const clientPlanId = String(formData.get("clientPlanId") ?? "").trim();
+  await requireAdminPermission("canAccessServices");
+  const companyId = await getAdminCompanyIdOrThrow();
 
+  const clientPlanId = String(formData.get("clientPlanId") ?? "").trim();
   if (!clientPlanId) {
     throw new Error("ID do plano do cliente é obrigatório.");
   }
 
-  const clientPlan = await prisma.clientPlan.findUnique({
-    where: { id: clientPlanId },
+  const clientPlan = await prisma.clientPlan.findFirst({
+    where: { id: clientPlanId, companyId },
     select: { id: true, status: true },
   });
 
@@ -514,26 +611,24 @@ export async function expireClientPlan(formData: FormData) {
     throw new Error("Plano do cliente não encontrado.");
   }
 
-  if (clientPlan.status !== "ACTIVE") {
-    return;
-  }
+  if (clientPlan.status !== "ACTIVE") return;
 
-  await prisma.clientPlan.update({
-    where: { id: clientPlanId },
-    data: {
-      status: "EXPIRED",
-    },
+  const res = await prisma.clientPlan.updateMany({
+    where: { id: clientPlanId, companyId },
+    data: { status: "EXPIRED" },
   });
+
+  if (res.count === 0) {
+    throw new Error("Falha ao expirar o plano (escopo inválido).");
+  }
 
   revalidateAll();
 }
 
-/**
- * Revalida um plano de cliente:
- * - Expira o plano atual (se ainda não estiver expirado)
- * - Cria um novo ClientPlan para o mesmo cliente com o plano escolhido
- */
 export async function revalidateClientPlan(formData: FormData) {
+  await requireAdminPermission("canAccessServices");
+  const companyId = await getAdminCompanyIdOrThrow();
+
   const clientPlanId = String(formData.get("clientPlanId") ?? "").trim();
   const newPlanId = String(formData.get("newPlanId") ?? "").trim();
 
@@ -541,11 +636,9 @@ export async function revalidateClientPlan(formData: FormData) {
     throw new Error("Plano atual e novo plano são obrigatórios.");
   }
 
-  const clientPlan = await prisma.clientPlan.findUnique({
-    where: { id: clientPlanId },
-    include: {
-      plan: true,
-    },
+  const clientPlan = await prisma.clientPlan.findFirst({
+    where: { id: clientPlanId, companyId },
+    include: { plan: true },
   });
 
   if (!clientPlan) {
@@ -563,8 +656,8 @@ export async function revalidateClientPlan(formData: FormData) {
     );
   }
 
-  const newPlan = await prisma.plan.findUnique({
-    where: { id: newPlanId },
+  const newPlan = await prisma.plan.findFirst({
+    where: { id: newPlanId, companyId },
   });
 
   if (!newPlan) {
@@ -581,16 +674,19 @@ export async function revalidateClientPlan(formData: FormData) {
 
   await prisma.$transaction(async (tx) => {
     if (clientPlan.status !== "EXPIRED") {
-      await tx.clientPlan.update({
-        where: { id: clientPlanId },
-        data: {
-          status: "EXPIRED",
-        },
+      const expired = await tx.clientPlan.updateMany({
+        where: { id: clientPlanId, companyId },
+        data: { status: "EXPIRED" },
       });
+
+      if (expired.count === 0) {
+        throw new Error("Falha ao expirar o plano atual (escopo inválido).");
+      }
     }
 
     await tx.clientPlan.create({
       data: {
+        companyId,
         clientId: clientPlan.clientId,
         planId: newPlan.id,
         startDate,

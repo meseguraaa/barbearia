@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
+import { verifyAppJwt } from "@/lib/app-jwt";
 
 type MobileTokenPayload = {
   sub: string;
   role?: "CLIENT" | "BARBER" | "ADMIN";
+  companyId: string; // ✅ multi-tenant obrigatório
 };
 
 const DEFAULT_RESCHEDULE_WINDOW_HOURS = 24;
@@ -17,18 +18,21 @@ function corsHeaders() {
   };
 }
 
-function getJwtSecretKey() {
-  const secret = process.env.APP_JWT_SECRET;
-  if (!secret) throw new Error("APP_JWT_SECRET não definido no .env");
-  return new TextEncoder().encode(secret);
-}
-
 async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
   const auth = req.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!token) throw new Error("Token ausente");
-  const { payload } = await jwtVerify(token, getJwtSecretKey());
-  return payload as unknown as MobileTokenPayload;
+  if (!token) throw new Error("missing_token");
+
+  const payload = (await verifyAppJwt(token)) as any;
+
+  const companyId =
+    typeof payload?.companyId === "string"
+      ? String(payload.companyId).trim()
+      : "";
+
+  if (!companyId) throw new Error("missing_company_id");
+
+  return { ...(payload as any), companyId } as MobileTokenPayload;
 }
 
 function normalizeWindowHours(raw: unknown): number | null {
@@ -58,6 +62,7 @@ export async function POST(
 ) {
   try {
     const payload = await requireMobileAuth(req);
+    const companyId = payload.companyId;
 
     if (payload.role && payload.role !== "CLIENT") {
       return NextResponse.json(
@@ -75,11 +80,15 @@ export async function POST(
       );
     }
 
-    const body = await req.json().catch(() => ({}));
-    const unitId = String(body?.unitId ?? "").trim();
-    const serviceId = body?.serviceId ? String(body.serviceId).trim() : "";
-    const barberId = body?.barberId ? String(body.barberId).trim() : "";
-    const scheduleAtRaw = String(body?.scheduleAt ?? "").trim();
+    const body = await req.json().catch(() => ({}) as any);
+    const unitId = String((body as any)?.unitId ?? "").trim();
+    const serviceId = (body as any)?.serviceId
+      ? String((body as any).serviceId).trim()
+      : "";
+    const barberId = (body as any)?.barberId
+      ? String((body as any).barberId).trim()
+      : "";
+    const scheduleAtRaw = String((body as any)?.scheduleAt ?? "").trim();
     const scheduleAt = scheduleAtRaw ? new Date(scheduleAtRaw) : null;
 
     if (
@@ -95,17 +104,76 @@ export async function POST(
       );
     }
 
-    // 1) carrega o agendamento atual (pra validar janela)
+    // ✅ não permite reagendar para o passado
+    if (scheduleAt.getTime() <= Date.now()) {
+      return NextResponse.json(
+        { error: "Não é possível reagendar para um horário no passado." },
+        { status: 400, headers: corsHeaders() },
+      );
+    }
+
+    // ✅ valida unit/service/barber no tenant antes de qualquer update
+    const [unit, nextService, barberUnit, sp] = await Promise.all([
+      prisma.unit.findFirst({
+        where: { id: unitId, companyId, isActive: true },
+        select: { id: true },
+      }),
+      prisma.service.findFirst({
+        where: { id: serviceId, companyId, isActive: true },
+        select: { id: true, name: true },
+      }),
+      prisma.barberUnit.findFirst({
+        where: { companyId, unitId, barberId, isActive: true },
+        select: { id: true },
+      }),
+      prisma.serviceProfessional.findFirst({
+        where: { companyId, serviceId, barberId },
+        select: { id: true },
+      }),
+    ]);
+
+    if (!unit) {
+      return NextResponse.json(
+        { error: "Unidade inválida" },
+        { status: 400, headers: corsHeaders() },
+      );
+    }
+
+    if (!nextService) {
+      return NextResponse.json(
+        { error: "Serviço inválido" },
+        { status: 400, headers: corsHeaders() },
+      );
+    }
+
+    if (!barberUnit) {
+      return NextResponse.json(
+        { error: "Profissional não vinculado a esta unidade" },
+        { status: 400, headers: corsHeaders() },
+      );
+    }
+
+    if (!sp) {
+      return NextResponse.json(
+        { error: "Profissional não executa este serviço" },
+        { status: 400, headers: corsHeaders() },
+      );
+    }
+
+    // 1) carrega o agendamento atual (tenant-safe) pra validar janela
     const current = await prisma.appointment.findFirst({
-      where: { id: apptId, clientId: payload.sub, status: { not: "CANCELED" } },
+      where: {
+        id: apptId,
+        companyId, // ✅ tenant scope
+        clientId: payload.sub,
+        status: { not: "CANCELED" },
+      },
       select: {
         id: true,
         scheduleAt: true,
-        serviceId: true,
         service: {
           select: {
-            id: true,
-            cancelLimitHours: true,
+            cancelLimitHours: true, // (usado como janela de reagendamento aqui)
           },
         },
       },
@@ -140,22 +208,11 @@ export async function POST(
       );
     }
 
-    // 3) pega o serviço novo pra atualizar descrição (admin geralmente usa appointment.description)
-    const nextService = await prisma.service.findUnique({
-      where: { id: serviceId },
-      select: { id: true, name: true },
-    });
-
-    if (!nextService) {
-      return NextResponse.json(
-        { error: "Serviço inválido" },
-        { status: 400, headers: corsHeaders() },
-      );
-    }
-
-    // 4) conflito de horário (mantém tua regra atual: mesmo scheduleAt)
+    // 3) conflito de horário (regra atual: mesmo scheduleAt)
+    // ✅ tenant-safe + evita travar na própria edição
     const conflict = await prisma.appointment.findFirst({
       where: {
+        companyId, // ✅ tenant scope
         id: { not: apptId },
         barberId,
         status: { not: "CANCELED" },
@@ -171,19 +228,31 @@ export async function POST(
       );
     }
 
-    // 5) update completo: troca ids + scheduleAt + description (✅ o que estava faltando)
-    await prisma.appointment.update({
-      where: { id: apptId },
+    // 4) update blindado: reforça tenant + dono (e status) no write
+    const updated = await prisma.appointment.updateMany({
+      where: {
+        id: apptId,
+        companyId,
+        clientId: payload.sub,
+        status: { not: "CANCELED" },
+      },
       data: {
         unitId,
         serviceId,
         barberId,
         scheduleAt,
 
-        // ✅ MUITO IMPORTANTE: reflete no admin/web (descrição do serviço)
+        // ✅ reflete no admin/web (descrição do serviço)
         description: nextService.name,
       },
     });
+
+    if (updated.count === 0) {
+      return NextResponse.json(
+        { error: "Agendamento não encontrado" },
+        { status: 404, headers: corsHeaders() },
+      );
+    }
 
     return NextResponse.json(
       { ok: true },
@@ -192,11 +261,16 @@ export async function POST(
   } catch (err: any) {
     const msg = String(err?.message ?? "Erro");
 
-    if (
-      msg.toLowerCase().includes("token") ||
+    const isAuth =
+      msg === "missing_token" ||
+      msg === "missing_company_id" ||
+      msg.includes("Invalid token payload") ||
       msg.toLowerCase().includes("jwt") ||
-      msg.toLowerCase().includes("signature")
-    ) {
+      msg.toLowerCase().includes("token") ||
+      msg.toLowerCase().includes("signature") ||
+      msg.toLowerCase().includes("companyid");
+
+    if (isAuth) {
       return NextResponse.json(
         { error: "Não autorizado" },
         { status: 401, headers: corsHeaders() },

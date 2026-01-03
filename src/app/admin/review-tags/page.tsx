@@ -1,6 +1,9 @@
 // app/admin/review-tags/page.tsx
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { jwtVerify } from "jose";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,14 +21,81 @@ export const metadata: Metadata = {
   title: "Admin | Motivos de avaliação",
 };
 
+const COMPANY_COOKIE_NAME = "admin_company_context";
+const SESSION_COOKIE_NAME = "painel_session";
+
+// se você já tem uma rota/tela de “selecionar empresa”, troque aqui:
+const COMPANY_PICKER_PATH = "/admin/companies";
+
+function getJwtSecretKey() {
+  const secret = process.env.PAINEL_JWT_SECRET;
+  if (!secret) throw new Error("PAINEL_JWT_SECRET não definido no .env");
+  return new TextEncoder().encode(secret);
+}
+
+type PainelSessionPayload = {
+  sub: string; // userId
+  role: "CLIENT" | "BARBER" | "ADMIN";
+  email: string;
+  name?: string | null;
+};
+
+async function getUserIdFromPainelSessionOrNull(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return null;
+
+  try {
+    const { payload } = await jwtVerify(token, getJwtSecretKey());
+    const data = payload as unknown as PainelSessionPayload;
+    return data?.sub ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function getCompanyIdOrThrow() {
+  const cookieStore = await cookies();
+
+  // 1) tenta pelo cookie de contexto
+  const fromCookie = cookieStore.get(COMPANY_COOKIE_NAME)?.value?.trim();
+  if (fromCookie) return fromCookie;
+
+  // 2) fallback: tenta inferir pelo usuário logado no painel
+  const userId = await getUserIdFromPainelSessionOrNull();
+  if (!userId) {
+    // sem sessão, não tem como inferir
+    redirect("/painel/login?error=missing_company");
+  }
+
+  // pega memberships ativas do usuário
+  const memberships = await prisma.companyMember.findMany({
+    where: {
+      userId,
+      isActive: true,
+      role: { in: ["OWNER", "ADMIN", "STAFF"] },
+    },
+    select: { companyId: true },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (memberships.length === 1) {
+    // se ele só tem 1 empresa ativa, dá pra seguir sem cookie
+    return memberships[0]!.companyId;
+  }
+
+  // se tem 0: sem empresa ativa; se tem >1: precisa escolher contexto
+  redirect(COMPANY_PICKER_PATH);
+}
+
 export default async function AdminReviewTagsPage() {
-  // 🔐 Permissão: precisa ter acesso a Avaliação (ou ser Dono)
   await requireAdminPermission("canAccessReviews");
 
+  const companyId = await getCompanyIdOrThrow();
+
   const tags = await prisma.reviewTag.findMany({
-    orderBy: {
-      label: "asc",
-    },
+    where: { companyId },
+    orderBy: { label: "asc" },
   });
 
   const activeTags = tags.filter((t) => t.isActive);
@@ -51,10 +121,13 @@ export default async function AdminReviewTagsPage() {
         <p className="text-label-small text-content-primary">
           Adicionar novo motivo
         </p>
+
         <form
           action={createReviewTagAction}
           className="flex flex-col gap-3 sm:flex-row sm:items-center"
         >
+          <input type="hidden" name="companyId" value={companyId} />
+
           <Input
             name="label"
             placeholder="Ex.: Atendimento rápido, Ambiente agradável..."
@@ -64,6 +137,7 @@ export default async function AdminReviewTagsPage() {
             Salvar motivo
           </Button>
         </form>
+
         <p className="text-paragraph-small text-content-tertiary">
           Esses motivos aparecem como botões para o cliente escolher (até 3) ao
           avaliar um atendimento.
@@ -90,11 +164,11 @@ export default async function AdminReviewTagsPage() {
                 key={tag.id}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border-primary bg-background-tertiary px-4 py-3"
               >
-                {/* ESQUERDA: status + edição do texto */}
                 <form
                   action={updateReviewTagLabelAction}
                   className="flex flex-1 items-center gap-3 min-w-0"
                 >
+                  <input type="hidden" name="companyId" value={companyId} />
                   <input type="hidden" name="tagId" value={tag.id} />
 
                   <ServiceStatusBadge isActive={tag.isActive} />
@@ -115,9 +189,10 @@ export default async function AdminReviewTagsPage() {
                   </Button>
                 </form>
 
-                {/* DIREITA: ativar / desativar */}
                 <form action={toggleReviewTagStatusAction}>
+                  <input type="hidden" name="companyId" value={companyId} />
                   <input type="hidden" name="tagId" value={tag.id} />
+
                   <Button
                     type="submit"
                     variant="destructive"
@@ -152,11 +227,11 @@ export default async function AdminReviewTagsPage() {
                 key={tag.id}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border-primary bg-background-tertiary px-4 py-3"
               >
-                {/* ESQUERDA: status + edição do texto */}
                 <form
                   action={updateReviewTagLabelAction}
                   className="flex flex-1 items-center gap-3 min-w-0"
                 >
+                  <input type="hidden" name="companyId" value={companyId} />
                   <input type="hidden" name="tagId" value={tag.id} />
 
                   <ServiceStatusBadge isActive={tag.isActive} />
@@ -177,9 +252,10 @@ export default async function AdminReviewTagsPage() {
                   </Button>
                 </form>
 
-                {/* DIREITA: ativar */}
                 <form action={toggleReviewTagStatusAction}>
+                  <input type="hidden" name="companyId" value={companyId} />
                   <input type="hidden" name="tagId" value={tag.id} />
+
                   <Button
                     type="submit"
                     variant="active"

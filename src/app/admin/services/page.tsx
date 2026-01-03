@@ -1,8 +1,7 @@
-// app/admin/services/page.tsx
 import { prisma } from "@/lib/prisma";
 import { Metadata } from "next";
 
-import {
+import type {
   Service,
   Plan,
   PlanService as PlanServiceModel,
@@ -15,7 +14,11 @@ import { ServiceNewDialog } from "@/components/service-new-dialog";
 import { ServiceRow } from "@/components/service-row";
 import { PlanRow } from "@/components/plan-row";
 import { ClientPlanRow } from "@/components/client-plan-row";
-import { requireAdminPermission } from "@/lib/admin-permissions";
+
+import {
+  requireAdminWithPermissions,
+  requireAdminPermission,
+} from "@/lib/admin-permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -32,29 +35,42 @@ type ClientPlanWithRelations = ClientPlan & {
   plan: Plan;
 };
 
+type AdminContext = {
+  companyId?: string;
+};
+
 export default async function ServicesPage() {
   // 🔐 Permissão: precisa ter acesso a Serviços (ou ser Dono)
   await requireAdminPermission("canAccessServices");
 
-  // 🔹 Serviços em ordem alfabética pelo nome
+  // ✅ Fonte da verdade do tenant: admin logado
+  const currentAdmin = (await requireAdminWithPermissions()) as AdminContext;
+  const companyId = currentAdmin.companyId?.trim();
+
+  if (!companyId) {
+    throw new Error(
+      "[admin/services/page] ADMIN sem companyId. Este painel é multi-tenant: vincule o admin a uma empresa (companyId).",
+    );
+  }
+
+  // 🔹 Serviços (scoped)
   const services = await prisma.service.findMany({
+    where: { companyId },
     orderBy: { name: "asc" },
   });
 
-  // 🔹 Planos em ordem alfabética pelo nome
+  // 🔹 Planos (scoped)
   const plans = (await prisma.plan.findMany({
+    where: { companyId },
     orderBy: { name: "asc" },
     include: {
-      services: {
-        include: {
-          service: true,
-        },
-      },
+      services: { include: { service: true } },
     },
   })) as PlanWithServices[];
 
-  // 🔹 Todos os vínculos cliente <-> plano (com plano incluso)
+  // 🔹 ClientPlans (scoped)
   const clientPlans = (await prisma.clientPlan.findMany({
+    where: { companyId },
     orderBy: { createdAt: "desc" },
     include: {
       client: true,
@@ -62,11 +78,6 @@ export default async function ServicesPage() {
     },
   })) as ClientPlanWithRelations[];
 
-  // 🔹 Regra: cliente NÃO pode aparecer no modal se:
-  // - tiver um ClientPlan com:
-  //   - status === "ACTIVE"
-  //   - usedBookings < totalBookings
-  //   - endDate ainda não passou
   const today = new Date();
 
   const blockedClientIds = new Set(
@@ -75,15 +86,22 @@ export default async function ServicesPage() {
         const hasCredits = cp.usedBookings < cp.plan.totalBookings;
         const isWithinValidity = cp.endDate >= today;
         const isActive = cp.status === "ACTIVE";
-
         return isActive && hasCredits && isWithinValidity;
       })
       .map((cp) => cp.clientId),
   );
 
-  // 🔹 Clientes disponíveis para receber um novo plano
+  // ✅ USERS não tem companyId: filtra por membership (company_members)
   const allClients = await prisma.user.findMany({
-    where: { role: "CLIENT" },
+    where: {
+      role: "CLIENT",
+      companyMemberships: {
+        some: {
+          companyId,
+          isActive: true,
+        },
+      },
+    },
     orderBy: { name: "asc" },
   });
 
@@ -91,22 +109,21 @@ export default async function ServicesPage() {
     (client) => !blockedClientIds.has(client.id),
   );
 
-  // 🔹 Descobrir último plano de cada cliente (pra regra de revalidação)
-  const latestPlanByClientId = new Map<
+  // ✅ último ClientPlan por cliente
+  const latestClientPlanByClientId = new Map<
     string,
-    { planId: string; startDate: Date }
+    { clientPlanId: string; startDate: Date }
   >();
 
-  clientPlans.forEach((plan) => {
-    const clientId = (plan as any).clientId ?? plan.client.id;
-    const planStartDate = new Date(plan.startDate);
+  clientPlans.forEach((cp) => {
+    const clientId = cp.clientId ?? cp.client.id;
+    const startDate = new Date(cp.startDate);
+    const current = latestClientPlanByClientId.get(clientId);
 
-    const current = latestPlanByClientId.get(clientId);
-
-    if (!current || planStartDate > current.startDate) {
-      latestPlanByClientId.set(clientId, {
-        planId: plan.id,
-        startDate: planStartDate,
+    if (!current || startDate > current.startDate) {
+      latestClientPlanByClientId.set(clientId, {
+        clientPlanId: cp.id,
+        startDate,
       });
     }
   });
@@ -227,8 +244,7 @@ export default async function ServicesPage() {
                 </tr>
               ) : (
                 clientPlans.map((clientPlan) => {
-                  const clientId =
-                    (clientPlan as any).clientId ?? clientPlan.client.id;
+                  const clientId = clientPlan.clientId ?? clientPlan.client.id;
 
                   const isActive = clientPlan.status === "ACTIVE";
                   const hasCredits =
@@ -238,11 +254,12 @@ export default async function ServicesPage() {
 
                   const canExpire = isActive && hasCredits;
 
-                  const isLastPlanForClient =
-                    latestPlanByClientId.get(clientId)?.planId ===
+                  const isLastClientPlanForClient =
+                    latestClientPlanByClientId.get(clientId)?.clientPlanId ===
                     clientPlan.id;
 
-                  const canRevalidate = isFullyUsed && isLastPlanForClient;
+                  const canRevalidate =
+                    isFullyUsed && isLastClientPlanForClient;
 
                   return (
                     <ClientPlanRow

@@ -12,11 +12,24 @@ function getJwtSecretKey() {
   return new TextEncoder().encode(secret);
 }
 
+function getPainelCompanyIdFromEnv(): string | null {
+  const raw = process.env.PAINEL_COMPANY_ID;
+  const companyId = raw?.trim();
+  return companyId && companyId.length > 0 ? companyId : null;
+}
+
+type PainelRole = "OWNER" | "ADMIN" | "STAFF" | "CLIENT";
+
 type PainelSessionPayload = {
   sub: string;
-  role: "CLIENT" | "BARBER" | "ADMIN";
+  role: PainelRole;
   email: string;
   name?: string | null;
+
+  companyId: string;
+
+  unitId?: string | null;
+  canSeeAllUnits?: boolean;
 };
 
 async function verifySessionToken(
@@ -25,7 +38,33 @@ async function verifySessionToken(
   try {
     const secret = getJwtSecretKey();
     const { payload } = await jwtVerify(token, secret);
-    return payload as PainelSessionPayload;
+    const p = payload as any;
+
+    if (!p?.companyId) return null;
+
+    const companyId = String(p.companyId);
+
+    const envCompanyId = getPainelCompanyIdFromEnv();
+    if (envCompanyId && companyId !== envCompanyId) return null;
+
+    const role = String(p.role ?? "").toUpperCase() as PainelRole;
+    if (!["OWNER", "ADMIN", "STAFF", "CLIENT"].includes(role)) return null;
+
+    return {
+      sub: String(p.sub),
+      role,
+      email: String(p.email),
+      name: (p.name ?? null) as any,
+      companyId,
+      unitId:
+        p.unitId == null
+          ? null
+          : typeof p.unitId === "string"
+            ? p.unitId
+            : String(p.unitId),
+      canSeeAllUnits:
+        typeof p.canSeeAllUnits === "boolean" ? p.canSeeAllUnits : undefined,
+    };
   } catch {
     return null;
   }
@@ -37,21 +76,18 @@ export async function middleware(req: NextRequest) {
   const isAdminRoute = pathname.startsWith("/admin");
   const isBarberRoute = pathname.startsWith("/barber");
 
-  // Rotas não protegidas seguem normal
   if (!isAdminRoute && !isBarberRoute) {
     return NextResponse.next();
   }
 
   const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-  // Sem cookie → manda pro login
   if (!token) {
     return NextResponse.redirect(new URL("/painel/login", req.url));
   }
 
   const payload = await verifySessionToken(token);
 
-  // Token inválido → limpa cookie e manda pro login
   if (!payload) {
     const res = NextResponse.redirect(new URL("/painel/login", req.url));
     res.cookies.delete(SESSION_COOKIE_NAME);
@@ -60,14 +96,18 @@ export async function middleware(req: NextRequest) {
 
   const role = payload.role;
 
-  // Proteção admin → só ADMIN acessa /admin/**
+  // /admin: só ADMIN (se quiser OWNER também, inclua aqui)
   if (isAdminRoute && role !== "ADMIN") {
-    return NextResponse.redirect(new URL("/painel/login", req.url));
+    return NextResponse.redirect(
+      new URL("/painel/login?error=permissao", req.url),
+    );
   }
 
-  // Proteção barbeiro → só BARBER acessa /barber/**
-  if (isBarberRoute && role !== "BARBER") {
-    return NextResponse.redirect(new URL("/painel/login", req.url));
+  // /barber: STAFF (profissional) e ADMIN (opcional)
+  if (isBarberRoute && !(role === "STAFF" || role === "ADMIN")) {
+    return NextResponse.redirect(
+      new URL("/painel/login?error=permissao", req.url),
+    );
   }
 
   return NextResponse.next();

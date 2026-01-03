@@ -1,7 +1,42 @@
+// src/services/api.ts
 import * as SecureStore from "expo-secure-store";
 
 export const AUTH_TOKEN_KEY = "auth_token";
 const AUTH_SESSION_KEY = "auth_session";
+
+// ✅ mesmo storage key que vamos usar no AuthProvider / bootstrap
+export const COMPANY_ID_STORAGE_KEY = "company_context_id";
+
+// ✅ cache em memória (evita race logo após login)
+let MEMORY_TOKEN: string | null = null;
+let MEMORY_COMPANY_ID: string | null = null;
+
+/**
+ * ✅ Injeta token em memória para requests imediatas (sem depender do SecureStore)
+ */
+export function setApiAuthToken(token: string | null) {
+  MEMORY_TOKEN =
+    typeof token === "string" && token.trim() ? token.trim() : null;
+}
+
+/**
+ * ✅ Injeta companyId em memória para requests imediatas (sem depender do SecureStore)
+ */
+export function setApiCompanyId(companyId: string | null) {
+  MEMORY_COMPANY_ID =
+    typeof companyId === "string" && companyId.trim() ? companyId.trim() : null;
+}
+
+/**
+ * ✅ Limpa caches em memória (útil em casos de 401 / troca de sessão)
+ */
+function clearMemoryAuth() {
+  MEMORY_TOKEN = null;
+}
+
+function clearMemoryCompany() {
+  MEMORY_COMPANY_ID = null;
+}
 
 /**
  * Base URL do backend
@@ -33,9 +68,30 @@ type RequestOptions = {
 function normalizeHeaders(input?: HeadersLike): HeadersMap {
   if (!input) return {};
   if (typeof (input as any).headers === "object") {
-    return ((input as any).headers ?? {}) as HeadersMap;
+    return (((input as any).headers ?? {}) as HeadersMap) || {};
   }
-  return input as HeadersMap;
+  return (input as HeadersMap) || {};
+}
+
+function getHeaderValueCI(headers: HeadersMap, key: string): string | null {
+  const target = key.toLowerCase();
+  for (const k of Object.keys(headers)) {
+    if (k.toLowerCase() === target) {
+      const v = headers[k];
+      return typeof v === "string" && v.trim().length ? v.trim() : null;
+    }
+  }
+  return null;
+}
+
+function deleteHeaderCI(headers: HeadersMap, key: string) {
+  const target = key.toLowerCase();
+  for (const k of Object.keys(headers)) {
+    if (k.toLowerCase() === target) {
+      delete headers[k];
+      return;
+    }
+  }
 }
 
 async function safeReadBody(res: Response) {
@@ -83,9 +139,15 @@ function tryExtractTokenFromSession(sessionJson: string | null): string | null {
 }
 
 async function getAuthToken(): Promise<string | null> {
+  // ✅ 0) cache em memória
+  if (MEMORY_TOKEN) return MEMORY_TOKEN;
+
   // 1) fonte principal: auth_token
   const direct = await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
-  if (direct && direct.trim()) return direct.trim();
+  if (direct && direct.trim()) {
+    MEMORY_TOKEN = direct.trim();
+    return MEMORY_TOKEN;
+  }
 
   // 2) fallback: auth_session.*
   const sessionJson = await SecureStore.getItemAsync(AUTH_SESSION_KEY);
@@ -93,10 +155,24 @@ async function getAuthToken(): Promise<string | null> {
   if (fromSession) {
     // “cura” pra próximas requests
     await SecureStore.setItemAsync(AUTH_TOKEN_KEY, fromSession);
+    MEMORY_TOKEN = fromSession;
     return fromSession;
   }
 
   return null;
+}
+
+// ✅ companyId vem do SecureStore (com cache em memória)
+async function getCompanyId(): Promise<string | null> {
+  // ✅ 0) cache em memória
+  if (MEMORY_COMPANY_ID) return MEMORY_COMPANY_ID;
+
+  const raw = await SecureStore.getItemAsync(COMPANY_ID_STORAGE_KEY);
+  const id = typeof raw === "string" ? raw.trim() : "";
+  if (!id.length) return null;
+
+  MEMORY_COMPANY_ID = id;
+  return id;
 }
 
 function joinUrl(base: string, path: string) {
@@ -105,35 +181,113 @@ function joinUrl(base: string, path: string) {
   return `${b}${p}`;
 }
 
+function shouldLogApiErrors() {
+  // ✅ liga log só em DEV e quando você quiser
+  // Se quiser forçar: EXPO_PUBLIC_API_DEBUG=1
+  const forced = String(process.env.EXPO_PUBLIC_API_DEBUG ?? "").trim();
+  return __DEV__ || forced === "1" || forced.toLowerCase() === "true";
+}
+
+function looksLikeAuthOrTenantError(status: number, data: any) {
+  const msg = String(data?.message || data?.error || "").toLowerCase();
+  return (
+    status === 401 ||
+    msg.includes("missing_token") ||
+    msg.includes("invalid_token") ||
+    msg.includes("user_not_found") ||
+    msg.includes("missing_company") ||
+    msg.includes("companyid") ||
+    msg.includes("tenant") ||
+    msg.includes("não autorizado") ||
+    msg.includes("token ausente") ||
+    msg.includes("http 401")
+  );
+}
+
 async function request<T = any>(
   path: string,
   options: RequestOptions = {},
 ): Promise<T> {
-  const token = await getAuthToken();
+  const method = options.method ?? "GET";
+
   const extraHeaders = normalizeHeaders(options.headers);
 
-  const hasAuthHeader =
-    typeof (extraHeaders as any)?.Authorization === "string" &&
-    String((extraHeaders as any).Authorization).trim().length > 0;
+  // ✅ flags internas (não devem ir pro backend)
+  // Use: { "x-skip-company-id": "1" } para NÃO mandar x-company-id numa request específica.
+  const skipCompanyId =
+    getHeaderValueCI(extraHeaders, "x-skip-company-id") === "1" ||
+    getHeaderValueCI(extraHeaders, "x-skip-company-id")?.toLowerCase() ===
+      "true";
+
+  if (skipCompanyId) {
+    deleteHeaderCI(extraHeaders, "x-skip-company-id");
+  }
+
+  // ✅ Authorization (case-insensitive)
+  const authHeader = getHeaderValueCI(extraHeaders, "Authorization");
+  const hasAuthHeader = !!authHeader;
+
+  // ✅ x-company-id (case-insensitive)
+  const companyHeader = getHeaderValueCI(extraHeaders, "x-company-id");
+  const hasCompanyHeader = !!companyHeader;
+
+  // ✅ otimização: só busca token/companyId se a request NÃO veio com header manual
+  const token = hasAuthHeader ? null : await getAuthToken();
+  const companyId =
+    hasCompanyHeader || skipCompanyId ? null : await getCompanyId();
+
+  const hasBody =
+    options.body !== undefined &&
+    options.body !== null &&
+    method !== "GET" &&
+    method !== "DELETE";
+
+  // ✅ headers finais
+  const finalHeaders: HeadersMap = {
+    ...(hasBody ? { "Content-Type": "application/json" } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(companyId ? { "x-company-id": companyId } : {}),
+    ...extraHeaders,
+  };
 
   const res = await fetch(joinUrl(API_URL, path), {
-    method: options.method ?? "GET",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token && !hasAuthHeader ? { Authorization: `Bearer ${token}` } : {}),
-      ...extraHeaders,
-    },
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    method,
+    headers: finalHeaders,
+    body: hasBody ? JSON.stringify(options.body) : undefined,
   });
 
   const data = await safeReadBody(res);
 
   if (!res.ok) {
-    const error: any = new Error(
-      data?.message || data?.error || `Erro ${res.status} ao acessar ${path}`,
-    );
+    const message =
+      (data as any)?.message ||
+      (data as any)?.error ||
+      `Erro ${res.status} ao acessar ${path}`;
+
+    // ✅ se deu erro de auth/tenant, zera caches em memória pra não repetir request quebrada
+    if (looksLikeAuthOrTenantError(res.status, data)) {
+      clearMemoryAuth();
+      // Só limpa company cache se o erro “parece” de tenant também.
+      clearMemoryCompany();
+    }
+
+    const error: any = new Error(message);
     error.status = res.status;
     error.data = data;
+    error.path = path;
+    error.method = method;
+
+    if (shouldLogApiErrors()) {
+      // ✅ não loga token, só status + payload do erro
+      console.log("[api:error]", {
+        method,
+        path,
+        status: res.status,
+        message,
+        data,
+      });
+    }
+
     throw error;
   }
 
@@ -155,4 +309,47 @@ export const api = {
 
   delete: <T = any>(path: string, headers?: HeadersLike) =>
     request<T>(path, { method: "DELETE", headers }),
+
+  /**
+   * ✅ quando precisar forçar tenant manualmente (ex: super-admin trocando contexto)
+   * Observação: aqui a request já vai com x-company-id, então o request() não lê do storage.
+   */
+  withCompany: (companyId: string) => {
+    const id = String(companyId ?? "").trim();
+
+    return {
+      get: <T = any>(path: string, headers?: HeadersLike) =>
+        request<T>(path, {
+          method: "GET",
+          headers: { ...normalizeHeaders(headers), "x-company-id": id },
+        }),
+
+      post: <T = any>(path: string, body?: any, headers?: HeadersLike) =>
+        request<T>(path, {
+          method: "POST",
+          body,
+          headers: { ...normalizeHeaders(headers), "x-company-id": id },
+        }),
+
+      put: <T = any>(path: string, body?: any, headers?: HeadersLike) =>
+        request<T>(path, {
+          method: "PUT",
+          body,
+          headers: { ...normalizeHeaders(headers), "x-company-id": id },
+        }),
+
+      patch: <T = any>(path: string, body?: any, headers?: HeadersLike) =>
+        request<T>(path, {
+          method: "PATCH",
+          body,
+          headers: { ...normalizeHeaders(headers), "x-company-id": id },
+        }),
+
+      delete: <T = any>(path: string, headers?: HeadersLike) =>
+        request<T>(path, {
+          method: "DELETE",
+          headers: { ...normalizeHeaders(headers), "x-company-id": id },
+        }),
+    };
+  },
 };

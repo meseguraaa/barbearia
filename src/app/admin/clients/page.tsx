@@ -1,3 +1,4 @@
+// app/admin/clients/page.tsx
 import { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
@@ -27,6 +28,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { CustomerLevel } from "@prisma/client";
+import { jwtVerify } from "jose";
 
 export const dynamic = "force-dynamic";
 
@@ -34,8 +36,58 @@ export const metadata: Metadata = {
   title: "Admin | Clientes",
 };
 
+const COMPANY_COOKIE_NAME = "admin_company_context";
+const SESSION_COOKIE_NAME = "painel_session";
+
 const UNIT_COOKIE_NAME = "admin_unit_context";
 const UNIT_ALL_VALUE = "all";
+
+function getJwtSecretKey() {
+  const secret = process.env.PAINEL_JWT_SECRET;
+  if (!secret) throw new Error("PAINEL_JWT_SECRET não definido no .env");
+  return new TextEncoder().encode(secret);
+}
+
+async function getAdminUserIdFromPainelSessionCookie(): Promise<string | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return null;
+
+  try {
+    const { payload } = await jwtVerify(token, getJwtSecretKey());
+    const sub = String((payload as any)?.sub ?? "").trim();
+    return sub.length ? sub : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ✅ companyId no Admin:
+ * 1) cookie admin_company_context
+ * 2) decode do cookie painel_session -> payload.sub (userId)
+ * 3) primeira membership ativa no banco (company_members)
+ */
+async function requireCompanyId() {
+  const cookieStore = await cookies();
+  const cookieCompanyId = cookieStore.get(COMPANY_COOKIE_NAME)?.value;
+  if (cookieCompanyId) return cookieCompanyId;
+
+  const userId = await getAdminUserIdFromPainelSessionCookie();
+  if (userId) {
+    const membership = await prisma.companyMember.findFirst({
+      where: { userId, isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: { companyId: true },
+    });
+
+    if (membership?.companyId) return membership.companyId;
+  }
+
+  throw new Error(
+    `companyId ausente (cookie "${COMPANY_COOKIE_NAME}" e sem fallback via "${SESSION_COOKIE_NAME}").`,
+  );
+}
 
 const LEVEL_RANK: Record<CustomerLevel, number> = {
   BRONZE: 1,
@@ -209,6 +261,7 @@ export default async function ClientsPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   await requireAdminPermission("canAccessClients");
+  const companyId = await requireCompanyId();
 
   const resolvedSearchParams = await searchParams;
 
@@ -229,7 +282,20 @@ export default async function ClientsPage({
   const requestedPage = Number(pageParam ?? "1");
   const safeRequestedPage = Number.isFinite(requestedPage) ? requestedPage : 1;
 
-  const whereUser: any = { role: "CLIENT" };
+  /**
+   * ✅ Multi-tenant REAL:
+   * "Cliente" é CompanyMember.role = CLIENT (por empresa),
+   * NÃO User.role (global).
+   */
+  const whereUser: any = {
+    companyMemberships: {
+      some: {
+        companyId,
+        isActive: true,
+        role: "CLIENT",
+      },
+    },
+  };
 
   if (q.length > 0) {
     whereUser.OR = [
@@ -268,6 +334,7 @@ export default async function ClientsPage({
 
   const levelStates = await prisma.customerLevelState.findMany({
     where: {
+      companyId,
       userId: { in: clientIds },
       ...(selectedUnit !== UNIT_ALL_VALUE ? { unitId: selectedUnit } : {}),
     },
@@ -325,7 +392,7 @@ export default async function ClientsPage({
                 />
               </div>
 
-              <div className="w-full md:w-[220px]">
+              <div className="w-full md:w-55">
                 <label className="text-[11px] text-content-secondary">
                   Ordenar por
                 </label>
@@ -341,7 +408,7 @@ export default async function ClientsPage({
                 </select>
               </div>
 
-              <div className="w-full md:w-[220px]">
+              <div className="w-full md:w-55">
                 <label className="text-[11px] text-content-secondary">
                   Plano
                 </label>
@@ -356,7 +423,7 @@ export default async function ClientsPage({
                 </select>
               </div>
 
-              <div className="w-full md:w-[220px]">
+              <div className="w-full md:w-55">
                 <label className="text-[11px] text-content-secondary">
                   Nível
                 </label>
@@ -377,7 +444,7 @@ export default async function ClientsPage({
                 <Button type="submit" variant="edit2">
                   Filtrar
                 </Button>
-                <Button asChild variant="destructive">
+                <Button asChild variant="outline">
                   <Link href="/admin/clients">Limpar</Link>
                 </Button>
               </div>
@@ -388,24 +455,28 @@ export default async function ClientsPage({
     );
   }
 
-  const services = await prisma.service.findMany();
+  const services = await prisma.service.findMany({
+    where: { companyId },
+  });
+
   const servicePriceById = new Map<string, number>(
-    services.map((s) => [s.id, Number(s.price)]),
+    services.map((s) => [s.id, Number((s as any).price)]),
   );
 
   const appointments = await prisma.appointment.findMany({
-    where: { clientId: { in: clientIds } },
+    where: { companyId, clientId: { in: clientIds } },
     orderBy: { scheduleAt: "asc" },
   });
 
   const clientPlans = await prisma.clientPlan.findMany({
-    where: { clientId: { in: clientIds } },
+    where: { companyId, clientId: { in: clientIds } },
     include: { plan: true },
     orderBy: { startDate: "asc" },
   });
 
   const productOrders = await prisma.order.findMany({
     where: {
+      companyId,
       clientId: { in: clientIds },
       status: "COMPLETED",
       items: { some: { productId: { not: null } } },
@@ -430,11 +501,13 @@ export default async function ClientsPage({
     );
 
     const canceledWithFee = canceledAppointments.filter(
-      (apt) => apt.cancelFeeApplied,
+      (apt) => (apt as any).cancelFeeApplied,
     );
     const canceledWithFeeCount = canceledWithFee.length;
     const totalCancelFee = canceledWithFee.reduce((sum, apt) => {
-      const fee = apt.cancelFeeValue ? Number(apt.cancelFeeValue) : 0;
+      const fee = (apt as any).cancelFeeValue
+        ? Number((apt as any).cancelFeeValue)
+        : 0;
       return sum + fee;
     }, 0);
 
@@ -442,13 +515,16 @@ export default async function ClientsPage({
     const totalPlans = userClientPlans.length;
 
     const activePlan = userClientPlans.find((cp) => {
-      const hasCredits = cp.usedBookings < cp.plan.totalBookings;
-      const isActive = cp.status === "ACTIVE";
-      const isWithinValidity = cp.endDate >= today;
+      const hasCredits =
+        (cp as any).usedBookings < (cp as any).plan.totalBookings;
+      const isActive = (cp as any).status === "ACTIVE";
+      const isWithinValidity = (cp as any).endDate >= today;
       return isActive && isWithinValidity && hasCredits;
     });
 
-    const doneDates = doneAppointments.map((apt) => apt.scheduleAt);
+    const doneDates = doneAppointments.map(
+      (apt) => (apt as any).scheduleAt as Date,
+    );
     const frequencyLabel = buildFrequencyLabel(doneDates);
 
     const lastDoneDate =
@@ -468,31 +544,32 @@ export default async function ClientsPage({
       if (snapshot != null) return sum + Number(snapshot);
 
       const price =
-        apt.serviceId && servicePriceById.get(apt.serviceId as string);
+        (apt as any).serviceId &&
+        servicePriceById.get((apt as any).serviceId as string);
       return sum + (Number(price) || 0);
     }, 0);
 
     const totalFromPlans = userClientPlans.reduce(
-      (sum, cp) => sum + Number(cp.plan.price),
+      (sum, cp) => sum + Number((cp as any).plan.price),
       0,
     );
 
     const userProductOrders = productOrders.filter(
-      (order) => order.clientId === user.id,
+      (order) => (order as any).clientId === user.id,
     );
 
     const totalFromProducts = userProductOrders.reduce(
-      (sum, order) => sum + Number(order.totalAmount),
+      (sum, order) => sum + Number((order as any).totalAmount),
       0,
     );
 
     const totalSpent =
       totalFromAppointments + totalFromPlans + totalFromProducts;
 
-    const rawPhone = user.phone ?? "";
-    const phoneDigits = rawPhone.replace(/\D/g, "");
+    const rawPhone = (user as any).phone ?? "";
+    const phoneDigits = String(rawPhone).replace(/\D/g, "");
 
-    const baseName = user.name ?? "cliente";
+    const baseName = (user as any).name ?? "cliente";
     const whatsappMessage = `Olá ${baseName}! Tudo bem? Aqui é da barbearia. Vi seu cadastro aqui no sistema e queria saber se posso te ajudar com um novo agendamento. ✂️`;
 
     const whatsappUrl =
@@ -504,12 +581,12 @@ export default async function ClientsPage({
 
     return {
       id: user.id,
-      name: user.name ?? "Cliente sem nome",
-      email: user.email ?? "",
+      name: (user as any).name ?? "Cliente sem nome",
+      email: (user as any).email ?? "",
       phone: rawPhone || "—",
-      createdAt: user.createdAt,
+      createdAt: (user as any).createdAt,
       birthday: (user as any).birthday ?? null,
-      image: user.image ?? null,
+      image: (user as any).image ?? null,
 
       customerLevel: levelByUserId.get(user.id) ?? "BRONZE",
 
@@ -588,7 +665,7 @@ export default async function ClientsPage({
                 />
               </div>
 
-              <div className="w-full md:w-[220px]">
+              <div className="w-full md:w-55">
                 <label className="text-[11px] text-content-secondary">
                   Ordenar por
                 </label>
@@ -604,7 +681,7 @@ export default async function ClientsPage({
                 </select>
               </div>
 
-              <div className="w-full md:w-[220px]">
+              <div className="w-full md:w-55">
                 <label className="text-[11px] text-content-secondary">
                   Plano
                 </label>
@@ -619,7 +696,7 @@ export default async function ClientsPage({
                 </select>
               </div>
 
-              <div className="w-full md:w-[220px]">
+              <div className="w-full md:w-55">
                 <label className="text-[11px] text-content-secondary">
                   Nível
                 </label>
@@ -658,9 +735,7 @@ export default async function ClientsPage({
               className="border border-border-primary rounded-xl bg-background-tertiary"
             >
               <div className="flex items-center gap-6 px-4 py-3 w-full">
-                {/* ✅ TRIGGER = GRID (inclui a coluna fixa da seta) */}
                 <AccordionTrigger className="flex-1 min-w-0 px-0 py-0 hover:no-underline grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.6fr)_32px] items-center gap-6">
-                  {/* COL 1: Nome + Email */}
                   <div className="min-w-0 flex items-center gap-3 text-left">
                     <div className="h-10 w-10 rounded-full overflow-hidden bg-background-secondary border border-border-primary flex items-center justify-center shrink-0">
                       {row.image ? (
@@ -704,7 +779,6 @@ export default async function ClientsPage({
                     </div>
                   </div>
 
-                  {/* COL 2: Nível */}
                   <div className="hidden sm:flex flex-col text-left min-w-0">
                     <span className="text-[11px] text-content-secondary">
                       Nível
@@ -712,14 +786,15 @@ export default async function ClientsPage({
                     <div className="min-w-0">
                       <Badge
                         variant="outline"
-                        className={`text-xs ${levelBadgeClass(row.customerLevel)}`}
+                        className={`text-xs ${levelBadgeClass(
+                          row.customerLevel,
+                        )}`}
                       >
                         {levelLabel(row.customerLevel)}
                       </Badge>
                     </div>
                   </div>
 
-                  {/* COL 3: Telefone */}
                   <div className="hidden md:flex flex-col text-left min-w-0">
                     <span className="text-[11px] text-content-secondary">
                       Telefone
@@ -729,7 +804,6 @@ export default async function ClientsPage({
                     </span>
                   </div>
 
-                  {/* COL 4: Último agendamento */}
                   <div className="hidden sm:flex flex-col text-left min-w-0">
                     <span className="text-[11px] text-content-secondary">
                       Último agendamento
@@ -742,11 +816,8 @@ export default async function ClientsPage({
                         : "Sem atendimento"}
                     </span>
                   </div>
-
-                  {/* COL 5 é a seta do AccordionTrigger (automática) */}
                 </AccordionTrigger>
 
-                {/* ✅ AÇÕES grudadas no canto direito */}
                 <div className="ml-auto flex items-center justify-end gap-2 whitespace-nowrap">
                   <AdminEditClientDialog
                     client={{
@@ -797,7 +868,9 @@ export default async function ClientsPage({
                         <span className="flex-1 min-w-0 truncate">
                           <Badge
                             variant="outline"
-                            className={`text-xs ${levelBadgeClass(row.customerLevel)}`}
+                            className={`text-xs ${levelBadgeClass(
+                              row.customerLevel,
+                            )}`}
                           >
                             {levelLabel(row.customerLevel)}
                           </Badge>

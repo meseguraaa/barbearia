@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -8,8 +8,8 @@ import {
   Alert,
   ImageBackground,
 } from "react-native";
-import * as AuthSession from "expo-auth-session";
 import * as WebBrowser from "expo-web-browser";
+import * as AuthSession from "expo-auth-session";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { FontAwesome5, AntDesign, FontAwesome } from "@expo/vector-icons";
@@ -23,10 +23,19 @@ const API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL?.trim() ||
   (__DEV__ ? "http://localhost:3000" : "");
 
-const redirectUri = AuthSession.makeRedirectUri({
-  scheme: "agendaplay",
-  path: "auth",
-});
+// ✅ companyId obrigatório no fluxo mobile (multi-tenant REAL)
+const COMPANY_ID = process.env.EXPO_PUBLIC_COMPANY_ID?.trim() || "";
+
+// ✅ redirectUri (deep link do app)
+const redirectUri = (() => {
+  try {
+    // path "auth" precisa bater com seu endpoint /api/mobile/auth-redirect
+    return AuthSession.makeRedirectUri({ scheme: "agendaplay", path: "auth" });
+  } catch {
+    // fallback duro, mas evita crash em ambientes estranhos
+    return "agendaplay://auth";
+  }
+})();
 
 function parseSessionParam(value: string): any | null {
   try {
@@ -37,31 +46,122 @@ function parseSessionParam(value: string): any | null {
   }
 }
 
+function safeParseUrl(raw: string): URL | null {
+  try {
+    return new URL(raw);
+  } catch {
+    return null;
+  }
+}
+
+function ensureCompanyIdInSession(session: any, companyId: string) {
+  if (!session || typeof session !== "object") return session;
+
+  const cid = String(companyId || "").trim();
+  if (!cid) return session;
+
+  // já existe em algum lugar? ok
+  const already =
+    String(session?.companyId ?? "").trim() ||
+    String(session?.company_id ?? "").trim() ||
+    String(session?.tenantId ?? "").trim() ||
+    String(session?.tenant_id ?? "").trim() ||
+    String(session?.user?.companyId ?? "").trim() ||
+    String(session?.user?.company?.id ?? "").trim() ||
+    String(session?.session?.companyId ?? "").trim() ||
+    String(session?.data?.companyId ?? "").trim();
+
+  if (already) return session;
+
+  // injeta de forma “compat”
+  const next = { ...session };
+
+  // 1) raiz
+  next.companyId = cid;
+
+  // 2) user (se existir)
+  if (next.user && typeof next.user === "object") {
+    next.user = { ...next.user, companyId: cid };
+  }
+
+  // 3) session.user (se existir)
+  if (next.session && typeof next.session === "object") {
+    next.session = { ...next.session, companyId: cid };
+    if (next.session.user && typeof next.session.user === "object") {
+      next.session.user = { ...next.session.user, companyId: cid };
+    }
+  }
+
+  // 4) data.user (se existir)
+  if (next.data && typeof next.data === "object") {
+    next.data = { ...next.data, companyId: cid };
+    if (next.data.user && typeof next.data.user === "object") {
+      next.data.user = { ...next.data.user, companyId: cid };
+    }
+  }
+
+  return next;
+}
+
 export default function Login() {
   const insets = useSafeAreaInsets();
-  const { signIn } = useAuth();
+  const { signIn, refreshMe } = useAuth();
+
   const [loading, setLoading] = useState(false);
 
+  const apiOk = useMemo(() => Boolean(API_BASE_URL), []);
+  const companyOk = useMemo(() => Boolean(COMPANY_ID), []);
+
   async function handleProviderLogin(provider: "google" | "facebook") {
+    if (loading) return;
+
     try {
+      if (!apiOk) {
+        Alert.alert(
+          "Login",
+          "API do app não configurada (EXPO_PUBLIC_API_URL).",
+        );
+        return;
+      }
+
+      if (!companyOk) {
+        Alert.alert(
+          "Login",
+          "Aplicativo sem empresa configurada (EXPO_PUBLIC_COMPANY_ID).",
+        );
+        return;
+      }
+
       setLoading(true);
 
-      const callbackUrl = `${API_BASE_URL}/api/mobile/auth-redirect?redirect_uri=${encodeURIComponent(
-        redirectUri,
-      )}`;
+      // ✅ callbackUrl: backend -> /api/mobile/auth-redirect (ele devolve para o deep link do app)
+      const callback = new URL(`${API_BASE_URL}/api/mobile/auth-redirect`);
+      callback.searchParams.set(
+        "redirect_uri",
+        encodeURIComponent(String(redirectUri)),
+      );
+      callback.searchParams.set("companyId", COMPANY_ID);
 
-      const authUrl = `${API_BASE_URL}/api/auth/signin/${provider}?callbackUrl=${encodeURIComponent(
-        callbackUrl,
-      )}`;
+      const auth = new URL(`${API_BASE_URL}/api/auth/signin/${provider}`);
+      auth.searchParams.set("callbackUrl", callback.toString());
 
       const result = await WebBrowser.openAuthSessionAsync(
-        authUrl,
-        redirectUri,
+        auth.toString(),
+        String(redirectUri),
+        {
+          // ✅ no iOS ajuda muito em dev/testes (evita cookies grudados)
+          preferEphemeralSession: Platform.OS === "ios",
+        },
       );
 
+      // cancel/dismiss: usuário fechou, não é erro
       if (result.type !== "success" || !result.url) return;
 
-      const url = new URL(result.url);
+      const url = safeParseUrl(result.url);
+      if (!url) {
+        Alert.alert("Login", "Retorno inválido do provedor. Tente novamente.");
+        return;
+      }
 
       const error = url.searchParams.get("error");
       const message = url.searchParams.get("message");
@@ -69,7 +169,7 @@ export default function Login() {
       if (error) {
         Alert.alert(
           "Login",
-          message || "Não foi possível autenticar. Tente novamente.",
+          message || `Não foi possível autenticar (${error}).`,
         );
         return;
       }
@@ -85,9 +185,8 @@ export default function Login() {
         return;
       }
 
-      const session = parseSessionParam(payloadParam);
-
-      if (!session) {
+      const parsed = parseSessionParam(payloadParam);
+      if (!parsed) {
         Alert.alert(
           "Login",
           "Sessão inválida retornada pelo login. Tente novamente.",
@@ -95,7 +194,18 @@ export default function Login() {
         return;
       }
 
+      // ✅ garante companyId dentro do payload (caso backend não inclua)
+      const session = ensureCompanyIdInSession(parsed, COMPANY_ID);
+
+      // ✅ 1) salva sessão/token (AuthProvider injeta token/companyId na memória do api)
       await signIn(JSON.stringify(session));
+
+      // ✅ 2) warm-up do /me (acelera home e resolve dados do perfil)
+      try {
+        await refreshMe();
+      } catch {
+        // ok: guard/refresh automático ainda cobre
+      }
     } catch {
       Alert.alert("Login", "Erro inesperado ao autenticar.");
     } finally {
@@ -245,6 +355,23 @@ export default function Login() {
                   </View>
                 </Pressable>
               </View>
+
+              {/* dica útil em dev */}
+              {__DEV__ && (!apiOk || !companyOk) ? (
+                <View style={{ marginTop: 12 }}>
+                  {!apiOk ? (
+                    <Text style={styles.subtitle}>
+                      Configure EXPO_PUBLIC_API_URL (ex:
+                      https://xxxx.ngrok-free.dev)
+                    </Text>
+                  ) : null}
+                  {!companyOk ? (
+                    <Text style={styles.subtitle}>
+                      Configure EXPO_PUBLIC_COMPANY_ID (id da empresa no banco)
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           </View>
         </View>

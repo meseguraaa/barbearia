@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+import { requireAdminForModule } from "@/lib/admin-permissions";
 
 /* ===========================
  * HELPERS
@@ -21,6 +22,25 @@ function isValidTimeHHMM(value: string) {
   return /^([01]\d|2[0-3]):([0-5]\d)$/.test(value);
 }
 
+/**
+ * ✅ Tenant guard (Unit pertence à company do admin)
+ */
+async function requireUnitFromCompanyOrThrow(
+  unitId: string,
+  companyId: string,
+) {
+  const unit = await prisma.unit.findFirst({
+    where: { id: unitId, companyId },
+    select: { id: true },
+  });
+
+  if (!unit) {
+    throw new Error("Unidade não encontrada (company mismatch).");
+  }
+
+  return unit;
+}
+
 /* ===========================
  * CREATE UNIT
  * =========================== */
@@ -32,6 +52,9 @@ const createUnitSchema = z.object({
 });
 
 export async function createUnit(formData: FormData): Promise<void> {
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
+
   const result = createUnitSchema.safeParse({
     name: formData.get("name"),
     phone: formData.get("phone") || undefined,
@@ -51,6 +74,7 @@ export async function createUnit(formData: FormData): Promise<void> {
   try {
     await prisma.unit.create({
       data: {
+        companyId, // ✅ obrigatório no schema
         name: parsed.name.trim(),
         phone,
         address,
@@ -106,6 +130,9 @@ function parseIsActive(raw: unknown): boolean | undefined {
  * - ou chamado manualmente com new FormData()
  */
 export async function updateUnit(formData: FormData): Promise<void> {
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
+
   const result = updateUnitSchema.safeParse({
     unitId: formData.get("unitId"),
     name: formData.get("name"),
@@ -126,15 +153,7 @@ export async function updateUnit(formData: FormData): Promise<void> {
   const isActive = parseIsActive(parsed.isActive);
 
   try {
-    const unit = await prisma.unit.findUnique({
-      where: { id: parsed.unitId },
-      select: { id: true },
-    });
-
-    if (!unit) {
-      console.error("[updateUnit] Unidade não encontrada:", parsed.unitId);
-      return;
-    }
+    await requireUnitFromCompanyOrThrow(parsed.unitId, companyId);
 
     await prisma.unit.update({
       where: { id: parsed.unitId },
@@ -167,10 +186,15 @@ const toggleUnitStatusSchema = z.object({
 });
 
 export async function toggleUnitStatus(input: { unitId: string }) {
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
+
   const parsed = toggleUnitStatusSchema.parse(input);
 
-  const unit = await prisma.unit.findUnique({
-    where: { id: parsed.unitId },
+  await requireUnitFromCompanyOrThrow(parsed.unitId, companyId);
+
+  const unit = await prisma.unit.findFirst({
+    where: { id: parsed.unitId, companyId },
     select: { id: true, isActive: true },
   });
 
@@ -222,16 +246,12 @@ const saveUnitWeeklyAvailabilitySchema = z.object({
 export async function saveUnitWeeklyAvailability(
   input: SaveUnitWeeklyAvailabilityInput,
 ) {
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
+
   const parsed = saveUnitWeeklyAvailabilitySchema.parse(input);
 
-  const unit = await prisma.unit.findUnique({
-    where: { id: parsed.unitId },
-    select: { id: true },
-  });
-
-  if (!unit) {
-    throw new Error("Unidade não encontrada.");
-  }
+  await requireUnitFromCompanyOrThrow(parsed.unitId, companyId);
 
   const sanitizedDays = parsed.days
     .filter((d) => d.weekday >= 0 && d.weekday <= 6)
@@ -277,6 +297,7 @@ export async function saveUnitWeeklyAvailability(
         },
         update: { isActive: day.active },
         create: {
+          companyId, // ✅ obrigatório no schema
           unitId: parsed.unitId,
           weekday: day.weekday,
           isActive: day.active,

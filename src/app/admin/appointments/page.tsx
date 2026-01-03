@@ -94,10 +94,22 @@ function withUnitWhere<T extends Record<string, any>>(
   return { ...(base as any), unitId } as T;
 }
 
+/**
+ * ✅ Multi-tenant helper (companyId SEMPRE obrigatório)
+ */
+function withCompanyWhere<T extends Record<string, any>>(
+  base: T,
+  companyId: string,
+) {
+  return { ...(base as any), companyId } as T;
+}
+
 async function getAppointments(
   dateParam: string | undefined,
-  unitId: string | null,
+  args: { companyId: string; unitId: string | null },
 ) {
+  const { companyId, unitId } = args;
+
   const baseDate = dateParam
     ? (parseDateParam(dateParam) ?? getSaoPauloToday())
     : getSaoPauloToday();
@@ -107,12 +119,15 @@ async function getAppointments(
 
   const appointments = await prisma.appointment.findMany({
     where: withUnitWhere(
-      {
-        scheduleAt: {
-          gte: start,
-          lte: end,
+      withCompanyWhere(
+        {
+          scheduleAt: {
+            gte: start,
+            lte: end,
+          },
         },
-      },
+        companyId,
+      ),
       unitId,
     ) as any,
     orderBy: {
@@ -146,10 +161,14 @@ async function getAppointments(
 /**
  * ✅ Barber NÃO tem unitId direto (ele é N:N via BarberUnit).
  * Então o filtro por unidade é: units.some({ unitId, isActive:true })
+ * ✅ Multi-tenant: SEMPRE filtrar por companyId
  */
-async function getBarbers(unitId: string | null) {
+async function getBarbers(args: { companyId: string; unitId: string | null }) {
+  const { companyId, unitId } = args;
+
   const barbers = await prisma.barber.findMany({
     where: {
+      companyId,
       isActive: true,
       ...(unitId
         ? {
@@ -161,7 +180,7 @@ async function getBarbers(unitId: string | null) {
             },
           }
         : {}),
-    },
+    } as any,
     orderBy: { name: "asc" },
     include: {
       units: {
@@ -177,9 +196,9 @@ async function getBarbers(unitId: string | null) {
   return barbers;
 }
 
-async function getServices(): Promise<Service[]> {
+async function getServices(companyId: string): Promise<Service[]> {
   const services = await prisma.service.findMany({
-    where: { isActive: true },
+    where: { companyId, isActive: true } as any,
     orderBy: { name: "asc" },
   });
 
@@ -192,16 +211,35 @@ async function getServices(): Promise<Service[]> {
   }));
 }
 
-async function getInitialClientsForAdminAppointments(): Promise<
-  AppointmentClientOption[]
-> {
-  const clients = await prisma.user.findMany({
+async function getInitialClientsForAdminAppointments(args: {
+  companyId: string;
+  unitId: string | null;
+}): Promise<AppointmentClientOption[]> {
+  const { companyId, unitId } = args;
+
+  /**
+   * ✅ Correção multi-tenant:
+   * - User NÃO tem companyId
+   * - cliente pertence à empresa via CompanyMember (companyMemberships)
+   * - NÃO filtrar name != null (senão você perde clientes válidos)
+   */
+
+  const anonEmail = `anon+${companyId}@barbearia.local`;
+
+  // 1) clientes "oficiais" da company via membership
+  const clientsByMembership = await prisma.user.findMany({
     where: {
       role: "CLIENT",
-      name: { not: null },
-    },
+      isActive: true,
+      email: { not: anonEmail },
+
+      // ✅ tenant-safe correto
+      companyMemberships: {
+        some: { companyId, isActive: true },
+      },
+    } as any,
     orderBy: { name: "asc" },
-    take: 20,
+    take: 200,
     select: {
       id: true,
       name: true,
@@ -209,11 +247,44 @@ async function getInitialClientsForAdminAppointments(): Promise<
     },
   });
 
-  return clients.map(
+  if (clientsByMembership.length > 0) {
+    return clientsByMembership.map(
+      (c: { id: string; name: string | null; phone: string | null }) => ({
+        id: c.id,
+        name: (c.name ?? "").trim(),
+        phone: (c.phone ?? "").trim(),
+      }),
+    );
+  }
+
+  // 2) fallback: comportamento antigo (clientes que já têm appointment nessa company/unidade)
+  // (mantém compat caso a base esteja "bagunçada" e membership ainda não esteja completo)
+  const clientsWithHistory = await prisma.user.findMany({
+    where: {
+      role: "CLIENT",
+      isActive: true,
+      email: { not: anonEmail },
+      appointmentsAsClient: {
+        some: {
+          companyId,
+          ...(unitId ? { unitId } : {}),
+        } as any,
+      },
+    } as any,
+    orderBy: { name: "asc" },
+    take: 200,
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+    },
+  });
+
+  return clientsWithHistory.map(
     (c: { id: string; name: string | null; phone: string | null }) => ({
       id: c.id,
-      name: c.name ?? "",
-      phone: c.phone ?? "",
+      name: (c.name ?? "").trim(),
+      phone: (c.phone ?? "").trim(),
     }),
   );
 }
@@ -224,18 +295,21 @@ async function getInitialClientsForAdminAppointments(): Promise<
  *
  * - Dono (canSeeAllUnits): manda todas ativas
  * - Admin de unidade: manda só a unidade dele (1 item)
+ * ✅ Multi-tenant: SEMPRE filtrar por companyId
  */
 async function getUnitsForAdminAppointments(args: {
+  companyId: string;
   activeUnitId: string | null;
   canSeeAllUnits: boolean;
 }): Promise<UnitOption[]> {
-  const { activeUnitId, canSeeAllUnits } = args;
+  const { companyId, activeUnitId, canSeeAllUnits } = args;
 
   const units = await prisma.unit.findMany({
     where: {
+      companyId,
       isActive: true,
       ...(canSeeAllUnits ? {} : activeUnitId ? { id: activeUnitId } : {}),
-    },
+    } as any,
     orderBy: { name: "asc" },
     select: {
       id: true,
@@ -282,11 +356,28 @@ export default async function AdminAppointmentsPage({
 }: AdminAppointmentsPageProps) {
   const admin = await requireAdminPermission("canAccessAppointments");
 
+  // ✅ Multi-tenant hard stop
+  const companyId = String((admin as any)?.companyId ?? "");
+  if (!companyId) {
+    throw new Error(
+      "Admin sem companyId definido. Este painel é multi-tenant: vincule o admin a uma empresa (companyId).",
+    );
+  }
+
+  // ✅ Escopo de unidade (por cima do company)
   const activeUnitId = await resolveUnitScope({
     unitId: admin.unitId ?? null,
     canSeeAllUnits: !!admin.canSeeAllUnits,
   });
 
+  // admin de unidade não pode ficar sem unitId
+  if (!admin.canSeeAllUnits && !activeUnitId) {
+    throw new Error(
+      "Admin de unidade sem unitId definido. Vincule este admin a uma unidade.",
+    );
+  }
+
+  // No form: dono pode criar em qualquer unidade (unitId null => mostra select)
   const formScopeUnitId = admin.canSeeAllUnits ? null : activeUnitId;
 
   const resolvedSearchParams = await searchParams;
@@ -309,24 +400,42 @@ export default async function AdminAppointmentsPage({
     clientsForAdmin,
     unitsForForm,
   ] = await Promise.all([
-    getAppointments(dateParam, activeUnitId),
-    getBarbers(formScopeUnitId),
-    getServices(),
+    getAppointments(dateParam, { companyId, unitId: activeUnitId }),
+    getBarbers({ companyId, unitId: formScopeUnitId }),
+    getServices(companyId),
+
+    // ✅ Vendas do dia (multi-tenant + unidade)
     prisma.productSale.findMany({
       where: {
         soldAt: { gte: dayStart, lte: dayEnd },
+
+        // tenta primeiro filtrar por companyId no próprio ProductSale
+        ...(companyId ? { companyId } : {}),
+
+        // unidade: cobre dois schemas comuns
         ...(activeUnitId
           ? {
-              product: {
-                unitId: activeUnitId,
-              },
+              OR: [
+                { unitId: activeUnitId },
+                {
+                  product: {
+                    unitId: activeUnitId,
+                  },
+                },
+              ],
             }
           : {}),
       } as any,
       include: { product: true, barber: true },
     }),
-    getInitialClientsForAdminAppointments(),
+
+    getInitialClientsForAdminAppointments({
+      companyId,
+      unitId: formScopeUnitId,
+    }),
+
     getUnitsForAdminAppointments({
+      companyId,
       activeUnitId,
       canSeeAllUnits: !!admin.canSeeAllUnits,
     }),
@@ -474,7 +583,7 @@ export default async function AdminAppointmentsPage({
       {appointmentsPrisma.length === 0 && dayProductSalesPrisma.length === 0 ? (
         <section className="border border-border-primary rounded-xl overflow-hidden bg-background-tertiary">
           <div className="border-b border-border-primary px-4 py-3 bg-muted/40 flex justify-between items-center">
-            <p className="font-medium">Agendamentos e vendas de produto</p>
+            <p className="font-medium">Agendamentos</p>
           </div>
           <div className="p-6 text-paragraph-small text-content-secondary text-center">
             Nenhum agendamento ou venda de produto encontrada para esta data.

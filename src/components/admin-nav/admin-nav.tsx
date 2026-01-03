@@ -53,14 +53,12 @@ const adminLinks: AdminLink[] = [
     module: "DASHBOARD",
   },
 
-  // ✅ NOVO: Relatórios (estratégicos)
-  // Por enquanto amarrado no mesmo módulo do Dashboard pra não criar permissão nova agora.
-  // Quando criarmos o módulo "REPORTS", é só trocar aqui.
+  // ✅ Relatórios agora respeita permissão própria (REPORTS)
   {
     href: "/admin/reports",
     label: "Relatórios",
     icon: BarChart3,
-    module: "DASHBOARD",
+    module: "REPORTS" as AdminModule,
   },
 
   {

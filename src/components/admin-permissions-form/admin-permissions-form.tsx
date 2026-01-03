@@ -8,6 +8,10 @@ import { updateAdminPermissions } from "@/app/admin/settings/actions";
 
 type Permissions = {
   canAccessDashboard: boolean;
+
+  // ✅ NOVO: Relatórios
+  canAccessReports: boolean;
+
   canAccessCheckout: boolean;
   canAccessAppointments: boolean;
   canAccessProfessionals: boolean;
@@ -52,6 +56,11 @@ export function AdminPermissionsForm({
 
       if (permissions.canAccessDashboard)
         formData.append("canAccessDashboard", "on");
+
+      // ✅ NOVO: Relatórios
+      if (permissions.canAccessReports)
+        formData.append("canAccessReports", "on");
+
       if (permissions.canAccessCheckout)
         formData.append("canAccessCheckout", "on");
       if (permissions.canAccessAppointments)
@@ -95,6 +104,18 @@ export function AdminPermissionsForm({
             className="h-4 w-4 rounded border-border-primary bg-background-primary accent-brand-primary"
           />
           <span>Dashboard</span>
+        </label>
+
+        {/* ✅ NOVO: Relatórios */}
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            name="canAccessReports"
+            checked={permissions.canAccessReports}
+            onChange={() => handleToggle("canAccessReports")}
+            className="h-4 w-4 rounded border-border-primary bg-background-primary accent-brand-primary"
+          />
+          <span>Relatórios</span>
         </label>
 
         <label className="flex items-center gap-2">

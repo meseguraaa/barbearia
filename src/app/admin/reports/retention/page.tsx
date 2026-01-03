@@ -1,4 +1,6 @@
+// app/admin/reports/retention/page.tsx
 import type { Metadata } from "next";
+import type React from "react";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
@@ -20,6 +22,7 @@ import {
 } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { AppointmentStatus } from "@prisma/client";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +42,46 @@ type AdminReportsRetentionPageProps = {
 const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
 const UNIT_COOKIE_NAME = "admin_unit_context";
 const UNIT_ALL_VALUE = "all";
+const COMPANY_COOKIE_NAME = "admin_company_context";
+
+// ===============================
+// ✅ Company resolver (sem te jogar pro login)
+// ===============================
+async function resolveCompanyIdOrThrow(admin: any): Promise<string> {
+  const cookieStore = await cookies();
+  const fromCookie = cookieStore.get(COMPANY_COOKIE_NAME)?.value;
+  if (fromCookie) return fromCookie;
+
+  const fromAdmin =
+    (typeof admin?.companyId === "string" && admin.companyId) ||
+    (typeof admin?.company?.id === "string" && admin.company.id);
+  if (fromAdmin) return fromAdmin;
+
+  const userId =
+    (typeof admin?.userId === "string" && admin.userId) ||
+    (typeof admin?.id === "string" && admin.id) ||
+    (typeof admin?.sub === "string" && admin.sub);
+
+  if (!userId) {
+    throw new Error(
+      "Não consegui resolver o userId do admin para achar a company.",
+    );
+  }
+
+  const membership = await prisma.companyMember.findFirst({
+    where: { userId, isActive: true },
+    select: { companyId: true },
+    orderBy: { createdAt: "asc" } as any,
+  });
+
+  if (!membership?.companyId) {
+    throw new Error(
+      `Company não definida para este admin. (cookie "${COMPANY_COOKIE_NAME}" ausente e sem membership ativa).`,
+    );
+  }
+
+  return membership.companyId;
+}
 
 // ===============================
 // Timezone helpers (SP)
@@ -167,6 +210,7 @@ function buildCurve(args: {
 }
 
 async function computeRetentionFromCohort(args: {
+  companyId: string;
   cohort: CohortItem[];
   unitId: string | null;
   barberId: string | null;
@@ -186,8 +230,6 @@ async function computeRetentionFromCohort(args: {
     };
   }
 
-  // Para evitar N queries, buscamos retornos num range amplo:
-  // (minFirst, maxFirst+windowDays]
   const firstAts = args.cohort.map((c) => c.firstAt.getTime());
   const minFirst = new Date(Math.min(...firstAts) + 1); // evita contar o mesmo evento
   const maxFirst = new Date(Math.max(...firstAts));
@@ -195,6 +237,7 @@ async function computeRetentionFromCohort(args: {
 
   const followups = await prisma.appointment.findMany({
     where: {
+      companyId: args.companyId,
       clientId: { in: cohortClientIds },
       status: { in: DONE_ONLY },
       scheduleAt: { gt: minFirst, lte: maxWindowEnd },
@@ -272,14 +315,17 @@ export default async function AdminReportsRetentionPage({
 }: AdminReportsRetentionPageProps) {
   const admin = (await requireAdminPermission("canAccessDashboard")) as any;
 
+  // ✅ resolve companyId sem depender do cookie
+  const companyId = await resolveCompanyIdOrThrow(admin);
+
+  const cookieStore = await cookies();
+
   if (!admin?.canSeeAllUnits && !admin?.unitId) {
     throw new Error(
       "Admin de unidade sem unitId definido. Vincule este admin a uma unidade.",
     );
   }
 
-  // Cookie atual (para pintar o filtro de unidade)
-  const cookieStore = await cookies();
   const unitCookieValue =
     cookieStore.get(UNIT_COOKIE_NAME)?.value ?? UNIT_ALL_VALUE;
 
@@ -291,6 +337,15 @@ export default async function AdminReportsRetentionPage({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
   });
+
+  // Sanity check: se tiver unidade ativa, valida que é da company
+  if (activeUnitId) {
+    const ok = await prisma.unit.findFirst({
+      where: { id: activeUnitId, companyId, isActive: true },
+      select: { id: true },
+    });
+    if (!ok) redirect("/admin/reports");
+  }
 
   const { month: monthParam, barberId, compare, window } = await searchParams;
 
@@ -320,13 +375,13 @@ export default async function AdminReportsRetentionPage({
 
   if (admin?.canSeeAllUnits) {
     units = await prisma.unit.findMany({
-      where: { isActive: true },
+      where: { companyId, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
   } else if (admin?.unitId) {
-    const u = await prisma.unit.findUnique({
-      where: { id: admin.unitId },
+    const u = await prisma.unit.findFirst({
+      where: { id: admin.unitId, companyId },
       select: { name: true },
     });
     fixedUnitName = u?.name ?? null;
@@ -344,6 +399,7 @@ export default async function AdminReportsRetentionPage({
   const barbers = activeUnitId
     ? await prisma.barber.findMany({
         where: {
+          companyId,
           isActive: true,
           units: { some: { unitId: activeUnitId, isActive: true } },
         },
@@ -351,7 +407,7 @@ export default async function AdminReportsRetentionPage({
         orderBy: { name: "asc" },
       })
     : await prisma.barber.findMany({
-        where: { isActive: true },
+        where: { companyId, isActive: true },
         select: { id: true, name: true },
         orderBy: { name: "asc" },
       });
@@ -365,13 +421,13 @@ export default async function AdminReportsRetentionPage({
 
   // ===============================
   // KPI engine (topo do relatório)
-  // - "novos clientes do mês": clientes cuja PRIMEIRA visita (DONE) no escopo caiu no mês
   // ===============================
   const DONE_ONLY: AppointmentStatus[] = ["DONE"];
 
   const firstByClient = (await prisma.appointment.groupBy({
     by: ["clientId"],
     where: {
+      companyId,
       status: { in: DONE_ONLY },
       ...whereAppointmentUnit(activeUnitId),
       ...(barberIdSafe ? { barberId: barberIdSafe } : {}),
@@ -396,12 +452,14 @@ export default async function AdminReportsRetentionPage({
 
   const [baseKpis, compareKpis] = await Promise.all([
     computeRetentionFromCohort({
+      companyId,
       cohort: newClientsBase,
       unitId: activeUnitId,
       barberId: barberIdSafe,
       windowDays,
     }),
     computeRetentionFromCohort({
+      companyId,
       cohort: newClientsCompare,
       unitId: activeUnitId,
       barberId: barberIdSafe,
@@ -431,7 +489,6 @@ export default async function AdminReportsRetentionPage({
       ? baseKpis.avgReturnDays - compareKpis.avgReturnDays
       : NaN;
 
-  // ===== Curva 0..windowDays
   const curveRows = buildCurve({
     dayCounts: baseKpis.dayCounts,
     cohortSize: baseKpis.cohortSize,
@@ -442,8 +499,6 @@ export default async function AdminReportsRetentionPage({
 
   // ===============================
   // Clientes em risco
-  // - "clientes novos do mês" (do topo)
-  // - ainda não voltaram dentro da janela escolhida
   // ===============================
   const now = new Date();
   const baseIds = newClientsBase.map((c) => c.clientId);
@@ -466,6 +521,7 @@ export default async function AdminReportsRetentionPage({
 
     const followups = await prisma.appointment.findMany({
       where: {
+        companyId,
         clientId: { in: baseIds },
         status: { in: DONE_ONLY },
         scheduleAt: { gt: minFirst, lte: maxWindowEnd },
@@ -479,9 +535,8 @@ export default async function AdminReportsRetentionPage({
     const firstReturnByClient = new Map<string, Date>();
     for (const f of followups) {
       if (!f.clientId) continue;
-      if (!firstReturnByClient.has(f.clientId)) {
+      if (!firstReturnByClient.has(f.clientId))
         firstReturnByClient.set(f.clientId, f.scheduleAt);
-      }
     }
 
     const notReturned = newClientsBase.filter((c) => {
@@ -491,10 +546,21 @@ export default async function AdminReportsRetentionPage({
       return firstReturn.getTime() > windowEnd.getTime();
     });
 
-    const users = await prisma.user.findMany({
-      where: { id: { in: notReturned.map((c) => c.clientId) } },
-      select: { id: true, name: true, phone: true },
-    });
+    // ✅ FIX: User NÃO tem companyId no schema. Filtra pela relação companyMemberships
+    const userIds = notReturned.map((c) => c.clientId).filter(Boolean);
+
+    const users =
+      userIds.length > 0
+        ? await prisma.user.findMany({
+            where: {
+              id: { in: userIds },
+              companyMemberships: {
+                some: { companyId, isActive: true },
+              },
+            },
+            select: { id: true, name: true, phone: true },
+          })
+        : [];
 
     const userById = new Map(users.map((u) => [u.id, u]));
 
@@ -526,14 +592,11 @@ export default async function AdminReportsRetentionPage({
 
   // ===============================
   // Retenção por profissional
-  // - "Novos clientes da unidade no mês"
-  // - linha do profissional: quem fez a 1ª visita com ele
-  // - retorno do profissional: voltou com o mesmo profissional dentro da janela
-  // - linha "Média da unidade": voltou na unidade dentro da janela (sem filtrar profissional)
   // ===============================
   const firstByClientAll = (await prisma.appointment.groupBy({
     by: ["clientId"],
     where: {
+      companyId,
       status: { in: DONE_ONLY },
       ...whereAppointmentUnit(activeUnitId),
     },
@@ -553,10 +616,10 @@ export default async function AdminReportsRetentionPage({
 
   const newClientsUnitIds = newClientsUnit.map((c) => c.clientId);
 
-  // Map clientId -> barberId da 1ª visita (no mês)
   const firstAppointmentInMonth = newClientsUnitIds.length
     ? await prisma.appointment.findMany({
         where: {
+          companyId,
           clientId: { in: newClientsUnitIds },
           status: { in: DONE_ONLY },
           scheduleAt: { gte: monthStart, lte: monthEnd },
@@ -570,6 +633,7 @@ export default async function AdminReportsRetentionPage({
 
   const firstBarberByClient = new Map<string, string | null>();
   for (const a of firstAppointmentInMonth) {
+    if (!a.clientId) continue;
     firstBarberByClient.set(a.clientId, a.barberId ?? null);
   }
 
@@ -583,6 +647,7 @@ export default async function AdminReportsRetentionPage({
   }
 
   const unitAvgKpis = await computeRetentionFromCohort({
+    companyId,
     cohort: newClientsUnit,
     unitId: activeUnitId,
     barberId: null,
@@ -603,6 +668,7 @@ export default async function AdminReportsRetentionPage({
   if (barberIdSafe) {
     const group = newClientsByBarber.get(barberIdSafe) ?? [];
     const k = await computeRetentionFromCohort({
+      companyId,
       cohort: group,
       unitId: activeUnitId,
       barberId: barberIdSafe,
@@ -626,6 +692,7 @@ export default async function AdminReportsRetentionPage({
     const rowsPromises = barbers.map(async (b) => {
       const group = newClientsByBarber.get(b.id) ?? [];
       const k = await computeRetentionFromCohort({
+        companyId,
         cohort: group,
         unitId: activeUnitId,
         barberId: b.id,
@@ -662,7 +729,6 @@ export default async function AdminReportsRetentionPage({
   return (
     <div className="space-y-6 max-w-7xl">
       <header className="space-y-3">
-        {/* Linha 1: título + botão voltar */}
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-title text-content-primary">
             Retenção de clientes
@@ -673,15 +739,12 @@ export default async function AdminReportsRetentionPage({
           </Button>
         </div>
 
-        {/* Linha 2: filtros */}
         <div
           className={cn(
             "rounded-xl border border-border-primary bg-background-tertiary p-3",
           )}
         >
-          {/* ✅ ordem: unidade - profissional - comparar com - janela - mês */}
           <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto] md:items-end">
-            {/* UNIDADE */}
             <div className="w-full [&_select]:h-12 [&_select]:min-h-12 [&_select]:py-2">
               {ownerHasMultipleUnits ? (
                 <UnitFilter units={units} value={selectedUnitValue} />
@@ -705,22 +768,18 @@ export default async function AdminReportsRetentionPage({
               )}
             </div>
 
-            {/* PROFISSIONAL */}
             <div className="w-full [&_select]:h-12 [&_select]:min-h-12 [&_select]:py-2">
               <BarberFilter barbers={barbers} value={barberIdSafe} />
             </div>
 
-            {/* COMPARAR COM */}
             <div className="w-full [&_select]:h-12 [&_select]:min-h-12 [&_select]:py-2">
               <CompareWithFilter value={compareMode} />
             </div>
 
-            {/* JANELA */}
             <div className="w-full [&_select]:h-12 [&_select]:min-h-12 [&_select]:py-2">
               <RetentionWindowFilter value={windowDays} />
             </div>
 
-            {/* MÊS */}
             <div className="justify-self-end">
               <MonthPicker />
             </div>
@@ -738,7 +797,6 @@ export default async function AdminReportsRetentionPage({
             {retentionRateLabel}
           </p>
 
-          {/* ✅ Frase “na cara” */}
           <p className="mt-2 text-[12px] text-content-primary">
             De{" "}
             <span className="font-semibold tabular-nums">
@@ -979,19 +1037,15 @@ export default async function AdminReportsRetentionPage({
                         <td className="py-2 pr-3 text-content-primary text-right tabular-nums">
                           {r.cohortSize}
                         </td>
-
                         <td className="py-2 pr-3 text-content-primary text-right tabular-nums">
                           {r.retainedCount}
                         </td>
-
                         <td className="py-2 pr-3 text-content-primary text-right tabular-nums">
                           {r.lostCount}
                         </td>
-
                         <td className="py-2 pr-3 text-content-primary text-right tabular-nums">
                           {retLabel}
                         </td>
-
                         <td className="py-2 pr-3 text-content-primary text-right tabular-nums">
                           {avgDaysLabel}
                         </td>
@@ -999,7 +1053,6 @@ export default async function AdminReportsRetentionPage({
                     );
                   })}
 
-                  {/* Média da unidade */}
                   <tr className="border-t border-border-primary">
                     <td className="py-2 pr-3 text-content-primary font-medium">
                       {unitAvgRow.label}

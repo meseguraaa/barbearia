@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
-import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
+import { verifyAppJwt } from "@/lib/app-jwt";
+import { Prisma } from "@prisma/client";
 
 type MobileTokenPayload = {
   sub: string;
   role?: "CLIENT" | "BARBER" | "ADMIN";
+  companyId: string; // ✅ multi-tenant obrigatório
 };
 
 function corsHeaders() {
@@ -15,19 +17,21 @@ function corsHeaders() {
   };
 }
 
-function getJwtSecretKey() {
-  const secret = process.env.APP_JWT_SECRET;
-  if (!secret) throw new Error("APP_JWT_SECRET não definido no .env");
-  return new TextEncoder().encode(secret);
-}
-
 async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
   const auth = req.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!token) throw new Error("Token ausente");
+  if (!token) throw new Error("missing_token");
 
-  const { payload } = await jwtVerify(token, getJwtSecretKey());
-  return payload as unknown as MobileTokenPayload;
+  const payload = (await verifyAppJwt(token)) as any;
+
+  const companyId =
+    typeof payload?.companyId === "string"
+      ? String(payload.companyId).trim()
+      : "";
+
+  if (!companyId) throw new Error("missing_company_id");
+
+  return { ...(payload as any), companyId } as MobileTokenPayload;
 }
 
 function hoursDiff(dateFuture: Date, now: Date) {
@@ -56,6 +60,33 @@ function computeFeeEligibility(params: {
   return { eligible: h < cancelLimitHours };
 }
 
+// ✅ tenta gravar companyId se o schema suportar; fallback compat se não suportar.
+function isUnknownArgError(err: any) {
+  const msg = String(err?.message || "");
+  return (
+    msg.includes("Unknown arg") ||
+    msg.includes("Unknown argument") ||
+    (msg.includes("Argument") && msg.includes("is missing")) // Prisma varia mensagens
+  );
+}
+
+function toNumberPrice(v: any): number | null {
+  if (v === null || v === undefined) return null;
+
+  // Prisma.Decimal
+  if (typeof v === "object" && typeof v.toNumber === "function") {
+    try {
+      const n = v.toNumber();
+      return Number.isFinite(n) ? n : null;
+    } catch {
+      return null;
+    }
+  }
+
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
@@ -66,6 +97,7 @@ export async function POST(
 ) {
   try {
     const payload = await requireMobileAuth(req);
+    const companyId = payload.companyId;
 
     if (payload.role && payload.role !== "CLIENT") {
       return NextResponse.json(
@@ -75,9 +107,21 @@ export async function POST(
     }
 
     const { id } = await ctx.params;
+    const appointmentId = String(id ?? "").trim();
+
+    if (!appointmentId) {
+      return NextResponse.json(
+        { error: "Id ausente" },
+        { status: 400, headers: corsHeaders() },
+      );
+    }
 
     const appointment = await prisma.appointment.findFirst({
-      where: { id, clientId: payload.sub },
+      where: {
+        id: appointmentId,
+        companyId, // ✅ tenant scope
+        clientId: payload.sub,
+      },
       select: {
         id: true,
         status: true,
@@ -141,9 +185,11 @@ export async function POST(
       appointment.servicePriceAtTheTime ??
       (appointment.service?.price ? appointment.service.price : null);
 
+    const basePriceNumber = toNumberPrice(basePrice);
+
     const feeValue =
-      fee.eligible && basePrice && cancelFeePercentage
-        ? Number(basePrice) * (Number(cancelFeePercentage) / 100)
+      fee.eligible && basePriceNumber && cancelFeePercentage
+        ? basePriceNumber * (Number(cancelFeePercentage) / 100)
         : 0;
 
     const shouldCreateFee =
@@ -153,8 +199,14 @@ export async function POST(
       !!appointment.unitId;
 
     await prisma.$transaction(async (tx) => {
-      await tx.appointment.update({
-        where: { id: appointment.id },
+      // ✅ update tenant-safe
+      const updated = await tx.appointment.updateMany({
+        where: {
+          id: appointment.id,
+          companyId,
+          clientId: payload.sub,
+          status: { notIn: ["DONE", "CANCELED"] as any },
+        },
         data: {
           status: "CANCELED",
           cancelledByRole: "CLIENT",
@@ -163,17 +215,47 @@ export async function POST(
         },
       });
 
+      if (!updated?.count) {
+        // alguém já alterou status entre o findFirst e a transação
+        throw new Error("appointment_not_updatable");
+      }
+
       if (shouldCreateFee) {
-        await tx.barberCancellationFee.upsert({
-          where: { appointmentId: appointment.id },
-          create: {
-            appointmentId: appointment.id,
-            barberId: appointment.barberId!,
-            unitId: appointment.unitId,
-            amount: feeValue,
-          },
-          update: { amount: feeValue },
-        });
+        const createWithCompany = {
+          companyId,
+          appointmentId: appointment.id,
+          barberId: appointment.barberId!,
+          unitId: appointment.unitId!,
+          amount: feeValue,
+        };
+
+        const updateWithCompany = { companyId, amount: feeValue };
+
+        const createCompat = {
+          appointmentId: appointment.id,
+          barberId: appointment.barberId!,
+          unitId: appointment.unitId!,
+          amount: feeValue,
+        };
+
+        const updateCompat = { amount: feeValue };
+
+        // ✅ tenta com companyId; se o schema não suportar, fallback sem companyId
+        try {
+          await tx.barberCancellationFee.upsert({
+            where: { appointmentId: appointment.id },
+            create: createWithCompany as any,
+            update: updateWithCompany as any,
+          });
+        } catch (e: any) {
+          if (!isUnknownArgError(e)) throw e;
+
+          await tx.barberCancellationFee.upsert({
+            where: { appointmentId: appointment.id },
+            create: createCompat as any,
+            update: updateCompat as any,
+          });
+        }
       }
     });
 
@@ -184,14 +266,25 @@ export async function POST(
   } catch (err: any) {
     const msg = String(err?.message ?? "Erro");
 
-    if (
-      msg.toLowerCase().includes("token") ||
+    const isAuth =
+      msg === "missing_token" ||
+      msg === "missing_company_id" ||
+      msg.includes("Invalid token payload") ||
       msg.toLowerCase().includes("jwt") ||
-      msg.toLowerCase().includes("signature")
-    ) {
+      msg.toLowerCase().includes("token") ||
+      msg.toLowerCase().includes("signature");
+
+    if (isAuth) {
       return NextResponse.json(
         { error: "Não autorizado" },
         { status: 401, headers: corsHeaders() },
+      );
+    }
+
+    if (msg === "appointment_not_updatable") {
+      return NextResponse.json(
+        { error: "Agendamento não pode ser cancelado" },
+        { status: 409, headers: corsHeaders() },
       );
     }
 

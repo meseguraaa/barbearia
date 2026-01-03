@@ -93,11 +93,13 @@ function endOfMonthSP(date: Date): Date {
 }
 
 /* =========================================================
- * Multi-unidade: helpers de contexto + where
+ * Multi-tenant + Multi-unidade: helpers de contexto + where
  * ========================================================= */
 
 type AdminContext = {
   id: string;
+  companyId: string;
+
   unitId?: string | null;
   canSeeAllUnits?: boolean | null;
   isOwner?: boolean | null;
@@ -106,36 +108,45 @@ type AdminContext = {
 async function normalizeAdminContext(admin: any): Promise<AdminContext> {
   const ctx: AdminContext = {
     id: String(admin?.id ?? ""),
+    companyId: String(admin?.companyId ?? ""),
+
     unitId: (admin?.unitId ?? null) as string | null,
     canSeeAllUnits:
       typeof admin?.canSeeAllUnits === "boolean" ? admin.canSeeAllUnits : null,
     isOwner: typeof admin?.isOwner === "boolean" ? admin.isOwner : null,
   };
 
-  if (!ctx.id) return ctx;
+  // companyId é obrigatório no painel multi-tenant
+  if (!ctx.id || !ctx.companyId) return ctx;
 
   const needsDb =
     ctx.unitId == null || ctx.canSeeAllUnits == null || ctx.isOwner == null;
 
   if (!needsDb) return ctx;
 
-  const dbUser = await prisma.user.findUnique({
-    where: { id: ctx.id },
-    select: {
-      isOwner: true,
-      adminAccess: {
-        select: {
-          unitId: true as any,
-        } as any,
-      },
-    },
-  });
+  // 🔒 NUNCA buscar companyId no User (não existe no schema)
+  // Busca apenas o que falta via CompanyMember + AdminAccess (scopado por companyId).
+  const [membership, access] = await Promise.all([
+    prisma.companyMember.findFirst({
+      where: {
+        userId: ctx.id,
+        companyId: ctx.companyId,
+        isActive: true,
+      } as any,
+      select: { role: true },
+    }),
+    prisma.adminAccess.findFirst({
+      where: { userId: ctx.id, companyId: ctx.companyId } as any,
+      select: { unitId: true as any },
+    }),
+  ]);
 
-  const dbIsOwner = dbUser?.isOwner ?? false;
-  const dbUnitId = (dbUser?.adminAccess as any)?.unitId ?? null;
+  const dbIsOwner = String(membership?.role ?? "") === "OWNER";
+  const dbUnitId = (access as any)?.unitId ?? null;
 
   return {
     id: ctx.id,
+    companyId: ctx.companyId,
     isOwner: ctx.isOwner ?? dbIsOwner,
     unitId: ctx.unitId ?? dbUnitId,
     canSeeAllUnits: ctx.canSeeAllUnits ?? ctx.isOwner ?? dbIsOwner ?? false,
@@ -158,22 +169,58 @@ async function resolveUnitScope(admin: {
   return cookieValue;
 }
 
-function whereAppointmentUnit(unitId: string | null) {
-  return unitId ? { unitId } : {};
+function whereCompany(companyId: string) {
+  return { companyId } as any;
 }
 
-// AppointmentReview não tem unitId: filtra via appointment.unitId.
-function whereReviewUnit(unitId: string | null) {
-  return unitId ? { appointment: { unitId } } : {};
+function whereAppointmentScope(companyId: string, unitId: string | null) {
+  return {
+    ...whereCompany(companyId),
+    ...(unitId ? { unitId } : {}),
+  } as any;
 }
 
-// ProductSale tem unitId.
-function whereProductSaleUnit(unitId: string | null) {
-  return unitId ? { unitId } : {};
+// AppointmentReview não tem unitId: filtra via appointment.unitId e appointment.companyId.
+function whereReviewScope(companyId: string, unitId: string | null) {
+  return {
+    appointment: {
+      companyId,
+      ...(unitId ? { unitId } : {}),
+    },
+  } as any;
+}
+
+function whereProductSaleScope(companyId: string, unitId: string | null) {
+  return {
+    ...whereCompany(companyId),
+    ...(unitId ? { unitId } : {}),
+  } as any;
+}
+
+function whereExpenseScope(companyId: string, unitId: string | null) {
+  return {
+    ...whereCompany(companyId),
+    ...(unitId ? { unitId } : {}),
+  } as any;
+}
+
+function whereOrderScope(companyId: string, unitId: string | null) {
+  return {
+    ...whereCompany(companyId),
+    ...(unitId ? { unitId } : {}),
+  } as any;
+}
+
+function whereProductScope(companyId: string, unitId: string | null) {
+  return {
+    ...whereCompany(companyId),
+    ...(unitId ? { unitId } : {}),
+  } as any;
 }
 
 async function getAppointments(
   dateParam: string | undefined,
+  companyId: string,
   unitId: string | null,
 ) {
   let baseDate: Date;
@@ -191,8 +238,8 @@ async function getAppointments(
   const appointments = await prisma.appointment.findMany({
     where: {
       scheduleAt: { gte: start, lte: end },
-      ...whereAppointmentUnit(unitId),
-    },
+      ...whereAppointmentScope(companyId, unitId),
+    } as any,
     orderBy: { scheduleAt: "asc" },
     include: { service: true },
   });
@@ -207,13 +254,21 @@ export default async function AdminDashboardPage({
   const rawAdmin = await requireAdminPermission("canAccessDashboard");
   const admin = await normalizeAdminContext(rawAdmin);
 
+  // ✅ Multi-tenant hard stop (nada existe sem companyId)
+  const companyId = admin.companyId;
+  if (!companyId) {
+    throw new Error(
+      "Admin sem companyId definido. Este painel é multi-tenant: vincule o admin a uma empresa (companyId).",
+    );
+  }
+
   if (!admin.canSeeAllUnits && !admin.unitId) {
     throw new Error(
       "Admin de unidade sem unitId definido. Vincule este admin a uma unidade.",
     );
   }
 
-  // ✅ Escopo final de unidade para TUDO no dashboard
+  // ✅ Escopo final de unidade (por cima do company)
   const activeUnitId = await resolveUnitScope({
     unitId: admin.unitId ?? null,
     canSeeAllUnits: !!admin.canSeeAllUnits,
@@ -254,14 +309,14 @@ export default async function AdminDashboardPage({
     productsStockAggPrisma,
     reservedOrdersPrisma,
   ] = await Promise.all([
-    getAppointments(dateParam, activeUnitId),
+    getAppointments(dateParam, companyId, activeUnitId),
 
     prisma.appointment.findMany({
       where: {
         status: "DONE",
         scheduleAt: { gte: monthStart, lte: monthEnd },
-        ...whereAppointmentUnit(activeUnitId),
-      },
+        ...whereAppointmentScope(companyId, activeUnitId),
+      } as any,
       include: { service: true },
     }),
 
@@ -269,22 +324,22 @@ export default async function AdminDashboardPage({
       where: {
         status: "CANCELED",
         scheduleAt: { gte: monthStart, lte: monthEnd },
-        ...whereAppointmentUnit(activeUnitId),
-      },
+        ...whereAppointmentScope(companyId, activeUnitId),
+      } as any,
     }),
 
     prisma.expense.findMany({
       where: {
         dueDate: { gte: monthStart, lte: monthEnd },
-        ...(activeUnitId ? { unitId: activeUnitId } : {}),
-      },
+        ...whereExpenseScope(companyId, activeUnitId),
+      } as any,
     }),
 
     prisma.productSale.findMany({
       where: {
         soldAt: { gte: dayStart, lte: dayEnd },
-        ...whereProductSaleUnit(activeUnitId),
-      },
+        ...whereProductSaleScope(companyId, activeUnitId),
+      } as any,
       include: {
         product: true,
         barber: true,
@@ -294,8 +349,8 @@ export default async function AdminDashboardPage({
     prisma.productSale.findMany({
       where: {
         soldAt: { gte: monthStart, lte: monthEnd },
-        ...whereProductSaleUnit(activeUnitId),
-      },
+        ...whereProductSaleScope(companyId, activeUnitId),
+      } as any,
       include: {
         product: true,
         barber: true,
@@ -305,8 +360,8 @@ export default async function AdminDashboardPage({
     prisma.appointmentReview.findMany({
       where: {
         createdAt: { gte: monthStart, lte: monthEnd },
-        ...whereReviewUnit(activeUnitId),
-      },
+        ...whereReviewScope(companyId, activeUnitId),
+      } as any,
       include: {
         barber: true,
         client: true,
@@ -325,8 +380,8 @@ export default async function AdminDashboardPage({
 
     prisma.appointmentReview.findMany({
       where: {
-        ...whereReviewUnit(activeUnitId),
-      },
+        ...whereReviewScope(companyId, activeUnitId),
+      } as any,
       select: { rating: true },
     }),
 
@@ -334,16 +389,16 @@ export default async function AdminDashboardPage({
       where: {
         status: "DONE",
         scheduleAt: { gte: previousMonthStart, lte: previousMonthEnd },
-        ...whereAppointmentUnit(activeUnitId),
-      },
+        ...whereAppointmentScope(companyId, activeUnitId),
+      } as any,
       include: { service: true },
     }),
 
     prisma.productSale.findMany({
       where: {
         soldAt: { gte: previousMonthStart, lte: previousMonthEnd },
-        ...whereProductSaleUnit(activeUnitId),
-      },
+        ...whereProductSaleScope(companyId, activeUnitId),
+      } as any,
       include: {
         product: true,
         barber: true,
@@ -354,17 +409,17 @@ export default async function AdminDashboardPage({
       where: {
         status: "COMPLETED",
         createdAt: { gte: monthStart, lte: monthEnd },
-        ...(activeUnitId ? { unitId: activeUnitId } : {}),
-      },
+        ...whereOrderScope(companyId, activeUnitId),
+      } as any,
       include: {
         items: true,
       },
     }),
 
-    // ✅ Estoque total (AGORA), respeitando filtro de unidade
+    // ✅ Estoque total (AGORA), respeitando company + filtro de unidade
     prisma.product.aggregate({
       where: {
-        ...(activeUnitId ? { unitId: activeUnitId } : {}),
+        ...whereProductScope(companyId, activeUnitId),
       } as any,
       _sum: {
         stockQuantity: true as any,
@@ -375,8 +430,8 @@ export default async function AdminDashboardPage({
     prisma.order.findMany({
       where: {
         createdAt: { gte: monthStart, lte: monthEnd },
-        ...(activeUnitId ? { unitId: activeUnitId } : {}),
-      },
+        ...whereOrderScope(companyId, activeUnitId),
+      } as any,
       select: {
         status: true,
         items: true,

@@ -20,12 +20,17 @@ type ErrorType =
 
 type AdminLoginFormProps = {
   initialErrorCode?: string;
+  initialCompanyId?: string;
 };
 
-export function AdminLoginForm({ initialErrorCode }: AdminLoginFormProps) {
+export function AdminLoginForm({
+  initialErrorCode,
+  initialCompanyId,
+}: AdminLoginFormProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
+  const [companyId, setCompanyId] = useState(initialCompanyId ?? "");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -60,6 +65,7 @@ export function AdminLoginForm({ initialErrorCode }: AdminLoginFormProps) {
 
     startTransition(async () => {
       const formData = new FormData();
+      formData.append("companyId", companyId.trim());
       formData.append("email", email.trim());
       formData.append("password", password);
 
@@ -87,6 +93,32 @@ export function AdminLoginForm({ initialErrorCode }: AdminLoginFormProps) {
 
       {/* Formulário – login do ADMIN (nosso auth próprio) */}
       <form onSubmit={handleSubmit} className="space-y-5">
+        {/* ✅ MULTI-TENANT: companyId obrigatório */}
+        <div className="space-y-2">
+          <Label
+            htmlFor="admin-company-id"
+            className="text-label-small text-content-secondary"
+          >
+            Company ID
+          </Label>
+          <Input
+            id="admin-company-id"
+            name="companyId"
+            type="text"
+            required
+            placeholder="Cole o companyId da sua empresa"
+            value={companyId}
+            onChange={(e) => setCompanyId(e.target.value)}
+            disabled={isPending}
+            className="bg-background-tertiary border-border-primary text-content-primary placeholder:text-content-tertiary focus-visible:ring-2 focus-visible:ring-border-brand focus-visible:ring-offset-0"
+          />
+          <p className="text-paragraph-small text-content-tertiary">
+            Dica: se você tiver um link do tipo{" "}
+            <span className="font-medium">/admin/login?companyId=...</span>, ele
+            já preenche aqui.
+          </p>
+        </div>
+
         <div className="space-y-2">
           <Label
             htmlFor="admin-email"

@@ -1,4 +1,3 @@
-// components/professional-new-dialog.tsx
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
@@ -28,7 +27,7 @@ export function ProfessionalNewDialog({ units }: { units: UnitOption[] }) {
   const [phone, setPhone] = useState("");
   const [selectedUnitIds, setSelectedUnitIds] = useState<string[]>([]);
 
-  const hasUnits = units?.length > 0;
+  const hasUnits = (units?.length ?? 0) > 0;
 
   const selectedCountLabel = useMemo(() => {
     if (selectedUnitIds.length === 0) return "Nenhuma selecionada";
@@ -66,13 +65,18 @@ export function ProfessionalNewDialog({ units }: { units: UnitOption[] }) {
       return;
     }
 
-    if (selectedUnitIds.length === 0) {
-      toast.error("Selecione pelo menos 1 unidade.");
+    // ✅ só pode escolher unidades ativas (server também valida)
+    const activeSelected = selectedUnitIds.filter((id) =>
+      units.some((u) => u.id === id && u.isActive),
+    );
+
+    if (activeSelected.length === 0) {
+      toast.error("Selecione pelo menos 1 unidade ativa.");
       return;
     }
 
     // injeta unitIds no FormData (multi values)
-    selectedUnitIds.forEach((id) => formData.append("unitIds", id));
+    activeSelected.forEach((id) => formData.append("unitIds", id));
 
     startTransition(async () => {
       const res = await createBarber(formData);
@@ -130,24 +134,29 @@ export function ProfessionalNewDialog({ units }: { units: UnitOption[] }) {
                 <div className="grid gap-2">
                   {units.map((u) => {
                     const checked = selectedUnitIds.includes(u.id);
+                    const disabled = !u.isActive;
+
                     return (
                       <label
                         key={u.id}
-                        className="flex items-center justify-between gap-3 rounded-lg border border-border-primary bg-background-secondary px-3 py-2 cursor-pointer"
+                        className={`flex items-center justify-between gap-3 rounded-lg border border-border-primary bg-background-secondary px-3 py-2 cursor-pointer ${
+                          disabled ? "opacity-60 cursor-not-allowed" : ""
+                        }`}
                       >
                         <div className="flex flex-col">
                           <span className="text-sm text-content-primary font-medium">
                             {u.name}
                           </span>
                           <span className="text-[11px] text-content-secondary">
-                            Unidade ativa
+                            {u.isActive ? "Unidade ativa" : "Unidade inativa"}
                           </span>
                         </div>
 
                         <input
                           type="checkbox"
                           checked={checked}
-                          onChange={() => toggleUnit(u.id)}
+                          disabled={disabled}
+                          onChange={() => !disabled && toggleUnit(u.id)}
                           className="h-4 w-4 accent-current"
                         />
                       </label>

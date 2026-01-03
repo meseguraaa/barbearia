@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
-import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 import { addMinutes } from "date-fns";
 import { Prisma } from "@prisma/client";
+import { verifyAppJwt } from "@/lib/app-jwt";
 
 type MobileTokenPayload = {
   sub: string;
-  role?: "CLIENT" | "BARBER" | "ADMIN";
+  role: "CLIENT" | "BARBER" | "ADMIN";
+  companyId: string; // ✅ multi-tenant obrigatório
+  profile_complete?: boolean;
+
+  // compat (não garantido no token)
   email?: string;
   name?: string | null;
 };
@@ -15,23 +19,31 @@ function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    // ✅ compat: se web/preflight usar x-company-id não quebra
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-company-id",
   };
 }
 
-function getJwtSecretKey() {
-  const secret = process.env.APP_JWT_SECRET;
-  if (!secret) throw new Error("APP_JWT_SECRET não definido no .env");
-  return new TextEncoder().encode(secret);
+// ✅ header case-insensitive (compat)
+function getHeaderCI(req: Request, key: string): string | null {
+  const target = key.toLowerCase();
+  for (const [k, v] of req.headers.entries()) {
+    if (k.toLowerCase() === target) {
+      const s = String(v ?? "").trim();
+      return s.length ? s : null;
+    }
+  }
+  return null;
 }
 
 async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
-  const auth = req.headers.get("authorization") || "";
+  const auth = getHeaderCI(req, "authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!token) throw new Error("Token ausente");
+  if (!token) throw new Error("missing_token");
 
-  const { payload } = await jwtVerify(token, getJwtSecretKey());
-  return payload as unknown as MobileTokenPayload;
+  // ✅ centralizado: valida assinatura + role + companyId
+  const payload = await verifyAppJwt(token);
+  return payload as MobileTokenPayload;
 }
 
 /**
@@ -69,6 +81,7 @@ function intervalsOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
 }
 
 async function ensureAvailability(
+  companyId: string,
   scheduleAt: Date,
   barberId: string,
   durationMinutes: number,
@@ -81,6 +94,7 @@ async function ensureAvailability(
 
   const candidates = await prisma.appointment.findMany({
     where: {
+      companyId, // ✅ tenant scope
       barberId,
       status: { not: "CANCELED" },
       scheduleAt: { gte: windowStart, lte: windowEnd },
@@ -108,6 +122,35 @@ async function ensureAvailability(
   return null;
 }
 
+/**
+ * ✅ Garante que o usuário (client) tenha vínculo na empresa (CompanyMember).
+ * Isso evita “cliente órfão” e ajuda em telas de histórico/nível/etc.
+ */
+async function ensureCompanyMembership(args: {
+  companyId: string;
+  userId: string;
+  unitId?: string | null;
+}) {
+  const { companyId, userId, unitId } = args;
+
+  await prisma.companyMember.upsert({
+    where: {
+      companyId_userId: { companyId, userId },
+    },
+    create: {
+      companyId,
+      userId,
+      role: "CLIENT",
+      isActive: true,
+      lastUnitId: unitId ?? undefined,
+    },
+    update: {
+      isActive: true,
+      ...(unitId ? { lastUnitId: unitId } : {}),
+    },
+  });
+}
+
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
@@ -116,7 +159,16 @@ export async function POST(req: Request) {
   try {
     const payload = await requireMobileAuth(req);
 
-    if (payload.role && payload.role !== "CLIENT") {
+    // ✅ companyId vem do token (fonte da verdade)
+    const companyId = String(payload.companyId || "").trim();
+    if (!companyId) {
+      return NextResponse.json(
+        { error: "Não autorizado" },
+        { status: 401, headers: corsHeaders() },
+      );
+    }
+
+    if (payload.role !== "CLIENT") {
       return NextResponse.json(
         { error: "Sem permissão" },
         { status: 403, headers: corsHeaders() },
@@ -129,6 +181,8 @@ export async function POST(req: Request) {
     const phoneRaw = String(body?.phone ?? "");
     const phone = normalizePhone(phoneRaw);
 
+    // ⚠️ unitId/serviceId/barberId continuam vindo do body,
+    // mas TODA validação/busca é feita com companyId (tenant-safe)
     const unitId = String(body?.unitId ?? "").trim();
     const serviceId = String(body?.serviceId ?? "").trim();
     const barberId = String(body?.barberId ?? "").trim();
@@ -184,8 +238,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const unit = await prisma.unit.findUnique({
-      where: { id: unitId },
+    const unit = await prisma.unit.findFirst({
+      where: { id: unitId, companyId }, // ✅ tenant scope
       select: { id: true, isActive: true },
     });
     if (!unit) {
@@ -201,11 +255,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const service = await prisma.service.findUnique({
-      where: { id: serviceId },
+    const service = await prisma.service.findFirst({
+      where: { id: serviceId, companyId }, // ✅ tenant scope
       select: {
         id: true,
         name: true,
+        unitId: true, // ✅ precisamos p/ validar unidade quando existir
         price: true,
         barberPercentage: true,
         isActive: true,
@@ -225,8 +280,16 @@ export async function POST(req: Request) {
       );
     }
 
+    // ✅ se o serviço tiver unitId definido, ele precisa bater com o unitId do agendamento
+    if (service.unitId && service.unitId !== unitId) {
+      return NextResponse.json(
+        { error: "Este serviço não pertence a esta unidade" },
+        { status: 400, headers: corsHeaders() },
+      );
+    }
+
     const barberUnit = await prisma.barberUnit.findFirst({
-      where: { barberId, unitId, isActive: true },
+      where: { barberId, unitId, isActive: true, companyId }, // ✅ tenant scope
       select: { id: true },
     });
     if (!barberUnit) {
@@ -237,7 +300,7 @@ export async function POST(req: Request) {
     }
 
     const sp = await prisma.serviceProfessional.findFirst({
-      where: { barberId, serviceId },
+      where: { barberId, serviceId, companyId }, // ✅ tenant scope
       select: { id: true },
     });
     if (!sp) {
@@ -248,6 +311,7 @@ export async function POST(req: Request) {
     }
 
     const conflict = await ensureAvailability(
+      companyId,
       scheduleAt,
       barberId,
       service.durationMinutes ?? 0,
@@ -259,14 +323,25 @@ export async function POST(req: Request) {
       );
     }
 
-    const clientId = payload.sub;
+    const clientId = String(payload.sub || "").trim();
+    if (!clientId) {
+      return NextResponse.json(
+        { error: "Não autorizado" },
+        { status: 401, headers: corsHeaders() },
+      );
+    }
 
-    const barberEarningValue = service.price
-      .mul(service.barberPercentage)
+    // ✅ garante vínculo do cliente com a empresa (evita “órfãos”)
+    await ensureCompanyMembership({ companyId, userId: clientId, unitId });
+
+    const barberEarningValue = (service.price as any)
+      .mul(service.barberPercentage as any)
       .div(new Prisma.Decimal(100));
 
     const appointment = await prisma.appointment.create({
       data: {
+        companyId, // ✅ obrigatório
+
         clientName,
         phone,
         description: service.name,
@@ -294,13 +369,17 @@ export async function POST(req: Request) {
       { status: 200, headers: corsHeaders() },
     );
   } catch (err: any) {
-    const msg = String(err?.message ?? "Erro");
+    const msg = String(err?.message ?? "Erro").toLowerCase();
 
-    if (
-      msg.toLowerCase().includes("token") ||
-      msg.toLowerCase().includes("jwt") ||
-      msg.toLowerCase().includes("signature")
-    ) {
+    const isAuth =
+      msg.includes("missing_token") ||
+      msg.includes("token") ||
+      msg.includes("jwt") ||
+      msg.includes("signature") ||
+      msg.includes("invalid token payload") ||
+      msg.includes("companyid");
+
+    if (isAuth) {
       return NextResponse.json(
         { error: "Não autorizado" },
         { status: 401, headers: corsHeaders() },

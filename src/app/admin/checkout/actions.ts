@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 
+import { Prisma } from "@prisma/client";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 
 /* ---------------------------------------------------------
@@ -14,7 +15,6 @@ import { requireAdminPermission } from "@/lib/admin-permissions";
 async function withRevalidate<T>(operation: () => Promise<T>): Promise<T> {
   const result = await operation();
 
-  // Revalida páginas relacionadas
   revalidatePath("/admin/checkout");
   revalidatePath("/admin/dashboard");
   revalidatePath("/barber");
@@ -23,7 +23,7 @@ async function withRevalidate<T>(operation: () => Promise<T>): Promise<T> {
   return result;
 }
 
-function getRedirectTo(formData: FormData) {
+function getRedirectTo(formData: FormData): string {
   const redirectTo = formData.get("redirectTo") as string | null;
   if (!redirectTo) return "/admin/checkout";
   if (typeof redirectTo !== "string") return "/admin/checkout";
@@ -31,58 +31,44 @@ function getRedirectTo(formData: FormData) {
   return redirectTo;
 }
 
-function normalizePriceToDecimalString(raw: string): string {
-  if (!raw) return "0";
-
-  const onlyDigitsAndSeparators = raw.replace(/[^\d,\.]/g, "");
-
-  if (
-    onlyDigitsAndSeparators.includes(",") &&
-    onlyDigitsAndSeparators.includes(".")
-  ) {
-    const withoutThousands = onlyDigitsAndSeparators.replace(/\./g, "");
-    return withoutThousands.replace(",", ".");
-  }
-
-  if (onlyDigitsAndSeparators.includes(",")) {
-    return onlyDigitsAndSeparators.replace(",", ".");
-  }
-
-  return onlyDigitsAndSeparators;
-}
-
-function assertPositiveInt(n: number, label: string) {
+function assertPositiveInt(n: number, label: string): void {
   if (!Number.isInteger(n) || n <= 0) {
     throw new Error(`${label} inválido.`);
   }
 }
 
-/** Decimal/any -> number seguro */
-function toNumberDecimal(v: any): number {
+function toNumberDecimal(v: unknown): number {
   if (v == null) return NaN;
   if (typeof v === "number") return v;
+
   if (typeof v === "string") {
     const n = Number(v.replace(",", "."));
     return Number.isFinite(n) ? n : NaN;
   }
+
   if (typeof v === "object") {
-    if (typeof v.toNumber === "function") {
-      const n = v.toNumber();
+    const anyObj = v as any;
+
+    if (typeof anyObj.toNumber === "function") {
+      const n = anyObj.toNumber();
       return Number.isFinite(n) ? n : NaN;
     }
-    if (typeof v.toString === "function") {
-      const n = Number(String(v.toString()).replace(",", "."));
+
+    if (typeof anyObj.toString === "function") {
+      const n = Number(String(anyObj.toString()).replace(",", "."));
       return Number.isFinite(n) ? n : NaN;
     }
   }
+
   return NaN;
 }
 
-/**
- * ✅ Snapshot financeiro do serviço
- * - total = soma dos itens de serviço do pedido
- * - fallback: totalPrice -> unitPrice*qty -> service.price*qty
- */
+function money(n: unknown): number {
+  const v = toNumberDecimal(n);
+  if (!Number.isFinite(v)) return 0;
+  return Math.round((v + Number.EPSILON) * 100) / 100;
+}
+
 function calcServiceSubtotal(
   items: Array<{
     quantity: number;
@@ -90,7 +76,7 @@ function calcServiceSubtotal(
     totalPrice: any | null;
     service?: { price: any | null } | null;
   }>,
-) {
+): number {
   let total = 0;
 
   for (const it of items) {
@@ -116,13 +102,30 @@ function calcServiceSubtotal(
     }
   }
 
-  return total;
+  return money(total);
 }
 
-function calcCommission(serviceSubtotal: number, pct: number) {
+function calcCommission(serviceSubtotal: number, pct: number): number {
   if (!Number.isFinite(serviceSubtotal) || serviceSubtotal <= 0) return 0;
   if (!Number.isFinite(pct) || pct < 0) return 0;
-  return (serviceSubtotal * pct) / 100;
+  return money((serviceSubtotal * pct) / 100);
+}
+
+/* ---------------------------------------------------------
+ * MULTI-TENANT (company scope)
+ * ---------------------------------------------------------*/
+function requireCompanyIdFromAdmin(admin: any): string {
+  const companyId = admin?.companyId as string | undefined;
+  if (!companyId) {
+    throw new Error("Contexto inválido: companyId ausente no admin.");
+  }
+  return companyId;
+}
+
+function assertOrderInCompany(order: { companyId: string }, companyId: string) {
+  if (!order.companyId || order.companyId !== companyId) {
+    throw new Error("Este pedido não pertence a esta empresa.");
+  }
 }
 
 /* ---------------------------------------------------------
@@ -131,15 +134,10 @@ function calcCommission(serviceSubtotal: number, pct: number) {
 const UNIT_COOKIE_NAME = "admin_unit_context";
 const UNIT_ALL_VALUE = "all";
 
-/**
- * Resolve o "escopo" de unidade para as queries do admin.
- * - Dono: respeita cookie (all = tudo)
- * - Admin de unidade: ignora cookie e força unitId do admin
- */
 async function resolveUnitScope(admin: {
   unitId: string | null;
   canSeeAllUnits: boolean;
-}) {
+}): Promise<string | null> {
   if (!admin.canSeeAllUnits) return admin.unitId;
 
   const cookieStore = await cookies();
@@ -150,29 +148,20 @@ async function resolveUnitScope(admin: {
   return cookieValue;
 }
 
-/**
- * Valida se um pedido pertence ao contexto de unidade ativo.
- * - Se activeUnitId = null (dono em "todas"), libera.
- * - Se activeUnitId != null, pedido precisa bater.
- */
 function assertOrderInActiveUnit(
   order: { unitId: string | null },
   activeUnitId: string | null,
-) {
+): void {
   if (!activeUnitId) return;
   if (!order.unitId || order.unitId !== activeUnitId) {
     throw new Error("Este pedido não pertence à unidade selecionada.");
   }
 }
 
-/**
- * ✅ Estoque: não permite checkout se não houver quantidade suficiente.
- * (Mais seguro do que “zerar” e fingir que deu certo.)
- */
 function assertEnoughStock(
   product: { name: string; stockQuantity: number },
   qty: number,
-) {
+): void {
   if (product.stockQuantity < qty) {
     throw new Error(
       `Estoque insuficiente para "${product.name}". Disponível: ${product.stockQuantity}, solicitado: ${qty}.`,
@@ -181,12 +170,7 @@ function assertEnoughStock(
 }
 
 /* ---------------------------------------------------------
- * 🔥 MOTOR DE PREÇO (novo)
- * - Ainda NÃO temos “nível do cliente (M+1)” implementado
- * - Então por enquanto:
- *   - nível padrão: BRONZE
- *   - se estiver na janela do aniversário e produto tiver benefício: usa birthdayPriceLevel
- * - Depois, você só injeta effectiveLevel real aqui.
+ * 🔥 MOTOR DE PREÇO (DESCONTO PERCENTUAL POR NÍVEL)
  * ---------------------------------------------------------*/
 type CustomerLevel = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
 
@@ -197,7 +181,10 @@ const LEVEL_FALLBACK: Record<CustomerLevel, CustomerLevel[]> = {
   BRONZE: ["BRONZE"],
 };
 
-function getDatePartsInTz(date: Date, timeZone: string) {
+function getDatePartsInTz(
+  date: Date,
+  timeZone: string,
+): { year: number; month: number; day: number } {
   const fmt = new Intl.DateTimeFormat("en-US", {
     timeZone,
     year: "numeric",
@@ -213,164 +200,233 @@ function getDatePartsInTz(date: Date, timeZone: string) {
   };
 }
 
-// cria Date UTC representando meia-noite no TZ (bom o suficiente para janela por dia)
-function tzMidnightUtc(
-  year: number,
-  month: number,
-  day: number,
-  _timeZone: string,
-) {
-  // A gente usa como “âncora” diária; não precisa de hora exata local.
+function tzMidnightUtc(year: number, month: number, day: number): Date {
   const iso = `${String(year).padStart(4, "0")}-${String(month).padStart(
     2,
     "0",
   )}-${String(day).padStart(2, "0")}T00:00:00`;
-  // Interpreta como UTC:
   return new Date(iso + "Z");
 }
 
-function addDays(date: Date, days: number) {
+function addDaysUtc(date: Date, days: number): Date {
   const d = new Date(date.getTime());
   d.setUTCDate(d.getUTCDate() + days);
   return d;
 }
 
-function isWithinInclusive(date: Date, start: Date, end: Date) {
+function isWithinInclusive(date: Date, start: Date, end: Date): boolean {
   const t = date.getTime();
   return t >= start.getTime() && t <= end.getTime();
 }
 
+function clampPct(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, n));
+}
+
 async function resolveProductUnitPrice(args: {
+  companyId: string;
   productId: string;
   clientId: string | null;
-  // nível vigente (M+1) ainda não existe -> default BRONZE
   effectiveLevel?: CustomerLevel;
-  // timezone do tenant/unidade (por enquanto default)
   timeZone?: string;
   now?: Date;
-}) {
+}): Promise<{
+  unitId: string;
+  unitPrice: number;
+  appliedLevel: CustomerLevel;
+  appliedBecause: "BIRTHDAY" | "LEVEL" | "BASE";
+  inBirthdayWindow: boolean;
+  productName: string;
+  discountPct: number;
+}> {
   const timeZone = args.timeZone ?? "America/Sao_Paulo";
   const now = args.now ?? new Date();
   const effectiveLevel: CustomerLevel = args.effectiveLevel ?? "BRONZE";
 
   const [product, client] = await Promise.all([
-    prisma.product.findUnique({
-      where: { id: args.productId },
+    prisma.product.findFirst({
+      where: {
+        id: args.productId,
+        companyId: args.companyId,
+        isActive: true,
+      } as any,
       select: {
         id: true,
+        companyId: true,
         name: true,
         price: true,
         unitId: true,
         stockQuantity: true,
-        isActive: true,
         birthdayBenefitEnabled: true,
         birthdayPriceLevel: true,
-        prices: { select: { level: true, price: true } }, // ProductPriceByLevel
+        discounts: { select: { level: true, discountPct: true } },
       } as any,
     }),
     args.clientId
-      ? prisma.user.findUnique({
-          where: { id: args.clientId },
+      ? prisma.user.findFirst({
+          where: { id: args.clientId } as any,
           select: { id: true, birthday: true },
         })
       : Promise.resolve(null),
   ]);
 
   if (!product) throw new Error("Produto não encontrado.");
-  if (!(product as any).isActive) throw new Error("Produto indisponível.");
-  if (typeof (product as any).stockQuantity === "number") {
-    // apenas “guard rail” leve, a baixa real é no finalize
-    if ((product as any).stockQuantity <= 0) {
-      throw new Error("Produto sem estoque.");
-    }
+
+  if (
+    typeof (product as any).stockQuantity === "number" &&
+    (product as any).stockQuantity <= 0
+  ) {
+    throw new Error("Produto sem estoque.");
   }
 
-  // monta mapa de preços por nível
-  const priceByLevel = new Map<CustomerLevel, number>();
-  for (const row of (product as any).prices ?? []) {
-    priceByLevel.set(row.level as CustomerLevel, Number(row.price));
+  const basePrice = toNumberDecimal((product as any).price);
+  if (!Number.isFinite(basePrice) || basePrice < 0) {
+    throw new Error("Preço base do produto inválido.");
   }
 
-  // fallback final: usa product.price se não houver BRONZE cadastrado
-  const baseBronze = priceByLevel.get("BRONZE") ?? Number(product.price);
+  // desconto percentual por nível (guarda só > 0)
+  const pctByLevel = new Map<CustomerLevel, number>();
+  for (const row of (product as any).discounts ?? []) {
+    const lvl = row.level as CustomerLevel;
+    const pct = clampPct(Number(row.discountPct ?? 0));
+    if (pct > 0) pctByLevel.set(lvl, pct);
+  }
 
-  function pickPrice(level: CustomerLevel) {
+  function pickDiscountPct(level: CustomerLevel): {
+    level: CustomerLevel;
+    pct: number;
+  } {
     for (const l of LEVEL_FALLBACK[level]) {
-      const found = priceByLevel.get(l);
-      if (typeof found === "number" && Number.isFinite(found)) {
-        return { level: l, price: found };
-      }
+      const pct = pctByLevel.get(l);
+      if (pct !== undefined) return { level: l, pct };
     }
-    return { level: "BRONZE" as CustomerLevel, price: baseBronze };
+    return { level: "BRONZE", pct: 0 };
   }
 
-  // janela de aniversário (3 dias antes + dia + 3 dias depois)
+  function applyDiscount(price: number, pct: number): number {
+    const p = clampPct(pct);
+    const final = price * (1 - p / 100);
+    return money(final);
+  }
+
+  // Janela de aniversário: +/- 3 dias
   let inBirthdayWindow = false;
 
   if (client?.birthday && (product as any).birthdayBenefitEnabled) {
     const nowParts = getDatePartsInTz(now, timeZone);
     const b = getDatePartsInTz(client.birthday, timeZone);
 
-    // aniversário no ano corrente (no TZ)
-    const birthdayThisYear = tzMidnightUtc(
-      nowParts.year,
-      b.month,
-      b.day,
-      timeZone,
-    );
+    const birthdayThisYear = tzMidnightUtc(nowParts.year, b.month, b.day);
+    const start = addDaysUtc(birthdayThisYear, -3);
+    const end = addDaysUtc(birthdayThisYear, +3);
 
-    const start = addDays(birthdayThisYear, -3);
-    const end = addDays(birthdayThisYear, +3);
-
-    // compara por dia: usa meia-noite no TZ (representada em UTC)
     const todayAnchor = tzMidnightUtc(
       nowParts.year,
       nowParts.month,
       nowParts.day,
-      timeZone,
     );
 
     inBirthdayWindow = isWithinInclusive(todayAnchor, start, end);
   }
 
-  // se está na janela e produto tem benefício: aplica nível escolhido no produto
   if (inBirthdayWindow && (product as any).birthdayBenefitEnabled) {
     const chosen =
       ((product as any).birthdayPriceLevel as CustomerLevel | null) ??
       "DIAMANTE";
-    const picked = pickPrice(chosen);
+
+    const picked = pickDiscountPct(chosen);
+    const unitPrice = applyDiscount(basePrice, picked.pct);
 
     return {
       unitId: (product as any).unitId as string,
-      unitPrice: picked.price,
+      unitPrice,
       appliedLevel: picked.level,
-      appliedBecause: "BIRTHDAY" as const,
+      appliedBecause: "BIRTHDAY",
       inBirthdayWindow: true,
       productName: (product as any).name as string,
+      discountPct: picked.pct,
     };
   }
 
-  // senão: aplica nível vigente do cliente (por enquanto BRONZE)
-  const picked = pickPrice(effectiveLevel);
+  const picked = pickDiscountPct(effectiveLevel);
+  const unitPrice = applyDiscount(basePrice, picked.pct);
 
   return {
     unitId: (product as any).unitId as string,
-    unitPrice: picked.price,
+    unitPrice,
     appliedLevel: picked.level,
-    appliedBecause:
-      picked.level === "BRONZE" ? ("BASE" as const) : ("LEVEL" as const),
+    appliedBecause: picked.pct > 0 ? "LEVEL" : "BASE",
     inBirthdayWindow: false,
     productName: (product as any).name as string,
+    discountPct: picked.pct,
   };
 }
 
 /* ---------------------------------------------------------
- * ✅ NOVO: Adicionar produto na "conta" do cliente (PENDING_CHECKIN)
- * - Congela o preço no OrderItem
- * - Não baixa estoque aqui (só no finalize)
- * - Respeita contexto de unidade ativo
+ * ✅ Reprecificar itens do pedido (produto) antes de finalizar
  * ---------------------------------------------------------*/
-export async function addProductToClientOpenOrder(formData: FormData) {
+async function repriceProductOrderInTx(args: {
+  tx: any;
+  companyId: string;
+  order: any;
+  clientId: string;
+  timeZone?: string;
+}) {
+  const { tx, companyId, order, clientId } = args;
+  const timeZone = args.timeZone ?? "America/Sao_Paulo";
+
+  const items = (order.items ?? []).filter((it: any) => it.productId != null);
+
+  const repriced = await Promise.all(
+    items.map(async (it: any) => {
+      const qty = Math.max(1, Number(it.quantity ?? 1));
+      const pricing = await resolveProductUnitPrice({
+        companyId,
+        productId: String(it.productId),
+        clientId,
+        timeZone,
+      });
+
+      const unitPrice = money(pricing.unitPrice);
+      const totalPrice = money(unitPrice * qty);
+
+      return {
+        id: it.id,
+        productId: String(it.productId),
+        quantity: qty,
+        unitPrice,
+        totalPrice,
+      };
+    }),
+  );
+
+  for (const it of repriced) {
+    await tx.orderItem.updateMany({
+      where: { id: it.id, orderId: order.id, companyId } as any,
+      data: { unitPrice: it.unitPrice, totalPrice: it.totalPrice } as any,
+    });
+  }
+
+  const totalAmount = money(
+    repriced.reduce((acc, it) => acc + it.totalPrice, 0),
+  );
+
+  await tx.order.updateMany({
+    where: { id: order.id, companyId } as any,
+    data: { totalAmount } as any,
+  });
+
+  return { items: repriced, totalAmount };
+}
+
+/* ---------------------------------------------------------
+ * ✅ Adicionar produto na conta (PENDING_CHECKIN)
+ * - agora valida estoque de verdade (considerando item existente)
+ * ---------------------------------------------------------*/
+export async function addProductToClientOpenOrder(
+  formData: FormData,
+): Promise<void> {
   const clientId = formData.get("clientId") as string | null;
   const productId = formData.get("productId") as string | null;
 
@@ -381,38 +437,47 @@ export async function addProductToClientOpenOrder(formData: FormData) {
   if (!productId) throw new Error("productId é obrigatório.");
   assertPositiveInt(quantity, "Quantidade");
 
-  // 🔐 Permissão + escopo de unidade (blindagem server-side)
   const admin = (await requireAdminPermission("canAccessCheckout")) as any;
+  const companyId = requireCompanyIdFromAdmin(admin);
+
   const activeUnitId = await resolveUnitScope({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
   });
 
   await withRevalidate(async () => {
-    // resolve preço (por enquanto nível padrão BRONZE + aniversário)
     const resolved = await resolveProductUnitPrice({
+      companyId,
       productId,
       clientId,
-      timeZone: "America/Sao_Paulo", // ✅ depois: puxar timezone do tenant/unidade
+      timeZone: "America/Sao_Paulo",
     });
 
-    // se admin está filtrando por unidade, o produto precisa ser dessa unidade
     if (activeUnitId && resolved.unitId !== activeUnitId) {
       throw new Error("Este produto não pertence à unidade selecionada.");
     }
 
     await prisma.$transaction(async (tx) => {
-      // encontra um pedido aberto de produto (PENDING_CHECKIN) para esse cliente nessa unidade
+      // ✅ pega produto “de verdade” no tx para validar estoque
+      const product = await tx.product.findFirst({
+        where: { id: productId, companyId, isActive: true } as any,
+        select: { id: true, name: true, stockQuantity: true, unitId: true },
+      });
+
+      if (!product) throw new Error("Produto não encontrado.");
+      if ((product as any).unitId !== resolved.unitId) {
+        throw new Error("Produto não pertence a esta unidade.");
+      }
+
       const existing = await tx.order.findFirst({
         where: {
+          companyId,
           clientId,
           unitId: resolved.unitId,
           status: "PENDING_CHECKIN",
           items: { some: { productId: { not: null } } },
         } as any,
-        include: {
-          items: true,
-        },
+        include: { items: true },
         orderBy: { createdAt: "desc" },
       });
 
@@ -421,6 +486,7 @@ export async function addProductToClientOpenOrder(formData: FormData) {
       if (!orderId) {
         const created = await tx.order.create({
           data: {
+            companyId,
             clientId,
             unitId: resolved.unitId,
             status: "PENDING_CHECKIN",
@@ -431,31 +497,38 @@ export async function addProductToClientOpenOrder(formData: FormData) {
         orderId = created.id;
       }
 
-      // tenta achar item do mesmo produto pra somar quantidade
       const currentItem =
-        existing?.items?.find((it: any) => it.productId === productId) ?? null;
+        existing?.items?.find(
+          (it: any) => String(it.productId) === productId,
+        ) ?? null;
+
+      // ✅ sempre usa o preço atual do motor (aniversário/nível)
+      const unitPrice = money(resolved.unitPrice);
+
+      const currentQty = currentItem
+        ? Math.max(1, Number(currentItem.quantity ?? 0))
+        : 0;
+      const newQty = currentQty + quantity;
+
+      // ✅ valida estoque considerando quantidade final do item
+      assertEnoughStock(
+        { name: product.name, stockQuantity: product.stockQuantity },
+        newQty,
+      );
 
       if (currentItem) {
-        const newQty = currentItem.quantity + quantity;
+        const totalPrice = money(unitPrice * newQty);
 
-        // preço congelado:
-        // - mantém o unitPrice já salvo (consistência da conta)
-        const unitPrice = Number(currentItem.unitPrice ?? 0);
-        const totalPrice = unitPrice * newQty;
-
-        await tx.orderItem.update({
-          where: { id: currentItem.id },
-          data: {
-            quantity: newQty,
-            totalPrice,
-          } as any,
+        await tx.orderItem.updateMany({
+          where: { id: currentItem.id, orderId, companyId } as any,
+          data: { quantity: newQty, unitPrice, totalPrice } as any,
         });
       } else {
-        const unitPrice = resolved.unitPrice;
-        const totalPrice = unitPrice * quantity;
+        const totalPrice = money(unitPrice * quantity);
 
         await tx.orderItem.create({
           data: {
+            companyId,
             order: { connect: { id: orderId } },
             product: { connect: { id: productId } },
             quantity,
@@ -465,19 +538,17 @@ export async function addProductToClientOpenOrder(formData: FormData) {
         });
       }
 
-      // recalcula total do pedido com soma dos itens
       const items = await tx.orderItem.findMany({
-        where: { orderId },
+        where: { orderId, companyId } as any,
         select: { totalPrice: true },
       });
 
-      const total = items.reduce(
-        (acc, it) => acc + Number(it.totalPrice ?? 0),
-        0,
+      const total = money(
+        items.reduce((acc: number, it: any) => acc + money(it.totalPrice), 0),
       );
 
-      await tx.order.update({
-        where: { id: orderId },
+      await tx.order.updateMany({
+        where: { id: orderId, companyId } as any,
         data: { totalAmount: total } as any,
       });
     });
@@ -487,9 +558,11 @@ export async function addProductToClientOpenOrder(formData: FormData) {
 }
 
 /* ---------------------------------------------------------
- * NOVO: CONTA DO CLIENTE (Opção A)
+ * CONTA DO CLIENTE
  * ---------------------------------------------------------*/
-export async function finalizeClientOpenOrders(formData: FormData) {
+export async function finalizeClientOpenOrders(
+  formData: FormData,
+): Promise<void> {
   const clientId = formData.get("clientId") as string | null;
   const barberId = (formData.get("barberId") as string | null) || null;
 
@@ -497,20 +570,19 @@ export async function finalizeClientOpenOrders(formData: FormData) {
     throw new Error("clientId é obrigatório para finalizar a conta.");
   }
 
-  // 🔐 Permissão + escopo de unidade (blindagem server-side)
   const admin = (await requireAdminPermission("canAccessCheckout")) as any;
+  const companyId = requireCompanyIdFromAdmin(admin);
+
   const activeUnitId = await resolveUnitScope({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
   });
 
   await withRevalidate(async () => {
-    // ✅ IMPORTANTE:
-    // - serviços podem estar com order.clientId nulo e client ficar no appointment.clientId
-    // - produtos geralmente ficam no order.clientId
     const [serviceOrders, productOrders] = await Promise.all([
       prisma.order.findMany({
         where: {
+          companyId,
           status: "PENDING",
           ...(activeUnitId ? { unitId: activeUnitId } : {}),
           items: { some: { serviceId: { not: null } } },
@@ -521,77 +593,40 @@ export async function finalizeClientOpenOrders(formData: FormData) {
           status: true,
           appointmentId: true,
           unitId: true,
-          items: {
-            select: {
-              id: true,
-              serviceId: true,
-              productId: true,
-            },
-          },
+          companyId: true,
+          items: { select: { id: true, serviceId: true, productId: true } },
         },
       }),
 
       prisma.order.findMany({
         where: {
+          companyId,
           clientId,
           status: "PENDING_CHECKIN",
           ...(activeUnitId ? { unitId: activeUnitId } : {}),
           items: { some: { productId: { not: null } } },
         } as any,
         include: {
-          items: {
-            include: {
-              product: true,
-            },
-          },
+          items: { include: { product: true } },
         },
       }),
     ]);
 
-    // Nada aberto? só sai
     if (serviceOrders.length === 0 && productOrders.length === 0) return;
 
-    // Guard rails
-    const anyServiceOrderInvalid = serviceOrders.some(
-      (o) => !(o.items ?? []).some((it: any) => it.serviceId != null),
-    );
-    if (anyServiceOrderInvalid) {
-      throw new Error(
-        "Encontramos um pedido PENDING sem itens de serviço. Não é possível finalizar automaticamente.",
-      );
-    }
-
-    const anyProductOrderInvalid = productOrders.some(
-      (o) => !(o.items ?? []).some((it: any) => it.productId != null),
-    );
-    if (anyProductOrderInvalid) {
-      throw new Error(
-        "Encontramos um pedido PENDING_CHECKIN sem itens de produto. Não é possível finalizar automaticamente.",
-      );
-    }
-
-    // Se houver produtos pendentes, barberId vira obrigatório
     if (productOrders.length > 0 && !barberId) {
       throw new Error(
         "Selecione o barbeiro responsável para finalizar a venda de produtos.",
       );
     }
 
-    /**
-     * ✅ REGRA MULTI-UNIDADE (CRÍTICA):
-     * - Ao finalizar produtos, o barbeiro escolhido PRECISA pertencer à unidade do pedido.
-     * - E uma “conta” não pode finalizar produtos de unidades diferentes num clique só.
-     */
     if (productOrders.length > 0) {
       const unitIds = Array.from(
         new Set(productOrders.map((o) => o.unitId).filter(Boolean)),
       ) as string[];
 
-      if (unitIds.length === 0) {
-        throw new Error(
-          "Pedidos de produto sem unidade vinculada. Não é possível finalizar.",
-        );
-      }
+      if (unitIds.length === 0)
+        throw new Error("Pedidos de produto sem unidade vinculada.");
 
       if (unitIds.length > 1) {
         throw new Error(
@@ -601,22 +636,17 @@ export async function finalizeClientOpenOrders(formData: FormData) {
 
       const orderUnitId = unitIds[0];
 
-      // Se o admin está com unidade ativa, a conta precisa estar dentro dela
       if (activeUnitId && orderUnitId !== activeUnitId) {
         throw new Error("Esta conta não pertence à unidade selecionada.");
       }
 
       const barberOk = await prisma.barber.findFirst({
         where: {
+          companyId,
           id: barberId!,
           isActive: true,
-          units: {
-            some: {
-              unitId: orderUnitId,
-              isActive: true,
-            },
-          },
-        },
+          units: { some: { unitId: orderUnitId, isActive: true } },
+        } as any,
         select: { id: true },
       });
 
@@ -627,7 +657,6 @@ export async function finalizeClientOpenOrders(formData: FormData) {
       }
     }
 
-    // Também garante que os serviços dessa conta (se existirem) são da mesma unidade ativa (quando setado)
     if (activeUnitId) {
       const serviceOutside = serviceOrders.some(
         (o) => o.unitId !== activeUnitId,
@@ -640,22 +669,22 @@ export async function finalizeClientOpenOrders(formData: FormData) {
     }
 
     await prisma.$transaction(async (tx) => {
-      // 1) Finaliza serviços (✅ com snapshot financeiro)
+      // -------- serviços --------
       for (const order of serviceOrders) {
-        if (order.status !== "PENDING") continue;
-
+        assertOrderInCompany({ companyId: order.companyId }, companyId);
         assertOrderInActiveUnit({ unitId: order.unitId ?? null }, activeUnitId);
 
-        // ✅ idempotência
-        const fresh = await tx.order.findUnique({
-          where: { id: order.id },
+        if (order.status !== "PENDING") continue;
+
+        const fresh = await tx.order.findFirst({
+          where: { id: order.id, companyId } as any,
           select: { id: true, status: true },
         });
+
         if (!fresh || fresh.status !== "PENDING") continue;
 
-        // ✅ pega itens e appointment+service para congelar financeiro
-        const full = await tx.order.findUnique({
-          where: { id: order.id },
+        const full = await tx.order.findFirst({
+          where: { id: order.id, companyId } as any,
           include: {
             items: {
               include: {
@@ -674,12 +703,11 @@ export async function finalizeClientOpenOrders(formData: FormData) {
 
         if (!full) continue;
 
-        await tx.order.update({
-          where: { id: order.id },
+        await tx.order.updateMany({
+          where: { id: order.id, companyId } as any,
           data: { status: "COMPLETED" },
         });
 
-        // Snapshot apenas se existir appointment vinculado
         if (full.appointment?.id) {
           const serviceItems = (full.items ?? []).filter(
             (it: any) => it.serviceId != null,
@@ -699,59 +727,50 @@ export async function finalizeClientOpenOrders(formData: FormData) {
 
           const earning = calcCommission(serviceSubtotal, pct);
 
+          // ✅ Decimal-safe
           await tx.appointment.updateMany({
             where: {
               id: full.appointment.id,
+              companyId,
               status: "PENDING",
               ...(activeUnitId ? { unitId: activeUnitId } : {}),
             } as any,
             data: {
               status: "DONE",
               concludedByRole: "ADMIN",
-
-              // ✅ congela contábil
-              servicePriceAtTheTime: serviceSubtotal,
-              barberPercentageAtTheTime: pct,
-              barberEarningValue: earning,
+              servicePriceAtTheTime: new Prisma.Decimal(serviceSubtotal),
+              barberPercentageAtTheTime: new Prisma.Decimal(pct),
+              barberEarningValue: new Prisma.Decimal(earning),
             } as any,
           });
         }
       }
 
-      // 2) Finaliza produtos (baixa estoque + cria productSale + status completed)
-      for (const order of productOrders) {
-        if (order.status !== "PENDING_CHECKIN") continue;
-
+      // -------- produtos --------
+      for (const order of productOrders as any[]) {
+        assertOrderInCompany({ companyId: order.companyId }, companyId);
         assertOrderInActiveUnit({ unitId: order.unitId ?? null }, activeUnitId);
 
+        if (order.status !== "PENDING_CHECKIN") continue;
+
         if (!order.unitId) {
-          throw new Error(
-            "Pedido de produto sem unidade vinculada. Não é possível finalizar.",
-          );
+          throw new Error("Pedido de produto sem unidade vinculada.");
         }
 
-        // ✅ Idempotência (anti-clique duplo / corrida):
-        const fresh = await tx.order.findUnique({
-          where: { id: order.id },
+        const fresh = await tx.order.findFirst({
+          where: { id: order.id, companyId } as any,
           select: { id: true, status: true },
         });
 
-        if (!fresh || fresh.status !== "PENDING_CHECKIN") {
-          continue;
-        }
+        if (!fresh || fresh.status !== "PENDING_CHECKIN") continue;
 
-        // ✅ valida barbeiro pertence à unidade do pedido (segurança extra)
         const barberOk = await tx.barber.findFirst({
           where: {
+            companyId,
             id: barberId!,
             isActive: true,
-            units: {
-              some: {
-                unitId: order.unitId,
-                isActive: true,
-              },
-            },
-          },
+            units: { some: { unitId: order.unitId, isActive: true } },
+          } as any,
           select: { id: true },
         });
 
@@ -761,49 +780,74 @@ export async function finalizeClientOpenOrders(formData: FormData) {
           );
         }
 
-        const productItems = order.items.filter(
-          (item) => item.productId != null,
+        // ✅ REPRECIFICA ANTES DE DAR BAIXA E REGISTRAR VENDA
+        const repriced = await repriceProductOrderInTx({
+          tx,
+          companyId,
+          order,
+          clientId,
+          timeZone: "America/Sao_Paulo",
+        });
+
+        const byProductId = new Map<
+          string,
+          { unitPrice: number; totalPrice: number; quantity: number }
+        >();
+        for (const it of repriced.items) {
+          byProductId.set(String(it.productId), {
+            unitPrice: it.unitPrice,
+            totalPrice: it.totalPrice,
+            quantity: it.quantity,
+          });
+        }
+
+        const productItems = (order.items ?? []).filter(
+          (item: any) => item.productId != null,
         );
 
         for (const item of productItems) {
           if (!item.productId || !item.product) continue;
 
-          // ✅ valida estoque antes de baixar
+          const priced = byProductId.get(String(item.productId));
+          const qty =
+            priced?.quantity ?? Math.max(1, Number(item.quantity ?? 1));
+
           assertEnoughStock(
             {
               name: item.product.name,
               stockQuantity: item.product.stockQuantity,
             },
-            item.quantity,
+            qty,
           );
 
-          const newQuantity = item.product.stockQuantity - item.quantity;
-
-          await tx.product.update({
-            where: { id: item.productId },
-            data: {
-              stockQuantity: newQuantity,
-            },
+          await tx.product.updateMany({
+            where: { id: item.productId, companyId } as any,
+            data: { stockQuantity: item.product.stockQuantity - qty },
           });
+
+          const saleUnitPrice = priced?.unitPrice ?? money(item.unitPrice);
+          const saleTotalPrice = priced?.totalPrice ?? money(item.totalPrice);
 
           await tx.productSale.create({
             data: {
+              company: { connect: { id: companyId } },
               product: { connect: { id: item.productId } },
               barber: { connect: { id: barberId! } },
               unit: { connect: { id: order.unitId } },
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              totalPrice: item.totalPrice,
-            },
+              quantity: qty,
+              unitPrice: new Prisma.Decimal(saleUnitPrice),
+              totalPrice: new Prisma.Decimal(saleTotalPrice),
+            } as any,
           });
         }
 
-        await tx.order.update({
-          where: { id: order.id },
+        await tx.order.updateMany({
+          where: { id: order.id, companyId } as any,
           data: {
             status: "COMPLETED",
             barberId: barberId!,
-          },
+            totalAmount: new Prisma.Decimal(repriced.totalAmount),
+          } as any,
         });
       }
     });
@@ -812,15 +856,17 @@ export async function finalizeClientOpenOrders(formData: FormData) {
   redirect(getRedirectTo(formData));
 }
 
-export async function cancelClientOpenOrders(formData: FormData) {
+export async function cancelClientOpenOrders(
+  formData: FormData,
+): Promise<void> {
   const clientId = formData.get("clientId") as string | null;
-
   if (!clientId) {
     throw new Error("clientId é obrigatório para cancelar a conta.");
   }
 
-  // 🔐 Permissão + escopo de unidade (blindagem server-side)
   const admin = (await requireAdminPermission("canAccessCheckout")) as any;
+  const companyId = requireCompanyIdFromAdmin(admin);
+
   const activeUnitId = await resolveUnitScope({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
@@ -829,13 +875,12 @@ export async function cancelClientOpenOrders(formData: FormData) {
   await withRevalidate(async () => {
     await prisma.order.updateMany({
       where: {
+        companyId,
         status: { in: ["PENDING", "PENDING_CHECKIN"] },
         ...(activeUnitId ? { unitId: activeUnitId } : {}),
         OR: [{ clientId }, { appointment: { clientId } }],
       } as any,
-      data: {
-        status: "CANCELED",
-      },
+      data: { status: "CANCELED" },
     });
   });
 
@@ -843,9 +888,9 @@ export async function cancelClientOpenOrders(formData: FormData) {
 }
 
 /* ---------------------------------------------------------
- * PRODUTOS – fluxo antigo (PENDING_CHECKIN → COMPLETED)
+ * PRODUTOS – fluxo antigo
  * ---------------------------------------------------------*/
-export async function finalizeProductOrder(formData: FormData) {
+export async function finalizeProductOrder(formData: FormData): Promise<void> {
   const orderId = formData.get("orderId") as string | null;
   const barberId = formData.get("barberId") as string | null;
 
@@ -853,67 +898,57 @@ export async function finalizeProductOrder(formData: FormData) {
     throw new Error("Dados inválidos para finalizar pedido de produto.");
   }
 
-  // 🔐 Permissão + escopo de unidade (blindagem server-side)
   const admin = (await requireAdminPermission("canAccessCheckout")) as any;
+  const companyId = requireCompanyIdFromAdmin(admin);
+
   const activeUnitId = await resolveUnitScope({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
   });
 
   await withRevalidate(async () => {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
-      include: {
-        items: {
-          include: {
-            product: true,
-          },
-        },
-      },
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, companyId } as any,
+      include: { items: { include: { product: true } } },
     });
 
-    if (!order) {
-      throw new Error("Pedido não encontrado.");
-    }
+    if (!order) throw new Error("Pedido não encontrado.");
 
-    assertOrderInActiveUnit({ unitId: order.unitId ?? null }, activeUnitId);
+    assertOrderInCompany({ companyId: (order as any).companyId }, companyId);
+    assertOrderInActiveUnit(
+      { unitId: (order as any).unitId ?? null },
+      activeUnitId,
+    );
 
-    if (order.status !== "PENDING_CHECKIN") {
-      return;
-    }
+    if ((order as any).status !== "PENDING_CHECKIN") return;
 
-    if (!order.items.some((it) => it.productId != null)) {
+    if (!(order as any).items.some((it: any) => it.productId != null)) {
       throw new Error("Este pedido não possui itens de produto.");
     }
 
-    const productItems = order.items.filter((item) => item.productId != null);
+    const productItems = (order as any).items.filter(
+      (item: any) => item.productId != null,
+    );
 
     await prisma.$transaction(async (tx) => {
-      if (!order.unitId) {
-        throw new Error(
-          "Pedido de produto sem unidade vinculada. Não é possível finalizar.",
-        );
+      if (!(order as any).unitId) {
+        throw new Error("Pedido de produto sem unidade vinculada.");
       }
 
-      // ✅ recheck status dentro da transação (idempotência)
-      const fresh = await tx.order.findUnique({
-        where: { id: orderId },
-        select: { status: true },
+      const fresh = await tx.order.findFirst({
+        where: { id: orderId, companyId } as any,
+        select: { status: true, clientId: true },
       });
-      if (!fresh || fresh.status !== "PENDING_CHECKIN") return;
 
-      // ✅ valida barbeiro pertence à unidade do pedido
+      if (!fresh || (fresh as any).status !== "PENDING_CHECKIN") return;
+
       const barberOk = await tx.barber.findFirst({
         where: {
+          companyId,
           id: barberId,
           isActive: true,
-          units: {
-            some: {
-              unitId: order.unitId,
-              isActive: true,
-            },
-          },
-        },
+          units: { some: { unitId: (order as any).unitId, isActive: true } },
+        } as any,
         select: { id: true },
       });
 
@@ -923,45 +958,70 @@ export async function finalizeProductOrder(formData: FormData) {
         );
       }
 
+      const repriced = await repriceProductOrderInTx({
+        tx,
+        companyId,
+        order,
+        clientId: String(
+          (fresh as any).clientId ?? (order as any).clientId ?? "",
+        ),
+        timeZone: "America/Sao_Paulo",
+      });
+
+      const byProductId = new Map<
+        string,
+        { unitPrice: number; totalPrice: number; quantity: number }
+      >();
+      for (const it of repriced.items) {
+        byProductId.set(String(it.productId), {
+          unitPrice: it.unitPrice,
+          totalPrice: it.totalPrice,
+          quantity: it.quantity,
+        });
+      }
+
       for (const item of productItems) {
         if (!item.productId || !item.product) continue;
 
-        // ✅ valida estoque antes de baixar
+        const priced = byProductId.get(String(item.productId));
+        const qty = priced?.quantity ?? Math.max(1, Number(item.quantity ?? 1));
+
         assertEnoughStock(
           {
             name: item.product.name,
             stockQuantity: item.product.stockQuantity,
           },
-          item.quantity,
+          qty,
         );
 
-        const newQuantity = item.product.stockQuantity - item.quantity;
-
-        await tx.product.update({
-          where: { id: item.productId },
-          data: {
-            stockQuantity: newQuantity,
-          },
+        await tx.product.updateMany({
+          where: { id: item.productId, companyId } as any,
+          data: { stockQuantity: item.product.stockQuantity - qty },
         });
+
+        const saleUnitPrice = priced?.unitPrice ?? money(item.unitPrice);
+        const saleTotalPrice = priced?.totalPrice ?? money(item.totalPrice);
 
         await tx.productSale.create({
           data: {
+            company: { connect: { id: companyId } },
             product: { connect: { id: item.productId } },
             barber: { connect: { id: barberId } },
-            unit: { connect: { id: order.unitId } },
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.totalPrice,
-          },
+            unit: { connect: { id: (order as any).unitId } },
+            quantity: qty,
+            unitPrice: new Prisma.Decimal(saleUnitPrice),
+            totalPrice: new Prisma.Decimal(saleTotalPrice),
+          } as any,
         });
       }
 
-      await tx.order.update({
-        where: { id: orderId },
+      await tx.order.updateMany({
+        where: { id: orderId, companyId } as any,
         data: {
           status: "COMPLETED",
           barberId,
-        },
+          totalAmount: new Prisma.Decimal(repriced.totalAmount),
+        } as any,
       });
     });
   });
@@ -969,50 +1029,48 @@ export async function finalizeProductOrder(formData: FormData) {
   redirect(getRedirectTo(formData));
 }
 
-export async function cancelProductOrder(formData: FormData) {
+export async function cancelProductOrder(formData: FormData): Promise<void> {
   const orderId = formData.get("orderId") as string | null;
-
-  if (!orderId) {
+  if (!orderId)
     throw new Error("Dados inválidos para cancelar pedido de produto.");
-  }
 
-  // 🔐 Permissão + escopo de unidade (blindagem server-side)
   const admin = (await requireAdminPermission("canAccessCheckout")) as any;
+  const companyId = requireCompanyIdFromAdmin(admin);
+
   const activeUnitId = await resolveUnitScope({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
   });
 
   await withRevalidate(async () => {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, companyId } as any,
       select: {
         id: true,
         status: true,
         unitId: true,
+        companyId: true,
         items: { select: { productId: true } },
       },
     });
 
-    if (!order) {
-      throw new Error("Pedido não encontrado.");
-    }
+    if (!order) throw new Error("Pedido não encontrado.");
 
-    assertOrderInActiveUnit({ unitId: order.unitId ?? null }, activeUnitId);
+    assertOrderInCompany({ companyId: (order as any).companyId }, companyId);
+    assertOrderInActiveUnit(
+      { unitId: (order as any).unitId ?? null },
+      activeUnitId,
+    );
 
-    if (order.status !== "PENDING_CHECKIN") {
-      return;
-    }
+    if ((order as any).status !== "PENDING_CHECKIN") return;
 
-    if (!(order.items ?? []).some((it: any) => it.productId != null)) {
+    if (!((order as any).items ?? []).some((it: any) => it.productId != null)) {
       throw new Error("Este pedido não possui itens de produto.");
     }
 
-    await prisma.order.update({
-      where: { id: orderId },
-      data: {
-        status: "CANCELED",
-      },
+    await prisma.order.updateMany({
+      where: { id: orderId, companyId } as any,
+      data: { status: "CANCELED" },
     });
   });
 
@@ -1020,59 +1078,58 @@ export async function cancelProductOrder(formData: FormData) {
 }
 
 /* ---------------------------------------------------------
- * SERVIÇOS – novos (PENDING → COMPLETED / CANCELED)
+ * SERVIÇOS – (PENDING → COMPLETED / CANCELED)
  * ---------------------------------------------------------*/
-export async function finalizeServiceOrder(formData: FormData) {
+export async function finalizeServiceOrder(formData: FormData): Promise<void> {
   const orderId = formData.get("orderId") as string | null;
-
-  if (!orderId) {
+  if (!orderId)
     throw new Error("Dados inválidos para finalizar checkout de serviço.");
-  }
 
-  // 🔐 Permissão + escopo de unidade (blindagem server-side)
   const admin = (await requireAdminPermission("canAccessCheckout")) as any;
+  const companyId = requireCompanyIdFromAdmin(admin);
+
   const activeUnitId = await resolveUnitScope({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
   });
 
   await withRevalidate(async () => {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, companyId } as any,
       select: {
         id: true,
         status: true,
         appointmentId: true,
         unitId: true,
+        companyId: true,
         items: { select: { serviceId: true } },
       },
     });
 
-    if (!order) {
-      throw new Error("Pedido não encontrado.");
-    }
+    if (!order) throw new Error("Pedido não encontrado.");
 
-    assertOrderInActiveUnit({ unitId: order.unitId ?? null }, activeUnitId);
+    assertOrderInCompany({ companyId: (order as any).companyId }, companyId);
+    assertOrderInActiveUnit(
+      { unitId: (order as any).unitId ?? null },
+      activeUnitId,
+    );
 
-    if (order.status !== "PENDING") {
-      return;
-    }
+    if ((order as any).status !== "PENDING") return;
 
-    if (!(order.items ?? []).some((it: any) => it.serviceId != null)) {
+    if (!((order as any).items ?? []).some((it: any) => it.serviceId != null)) {
       throw new Error("Este pedido não possui itens de serviço.");
     }
 
     await prisma.$transaction(async (tx) => {
-      // ✅ idempotência
-      const fresh = await tx.order.findUnique({
-        where: { id: orderId },
+      const fresh = await tx.order.findFirst({
+        where: { id: orderId, companyId } as any,
         select: { status: true },
       });
-      if (!fresh || fresh.status !== "PENDING") return;
 
-      // ✅ pega itens completos + appointment.service para snapshot
-      const full = await tx.order.findUnique({
-        where: { id: orderId },
+      if (!fresh || (fresh as any).status !== "PENDING") return;
+
+      const full = await tx.order.findFirst({
+        where: { id: orderId, companyId } as any,
         include: {
           items: {
             include: {
@@ -1091,13 +1148,13 @@ export async function finalizeServiceOrder(formData: FormData) {
 
       if (!full) return;
 
-      await tx.order.update({
-        where: { id: orderId },
+      await tx.order.updateMany({
+        where: { id: orderId, companyId } as any,
         data: { status: "COMPLETED" },
       });
 
-      if (full.appointment?.id) {
-        const serviceItems = (full.items ?? []).filter(
+      if ((full as any).appointment?.id) {
+        const serviceItems = ((full as any).items ?? []).filter(
           (it: any) => it.serviceId != null,
         );
 
@@ -1111,24 +1168,25 @@ export async function finalizeServiceOrder(formData: FormData) {
         );
 
         const pct =
-          toNumberDecimal(full.appointment.service?.barberPercentage) || 0;
+          toNumberDecimal(
+            (full as any).appointment.service?.barberPercentage,
+          ) || 0;
 
         const earning = calcCommission(serviceSubtotal, pct);
 
         await tx.appointment.updateMany({
           where: {
-            id: full.appointment.id,
+            id: (full as any).appointment.id,
+            companyId,
             status: "PENDING",
             ...(activeUnitId ? { unitId: activeUnitId } : {}),
           } as any,
           data: {
             status: "DONE",
             concludedByRole: "ADMIN",
-
-            // ✅ congela contábil
-            servicePriceAtTheTime: serviceSubtotal,
-            barberPercentageAtTheTime: pct,
-            barberEarningValue: earning,
+            servicePriceAtTheTime: new Prisma.Decimal(serviceSubtotal),
+            barberPercentageAtTheTime: new Prisma.Decimal(pct),
+            barberEarningValue: new Prisma.Decimal(earning),
           } as any,
         });
       }
@@ -1138,63 +1196,64 @@ export async function finalizeServiceOrder(formData: FormData) {
   redirect(getRedirectTo(formData));
 }
 
-export async function cancelServiceOrder(formData: FormData) {
+export async function cancelServiceOrder(formData: FormData): Promise<void> {
   const orderId = formData.get("orderId") as string | null;
-
-  if (!orderId) {
+  if (!orderId)
     throw new Error("Dados inválidos para cancelar checkout de serviço.");
-  }
 
-  // 🔐 Permissão + escopo de unidade (blindagem server-side)
   const admin = (await requireAdminPermission("canAccessCheckout")) as any;
+  const companyId = requireCompanyIdFromAdmin(admin);
+
   const activeUnitId = await resolveUnitScope({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
   });
 
   await withRevalidate(async () => {
-    const order = await prisma.order.findUnique({
-      where: { id: orderId },
+    const order = await prisma.order.findFirst({
+      where: { id: orderId, companyId } as any,
       select: {
         id: true,
         status: true,
         appointmentId: true,
         unitId: true,
+        companyId: true,
         items: { select: { serviceId: true } },
       },
     });
 
-    if (!order) {
-      throw new Error("Pedido não encontrado.");
-    }
+    if (!order) throw new Error("Pedido não encontrado.");
 
-    assertOrderInActiveUnit({ unitId: order.unitId ?? null }, activeUnitId);
+    assertOrderInCompany({ companyId: (order as any).companyId }, companyId);
+    assertOrderInActiveUnit(
+      { unitId: (order as any).unitId ?? null },
+      activeUnitId,
+    );
 
-    if (order.status !== "PENDING") {
-      return;
-    }
+    if ((order as any).status !== "PENDING") return;
 
-    if (!(order.items ?? []).some((it: any) => it.serviceId != null)) {
+    if (!((order as any).items ?? []).some((it: any) => it.serviceId != null)) {
       throw new Error("Este pedido não possui itens de serviço.");
     }
 
     await prisma.$transaction(async (tx) => {
-      // ✅ idempotência
-      const fresh = await tx.order.findUnique({
-        where: { id: orderId },
+      const fresh = await tx.order.findFirst({
+        where: { id: orderId, companyId } as any,
         select: { status: true },
       });
-      if (!fresh || fresh.status !== "PENDING") return;
 
-      await tx.order.update({
-        where: { id: orderId },
+      if (!fresh || (fresh as any).status !== "PENDING") return;
+
+      await tx.order.updateMany({
+        where: { id: orderId, companyId } as any,
         data: { status: "CANCELED" },
       });
 
-      if (order.appointmentId) {
+      if ((order as any).appointmentId) {
         await tx.appointment.updateMany({
           where: {
-            id: order.appointmentId,
+            id: (order as any).appointmentId,
+            companyId,
             status: "PENDING",
             ...(activeUnitId ? { unitId: activeUnitId } : {}),
           } as any,

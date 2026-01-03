@@ -7,10 +7,10 @@ export type AppJwtPayload = {
   sub: string; // userId
   role: Role;
 
-  // ✅ novo: onboarding gate (telefone + aniversário)
-  // true  => perfil completo
-  // false => deve ser redirecionado ao Profile
-  // undefined => tokens antigos / não informado
+  // ✅ multi-tenant REAL: tenant obrigatório no app token
+  companyId: string;
+
+  // ✅ onboarding gate (telefone + aniversário)
   profile_complete?: boolean;
 };
 
@@ -29,8 +29,6 @@ function getSecret(): Uint8Array {
 /**
  * Emite JWT pro app (mobile) usar como Bearer token.
  * Default: 30 dias.
- *
- * ✅ agora pode incluir claim profile_complete (opcional)
  */
 export async function signAppJwt(
   payload: AppJwtPayload,
@@ -38,8 +36,16 @@ export async function signAppJwt(
 ): Promise<string> {
   const secret = getSecret();
 
+  const companyId =
+    typeof payload.companyId === "string" ? payload.companyId.trim() : "";
+
+  if (!companyId) {
+    throw new Error("Missing companyId for app token.");
+  }
+
   const claims: Record<string, unknown> = {
-    role: payload.role, // ✅ claim customizada vai no payload
+    role: payload.role,
+    companyId,
   };
 
   if (typeof payload.profile_complete === "boolean") {
@@ -48,7 +54,7 @@ export async function signAppJwt(
 
   return new SignJWT(claims)
     .setProtectedHeader({ alg: "HS256", typ: "JWT" })
-    .setSubject(payload.sub) // sub = userId
+    .setSubject(payload.sub)
     .setIssuedAt()
     .setExpirationTime(expiresIn)
     .sign(secret);
@@ -56,8 +62,6 @@ export async function signAppJwt(
 
 /**
  * Verifica e devolve o payload normalizado.
- *
- * ✅ compat: tokens antigos podem não ter profile_complete
  */
 export async function verifyAppJwt(token: string): Promise<AppJwtPayload> {
   const secret = getSecret();
@@ -66,8 +70,13 @@ export async function verifyAppJwt(token: string): Promise<AppJwtPayload> {
     algorithms: ["HS256"],
   });
 
-  const sub = typeof payload.sub === "string" ? payload.sub : null;
+  const sub = typeof payload.sub === "string" ? payload.sub.trim() : "";
   const role = payload.role as Role | undefined;
+
+  const companyId =
+    typeof (payload as any)?.companyId === "string"
+      ? String((payload as any).companyId).trim()
+      : "";
 
   const profile_complete =
     typeof (payload as any)?.profile_complete === "boolean"
@@ -78,5 +87,9 @@ export async function verifyAppJwt(token: string): Promise<AppJwtPayload> {
     throw new Error("Invalid token payload.");
   }
 
-  return { sub, role, profile_complete };
+  if (!companyId) {
+    throw new Error("Invalid token payload: missing companyId.");
+  }
+
+  return { sub, role, companyId, profile_complete };
 }

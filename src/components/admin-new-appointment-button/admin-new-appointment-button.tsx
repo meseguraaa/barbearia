@@ -21,11 +21,13 @@ type Props = {
   /**
    * ✅ Unidade ativa do admin (já resolvida no page).
    * - string = unidade selecionada
-   * - null = "all" (ver todas) -> não pode agendar sem escolher uma unidade específica
+   * - null = "all" (ver todas)
+   *
+   * Importante: admin dono pode abrir o form e escolher a unidade lá dentro.
    */
   unitId: string | null;
 
-  // ✅ NOVO: unidades disponíveis (pra exibir label corretamente no form)
+  // ✅ unidades disponíveis (pra exibir label e permitir seleção no form)
   units?: UnitOption[];
 };
 
@@ -45,19 +47,49 @@ export function AdminNewAppointmentButton({
     setOpen(false);
   }, [unitId]);
 
-  const formKey = useMemo(() => unitId ?? "all", [unitId]);
+  // ✅ Se não tem unitId (modo "all") mas só existe 1 unidade, podemos "forçar" essa unidade.
+  const effectiveForcedUnitId = useMemo(() => {
+    if (unitId) return unitId;
 
-  const canOpen = !!unitId;
+    const activeUnits = (units ?? []).filter((u) => u.isActive !== false);
+    if (activeUnits.length === 1) return activeUnits[0].id;
+
+    return undefined;
+  }, [unitId, units]);
+
+  // ✅ Força remount quando a unidade (ou o "auto-force") mudar
+  const formKey = useMemo(
+    () => effectiveForcedUnitId ?? "all",
+    [effectiveForcedUnitId],
+  );
+
+  // ✅ Regra de abertura:
+  // - Admin de unidade (unitId definido): abre normal
+  // - Dono (unitId null): deixa abrir e escolher unidade no form
+  const canOpen = true;
 
   return (
     <>
       <Button
         variant="brand"
         onClick={() => {
-          if (!canOpen) {
-            toast.error("Selecione uma unidade para criar um agendamento.");
+          if (!canOpen) return;
+
+          // Se estiver em "all" e não houver unidade efetiva forçada,
+          // a escolha da unidade deve acontecer no form.
+          const activeUnits = (units ?? []).filter((u) => u.isActive !== false);
+
+          if (!unitId && !effectiveForcedUnitId && activeUnits.length > 1) {
+            toast.message("Escolha uma unidade no formulário para agendar.");
+          } else if (
+            !unitId &&
+            !effectiveForcedUnitId &&
+            activeUnits.length === 0
+          ) {
+            toast.error("Nenhuma unidade ativa encontrada para agendar.");
             return;
           }
+
           setOpen(true);
         }}
       >
@@ -65,7 +97,7 @@ export function AdminNewAppointmentButton({
       </Button>
 
       <AppointmentForm
-        key={formKey} // ✅ força remount quando unitId mudar (zera estado do form)
+        key={formKey} // ✅ força remount quando a unidade efetiva mudar (zera estado do form)
         mode="admin"
         open={open}
         onOpenChange={setOpen}
@@ -73,8 +105,8 @@ export function AdminNewAppointmentButton({
         appointments={appointments}
         barbers={barbers}
         services={services}
-        units={units} // ✅ NOVO
-        forcedUnitId={unitId ?? undefined} // ✅ evita null causar inconsistência no form
+        units={units}
+        forcedUnitId={effectiveForcedUnitId} // ✅ undefined quando dono precisa escolher
       >
         {/* IMPORTANTE:
             Passamos um trigger invisível só pra impedir o AppointmentForm

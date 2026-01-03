@@ -1,4 +1,3 @@
-// app/api/mobile/me/history/preview/route.ts
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
@@ -10,6 +9,7 @@ type MobileTokenPayload = {
   role?: "CLIENT" | "BARBER" | "ADMIN";
   email?: string;
   name?: string | null;
+  companyId: string; // ✅ multi-tenant obrigatório
 };
 
 type HistoryItem = {
@@ -24,7 +24,7 @@ function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-company-id",
   };
 }
 
@@ -37,17 +37,25 @@ function getJwtSecretKey() {
 async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
   const auth = req.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!token) throw new Error("Token ausente");
+  if (!token) throw new Error("missing_token");
 
   const { payload } = await jwtVerify(token, getJwtSecretKey());
-  const sub = String(payload.sub || "");
-  if (!sub) throw new Error("Token inválido");
+
+  const sub = String((payload as any)?.sub || "").trim();
+  if (!sub) throw new Error("invalid_token");
+
+  const companyId =
+    typeof (payload as any)?.companyId === "string"
+      ? String((payload as any).companyId).trim()
+      : "";
+  if (!companyId) throw new Error("companyId_missing_in_token");
 
   return {
     sub,
     role: (payload as any).role,
     email: (payload as any).email,
     name: (payload as any).name ?? null,
+    companyId,
   };
 }
 
@@ -57,17 +65,15 @@ function formatPreviewDate(d: Date) {
   return format(d, "dd/MM/yyyy • HH:mm", { locale: ptBR });
 }
 
-function pickApptOccurredAt(appt: any) {
-  const d =
-    appt?.canceledAt ??
-    appt?.cancelledAt ??
-    appt?.completedAt ??
-    appt?.finishedAt ??
-    appt?.performedAt ??
-    appt?.updatedAt ??
-    appt?.scheduleAt;
+function safeDate(input: any) {
+  const d = new Date(input ?? Date.now());
+  return Number.isFinite(d.getTime()) ? d : new Date();
+}
 
-  return new Date(d);
+function pickApptOccurredAt(appt: any) {
+  // ✅ no seu schema real: temos scheduleAt / updatedAt / createdAt
+  const d = appt?.updatedAt ?? appt?.scheduleAt ?? appt?.createdAt;
+  return safeDate(d);
 }
 
 function pickOrderOccurredAt(order: any) {
@@ -75,7 +81,7 @@ function pickOrderOccurredAt(order: any) {
   const isFinal =
     status === "COMPLETED" || status === "CANCELED" || status === "CANCELLED";
   const d = isFinal ? (order?.updatedAt ?? order?.createdAt) : order?.createdAt;
-  return new Date(d);
+  return safeDate(d);
 }
 
 function safeStars(n: any) {
@@ -86,48 +92,134 @@ function safeStars(n: any) {
 }
 
 export async function OPTIONS() {
-  return NextResponse.json({}, { headers: corsHeaders() });
+  return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
 
 export async function GET(req: Request) {
   try {
     const me = await requireMobileAuth(req);
+
+    if (me.role && me.role !== "CLIENT") {
+      return NextResponse.json(
+        { ok: false, error: "Sem permissão" },
+        { status: 403, headers: corsHeaders() },
+      );
+    }
+
     const clientId = me.sub;
+    const companyId = me.companyId;
+
+    const canceledWherePrimary: any = {
+      companyId,
+      clientId,
+      status: { in: ["CANCELED", "CANCELLED"] },
+    };
+
+    const canceledWhereFallback: any = {
+      companyId,
+      clientId,
+      status: "CANCELED",
+    };
 
     const [doneAppointments, canceledAppointments, orders, reviewedAppts] =
       await Promise.all([
         prisma.appointment.findMany({
-          where: { clientId, status: "DONE" },
+          where: { companyId, clientId, status: "DONE" },
           orderBy: { scheduleAt: "desc" },
           take: 10,
-          include: { barber: true, service: true },
+          select: {
+            id: true,
+            scheduleAt: true,
+            updatedAt: true,
+            createdAt: true,
+            description: true,
+            barber: { select: { name: true } },
+            service: { select: { name: true } },
+          },
         }),
-        prisma.appointment.findMany({
-          where: { clientId, status: "CANCELED" },
-          orderBy: { scheduleAt: "desc" },
-          take: 10,
-          include: { barber: true, service: true },
-        }),
+
+        (async () => {
+          try {
+            return await prisma.appointment.findMany({
+              where: canceledWherePrimary,
+              orderBy: { scheduleAt: "desc" },
+              take: 10,
+              select: {
+                id: true,
+                scheduleAt: true,
+                updatedAt: true,
+                createdAt: true,
+                description: true,
+                barber: { select: { name: true } },
+                service: { select: { name: true } },
+              },
+            });
+          } catch {
+            return await prisma.appointment.findMany({
+              where: canceledWhereFallback,
+              orderBy: { scheduleAt: "desc" },
+              take: 10,
+              select: {
+                id: true,
+                scheduleAt: true,
+                updatedAt: true,
+                createdAt: true,
+                description: true,
+                barber: { select: { name: true } },
+                service: { select: { name: true } },
+              },
+            });
+          }
+        })(),
+
         prisma.order.findMany({
-          where: { clientId },
+          where: { companyId, clientId },
           orderBy: { createdAt: "desc" },
           take: 20,
-          include: { items: { include: { product: true, service: true } } },
+          select: {
+            id: true,
+            status: true,
+            createdAt: true,
+            updatedAt: true,
+            items: {
+              select: {
+                quantity: true,
+                productId: true,
+                product: { select: { id: true, name: true } },
+                service: { select: { name: true } },
+              },
+            },
+          },
         }),
-        // ✅ AVALIAÇÕES FEITAS
+
         prisma.appointment.findMany({
           where: {
+            companyId,
             clientId,
             status: "DONE",
             review: { isNot: null },
           },
           orderBy: { updatedAt: "desc" },
           take: 10,
-          include: { barber: true, service: true, review: true },
+          select: {
+            id: true,
+            updatedAt: true,
+            createdAt: true,
+            description: true,
+            barber: { select: { name: true } },
+            service: { select: { name: true } },
+            review: {
+              select: {
+                rating: true,
+                createdAt: true,
+                updatedAt: true,
+              },
+            },
+          },
         }),
       ]);
 
-    const productOrders = orders
+    const productOrders = (orders as any[])
       .filter((order) =>
         order.items.some(
           (item: any) => item?.productId != null || item?.product?.id != null,
@@ -140,7 +232,7 @@ export async function GET(req: Request) {
 
     const normalized: Array<{ occurredAt: Date; item: HistoryItem }> = [];
 
-    for (const appt of doneAppointments) {
+    for (const appt of doneAppointments as any[]) {
       const occurredAt = pickApptOccurredAt(appt);
       const barberPart = appt.barber?.name ? ` • ${appt.barber.name}` : "";
 
@@ -156,7 +248,7 @@ export async function GET(req: Request) {
       });
     }
 
-    for (const appt of canceledAppointments) {
+    for (const appt of canceledAppointments as any[]) {
       const occurredAt = pickApptOccurredAt(appt);
       const barberPart = appt.barber?.name ? ` • ${appt.barber.name}` : "";
 
@@ -172,7 +264,7 @@ export async function GET(req: Request) {
       });
     }
 
-    for (const order of productOrders) {
+    for (const order of productOrders as any[]) {
       const occurredAt = pickOrderOccurredAt(order);
 
       const itemsLabel = order.items
@@ -202,12 +294,9 @@ export async function GET(req: Request) {
       });
     }
 
-    // ✅ entrou no feed como “evento”: review criado/atualizado
     for (const appt of reviewedAppts as any[]) {
       const reviewAt = appt?.review?.createdAt ?? appt?.review?.updatedAt;
-      const occurredAt = reviewAt
-        ? new Date(reviewAt)
-        : new Date(appt.updatedAt);
+      const occurredAt = safeDate(reviewAt ?? appt.updatedAt ?? appt.createdAt);
 
       const barberName = appt.barber?.name || "Profissional";
       const serviceName =
@@ -234,25 +323,47 @@ export async function GET(req: Request) {
     const items = normalized.slice(0, 5).map((x) => x.item);
 
     const _debug = {
-      apptsTotal: doneAppointments.length + canceledAppointments.length,
-      doneCount: doneAppointments.length,
-      canceledCount: canceledAppointments.length,
-      ordersTotal: orders.length,
+      apptsTotal:
+        (doneAppointments as any[]).length +
+        (canceledAppointments as any[]).length,
+      doneCount: (doneAppointments as any[]).length,
+      canceledCount: (canceledAppointments as any[]).length,
+      ordersTotal: (orders as any[]).length,
       productOrdersCount: productOrders.length,
-      reviewsDoneCount: reviewedAppts.length,
+      reviewsDoneCount: (reviewedAppts as any[]).length,
       normalizedCount: normalized.length,
       topTypes: items.map((it) => String(it.id).split(":")[0]),
+      companyId,
     };
 
     return NextResponse.json(
       { ok: true, items, _debug },
-      { headers: corsHeaders() },
+      { status: 200, headers: corsHeaders() },
     );
   } catch (err: any) {
-    const message = err?.message || "Erro inesperado";
+    const message = String(err?.message || "Erro inesperado").trim();
+    const lower = message.toLowerCase();
+
+    // ✅ auth só quando for claramente auth (não por "companyId" aparecer em query/stack)
+    const isAuth =
+      lower.includes("missing_token") ||
+      lower.includes("invalid_token") ||
+      lower.includes("jwt") ||
+      lower.includes("signature") ||
+      lower.includes("não autorizado") ||
+      lower.includes("token ausente") ||
+      lower.includes("companyid_missing_in_token");
+
     return NextResponse.json(
-      { ok: false, error: message, _debug: { where: "catch", message } },
-      { status: 401, headers: corsHeaders() },
+      {
+        ok: false,
+        error: isAuth ? "Não autorizado" : "Erro ao carregar histórico",
+        _debug:
+          process.env.NODE_ENV === "development"
+            ? { where: "catch", message }
+            : undefined,
+      },
+      { status: isAuth ? 401 : 500, headers: corsHeaders() },
     );
   }
 }

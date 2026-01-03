@@ -14,7 +14,7 @@ import {
   cancelProductOrder,
   finalizeServiceOrder,
   cancelServiceOrder,
-  addProductToClientOpenOrder, // ✅ NOVO
+  addProductToClientOpenOrder,
 } from "./actions";
 import { MonthPicker } from "@/components/month-picker";
 import type { OrderStatus } from "@prisma/client";
@@ -102,16 +102,12 @@ async function resolveUnitScope(admin: {
   return cookieValue;
 }
 
-/**
- * Helper pra aplicar unitId sem espalhar if em todo lugar.
- * (Assumindo que os models já tenham unitId no schema multi-unidade.)
- */
-function withUnitWhere<T extends Record<string, any>>(
-  base: T,
-  unitId: string | null,
-) {
-  if (!unitId) return base;
-  return { ...(base as any), unitId } as T;
+function requireCompanyIdFromAdmin(admin: any): string {
+  const companyId = admin?.companyId as string | undefined;
+  if (!companyId) {
+    throw new Error("Contexto inválido: companyId ausente no admin.");
+  }
+  return companyId;
 }
 
 export default async function AdminCheckoutPage({
@@ -119,6 +115,9 @@ export default async function AdminCheckoutPage({
 }: AdminCheckoutPageProps) {
   // 🔐 Permissão: apenas quem tem "Checkout" liberado (ou Dono)
   const admin = (await requireAdminPermission("canAccessCheckout")) as any;
+
+  // ✅ Multi-tenant real: companyId obrigatório
+  const companyId = requireCompanyIdFromAdmin(admin);
 
   // ✅ Unidade ativa para TODAS as queries do checkout
   const activeUnitId = await resolveUnitScope({
@@ -143,119 +142,91 @@ export default async function AdminCheckoutPage({
   const pageSize = clamp(rawPageSize, 5, 100);
 
   const ordersMonthWhere = {
+    companyId,
     createdAt: { gte: monthStart, lte: monthEnd },
     status: "COMPLETED",
-
     ...(activeUnitId ? { unitId: activeUnitId } : {}),
   };
 
-  const [
-    // 🔹 Pedidos de produtos aguardando retirada (fluxo antigo)
-    pendingProductOrders,
-    // 🔹 Pedidos de serviço aguardando checkout
-    pendingServiceOrders,
-    // 🔹 Profissionals para selecionar na venda de produto
-    barbers,
-    // ✅ NOVO: catálogo de produtos para adicionar na conta
-    productsCatalog,
-  ] = await Promise.all([
-    prisma.order.findMany({
-      where: {
-        status: "PENDING_CHECKIN",
-        ...(activeUnitId ? { unitId: activeUnitId } : {}),
-        items: {
-          some: {
-            productId: { not: null },
+  const [pendingProductOrders, pendingServiceOrders, barbers, productsCatalog] =
+    await Promise.all([
+      prisma.order.findMany({
+        where: {
+          companyId,
+          status: "PENDING_CHECKIN",
+          ...(activeUnitId ? { unitId: activeUnitId } : {}),
+          items: { some: { productId: { not: null } } },
+        } as any,
+        orderBy: { createdAt: "desc" },
+        include: {
+          client: true,
+          items: { include: { product: true } },
+        },
+      }),
+
+      prisma.order.findMany({
+        where: {
+          companyId,
+          status: "PENDING",
+          ...(activeUnitId ? { unitId: activeUnitId } : {}),
+          items: { some: { serviceId: { not: null } } },
+        } as any,
+        orderBy: { createdAt: "desc" },
+        include: {
+          client: true,
+          items: { include: { service: true } },
+          appointment: {
+            include: {
+              barber: true,
+              service: true,
+              client: true,
+            },
           },
         },
-      } as any,
+      }),
 
-      orderBy: {
-        createdAt: "desc",
-      },
-      include: {
-        client: true,
-        items: {
-          include: {
-            product: true,
+      prisma.barber.findMany({
+        where: {
+          companyId,
+          isActive: true,
+          ...(activeUnitId
+            ? {
+                units: {
+                  some: { unitId: activeUnitId, isActive: true },
+                },
+              }
+            : {}),
+        } as any,
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          units: {
+            where: { isActive: true },
+            select: { unitId: true, isActive: true },
           },
         },
-      },
-    }),
+      }),
 
-    prisma.order.findMany({
-      where: {
-        status: "PENDING",
-        ...(activeUnitId ? { unitId: activeUnitId } : {}),
-        items: {
-          some: {
-            serviceId: { not: null },
-          },
+      prisma.product.findMany({
+        where: {
+          companyId,
+          isActive: true,
+          ...(activeUnitId ? { unitId: activeUnitId } : {}),
+          stockQuantity: { gt: 0 },
+        } as any,
+        orderBy: { name: "asc" },
+        select: {
+          id: true,
+          name: true,
+          unitId: true,
+          stockQuantity: true,
         },
-      } as any,
-
-      orderBy: {
-        createdAt: "desc",
-      },
-      include: {
-        client: true,
-        items: {
-          include: {
-            service: true,
-          },
-        },
-        // ✅ IMPORTANTE: inclui o cliente do appointment e o snapshot clientName
-        appointment: {
-          include: {
-            barber: true,
-            service: true,
-            client: true,
-          },
-        },
-      },
-    }),
-
-    prisma.barber.findMany({
-      where: {
-        isActive: true,
-        ...(activeUnitId
-          ? {
-              units: {
-                some: { unitId: activeUnitId, isActive: true },
-              },
-            }
-          : {}),
-      },
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-        units: {
-          where: { isActive: true },
-          select: { unitId: true, isActive: true },
-        },
-      },
-    }),
-
-    prisma.product.findMany({
-      where: {
-        isActive: true,
-        ...(activeUnitId ? { unitId: activeUnitId } : {}),
-        stockQuantity: { gt: 0 },
-      } as any,
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-        unitId: true,
-        stockQuantity: true,
-      },
-    }),
-  ]);
+      }),
+    ]);
 
   const hasBarbers = barbers.length > 0;
 
-  // ⭐ total count do mês (para paginação)
   const ordersForMonthCount = await prisma.order.count({
     where: ordersMonthWhere as any,
   });
@@ -263,7 +234,6 @@ export default async function AdminCheckoutPage({
   const totalPages = Math.max(1, Math.ceil(ordersForMonthCount / pageSize));
   const page = clamp(requestedPage, 1, totalPages);
 
-  // ⭐ pedidos do mês paginados (usando page já "safe")
   const ordersForMonth = await prisma.order.findMany({
     where: ordersMonthWhere as any,
     include: {
@@ -275,7 +245,6 @@ export default async function AdminCheckoutPage({
           product: true,
         },
       },
-      // ✅ inclui client no appointment também
       appointment: {
         include: {
           barber: true,
@@ -284,9 +253,7 @@ export default async function AdminCheckoutPage({
         },
       },
     },
-    orderBy: {
-      createdAt: "desc",
-    },
+    orderBy: { createdAt: "desc" },
     skip: (page - 1) * pageSize,
     take: pageSize,
   });
@@ -452,7 +419,9 @@ export default async function AdminCheckoutPage({
               const createdAtStr = format(
                 account.latestCreatedAt,
                 "dd/MM/yyyy 'às' HH:mm",
-                { locale: ptBR },
+                {
+                  locale: ptBR,
+                },
               );
 
               const totalStr = account.totalAmount.toLocaleString("pt-BR", {
@@ -479,7 +448,6 @@ export default async function AdminCheckoutPage({
                 },
               );
 
-              // ✅ unidade do(s) produtos dessa conta (para filtrar barbeiros)
               const productUnitIds = Array.from(
                 new Set(
                   (account.productOrders ?? [])
@@ -488,8 +456,6 @@ export default async function AdminCheckoutPage({
                 ),
               );
 
-              // Regra: se tiver produtos, esperamos 1 unidade só.
-              // Se vier mais de uma (ex: filtro "todas unidades"), bloqueia e força o cara filtrar.
               const productUnitId =
                 account.hasProducts && productUnitIds.length === 1
                   ? productUnitIds[0]!
@@ -507,7 +473,6 @@ export default async function AdminCheckoutPage({
 
               const hasBarbersForAccount = barbersForAccount.length > 0;
 
-              // ✅ catálogo de produtos respeitando a unidade da conta (quando possível)
               const productsForAccount = productUnitId
                 ? productsCatalog.filter((p) => p.unitId === productUnitId)
                 : productsCatalog;
@@ -553,7 +518,6 @@ export default async function AdminCheckoutPage({
                       <span className="text-paragraph-small font-semibold text-content-primary">
                         Total a pagar: {totalStr}
                       </span>
-
                       <OrderStatusBadge status={"PENDING" as OrderStatus} />
                     </div>
                   </div>
@@ -571,7 +535,9 @@ export default async function AdminCheckoutPage({
                             ? format(
                                 order.appointment.scheduleAt,
                                 "dd/MM/yyyy 'às' HH:mm",
-                                { locale: ptBR },
+                                {
+                                  locale: ptBR,
+                                },
                               )
                             : null;
 
@@ -655,7 +621,9 @@ export default async function AdminCheckoutPage({
                           const createdAtStr = format(
                             order.createdAt,
                             "dd/MM/yyyy 'às' HH:mm",
-                            { locale: ptBR },
+                            {
+                              locale: ptBR,
+                            },
                           );
 
                           return (
@@ -779,7 +747,7 @@ export default async function AdminCheckoutPage({
                             type="number"
                             min={1}
                             defaultValue={1}
-                            className="h-9 w-[90px] rounded-md border border-border-primary bg-background-secondary px-2 text-sm text-content-primary"
+                            className="h-9 w-22.5 rounded-md border border-border-primary bg-background-secondary px-2 text-sm text-content-primary"
                           />
                         </div>
 
@@ -1052,10 +1020,10 @@ export default async function AdminCheckoutPage({
       </section>
 
       {/* ================================
-          2) PEDIDOS DO MÊS (AGRUPADO + DETALHADO POR ITEM)
+          2) PEDIDOS DO MÊS
           ================================ */}
       <OrdersSection
-        orders={ordersForMonth}
+        orders={ordersForMonth as any}
         currencyFormatter={currencyFormatter}
         monthLabel={monthLabel}
         monthParam={monthParam}
@@ -1134,7 +1102,6 @@ function OrdersSection({
     return key ?? `no-client:${getClientLabel(order)}`;
   }
 
-  // Agrupa pedidos por cliente (visão “extrato”)
   const grouped = orders.reduce<
     Record<
       string,
@@ -1240,7 +1207,6 @@ function OrdersSection({
                   key={g.clientKey}
                   className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-3 space-y-3"
                 >
-                  {/* Cabeçalho do grupo */}
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="text-paragraph-small text-content-primary truncate">
@@ -1272,7 +1238,6 @@ function OrdersSection({
                     </div>
                   </div>
 
-                  {/* Pedidos do cliente (detalhado) */}
                   <div className="pt-2 border-t border-border-primary space-y-2">
                     <p className="text-label-small text-content-secondary">
                       Pedidos ({g.orders.length})
@@ -1283,7 +1248,9 @@ function OrdersSection({
                         const createdAtStr = format(
                           order.createdAt,
                           "dd/MM/yyyy 'às' HH:mm",
-                          { locale: ptBR },
+                          {
+                            locale: ptBR,
+                          },
                         );
 
                         const serviceItems = order.items.filter(
@@ -1354,9 +1321,7 @@ function OrdersSection({
                               </div>
                             </summary>
 
-                            {/* Conteúdo expandido */}
                             <div className="mt-3 space-y-3">
-                              {/* Serviços */}
                               {serviceItems.length > 0 && (
                                 <div className="space-y-2">
                                   <p className="text-label-small text-content-secondary">
@@ -1428,7 +1393,6 @@ function OrdersSection({
                                 </div>
                               )}
 
-                              {/* Produtos */}
                               {productItems.length > 0 && (
                                 <div className="space-y-2">
                                   <p className="text-label-small text-content-secondary">
@@ -1510,7 +1474,6 @@ function OrdersSection({
             })}
           </div>
 
-          {/* Footer Paginação */}
           <div className="flex flex-col gap-2 items-center">
             <Pagination>
               <PaginationContent>

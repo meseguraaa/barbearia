@@ -48,8 +48,44 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    /**
+     * 🔐 Login centralizado
+     * - loginWithCredentials já valida:
+     *   - usuário existe
+     *   - senha correta
+     *   - isActive
+     *   - role permitida
+     * - e RETORNA o usuário COM companyId
+     */
     const user = await loginWithCredentials(email, password);
-    const token = await createSessionToken(user);
+
+    // ✅ Blindagem multi-tenant: painel NÃO funciona sem companyId
+    const companyId =
+      typeof (user as any)?.companyId === "string"
+        ? String((user as any).companyId).trim()
+        : "";
+
+    if (!companyId) {
+      return withCors(
+        NextResponse.json(
+          {
+            error: "missing_company_context",
+            message:
+              "Usuário não está vinculado a nenhuma empresa. Contate o administrador.",
+          },
+          { status: 403 },
+        ),
+      );
+    }
+
+    /**
+     * 🧾 Sessão do painel
+     * O token DEVE carregar companyId
+     */
+    const token = await createSessionToken({
+      ...user,
+      companyId,
+    });
 
     return withCors(
       NextResponse.json({
@@ -59,6 +95,7 @@ export async function POST(req: NextRequest) {
           name: user.name,
           email: user.email,
           role: user.role,
+          companyId, // ✅ útil para UI, mas o server é a autoridade
         },
       }),
     );

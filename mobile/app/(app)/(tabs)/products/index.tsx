@@ -121,6 +121,7 @@ function formatMoneySmartBRL(value: number) {
   const v = Number(value ?? 0);
   const safe = Number.isFinite(v) ? v : 0;
 
+  // eslint-disable-next-line no-restricted-globals
   const isInt = Math.abs(safe - Math.round(safe)) < 1e-9;
 
   try {
@@ -841,7 +842,9 @@ export default function Products() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const { user, meLoading } = useAuth();
+  // ✅ multi-tenant
+  const { user, meLoading, companyId, refreshMe } = useAuth();
+  const warnedMissingCompanyRef = useRef(false);
 
   const displayName = useMemo(
     () => user?.name || user?.email || "Cliente",
@@ -939,6 +942,9 @@ export default function Products() {
   const lastViewedKeyRef = useRef<string>("");
 
   const trackPageViewed = useCallback(() => {
+    // ✅ multi-tenant: sem companyId não trackeia
+    if (!companyId) return;
+
     const page = normalizePage(pathname || "/");
     const key = page;
 
@@ -949,9 +955,10 @@ export default function Products() {
       trackEvent("page_viewed", {
         page,
         platform: "mobile",
+        companyId,
       });
     } catch {}
-  }, [pathname]);
+  }, [pathname, companyId]);
 
   const recomputeReady = useCallback(() => {
     if (dataReady) return;
@@ -971,17 +978,26 @@ export default function Products() {
 
   const openProduct = useCallback(
     (id: string) => {
-      trackEvent("product_click", {
-        page: normalizePage(pathname || "/"),
-        from: "products",
-        productId: id,
-      });
+      // ✅ multi-tenant: só track se tiver tenant
+      if (companyId) {
+        try {
+          trackEvent("product_click", {
+            page: normalizePage(pathname || "/"),
+            from: "products",
+            productId: id,
+            companyId,
+          });
+        } catch {}
+      }
+
       router.push({ pathname: "/(app)/(tabs)/products/[id]", params: { id } });
     },
-    [router, pathname],
+    [router, pathname, companyId],
   );
 
   const fetchPendingCart = useCallback(async () => {
+    if (!companyId) return { id: null as string | null, count: 0 };
+
     if (cartFetchingRef.current) return { id: null as string | null, count: 0 };
     cartFetchingRef.current = true;
 
@@ -1012,9 +1028,11 @@ export default function Products() {
       didCartRef.current = true;
       recomputeReady();
     }
-  }, [recomputeReady]);
+  }, [recomputeReady, companyId]);
 
   const fetchPendingReview = useCallback(async () => {
+    if (!companyId) return { id: null as string | null, count: 0 };
+
     if (reviewFetchingRef.current)
       return { id: null as string | null, count: 0 };
     reviewFetchingRef.current = true;
@@ -1057,14 +1075,19 @@ export default function Products() {
       didReviewRef.current = true;
       recomputeReady();
     }
-  }, [recomputeReady]);
+  }, [recomputeReady, companyId]);
 
   const goCart = useCallback(async () => {
-    trackEvent("nav_click", {
-      page: normalizePage(pathname || "/"),
-      from: "products",
-      to: "/client/cart",
-    });
+    if (companyId) {
+      try {
+        trackEvent("nav_click", {
+          page: normalizePage(pathname || "/"),
+          from: "products",
+          to: "/client/cart",
+          companyId,
+        });
+      } catch {}
+    }
 
     try {
       const currentId = pendingCartOrderId;
@@ -1089,31 +1112,49 @@ export default function Products() {
     } catch {
       router.push("/client/cart");
     }
-  }, [fetchPendingCart, pendingCartOrderId, router, pathname]);
+  }, [fetchPendingCart, pendingCartOrderId, router, pathname, companyId]);
 
   const goNotifications = useCallback(() => {
-    trackEvent("nav_click", {
-      page: normalizePage(pathname || "/"),
-      from: "products",
-      to: "/client/notifications",
-    });
+    if (companyId) {
+      try {
+        trackEvent("nav_click", {
+          page: normalizePage(pathname || "/"),
+          from: "products",
+          to: "/client/notifications",
+          companyId,
+        });
+      } catch {}
+    }
+
     router.push("/client/notifications");
-  }, [router, pathname]);
+  }, [router, pathname, companyId]);
 
   const reserveProduct = useCallback(
     async (productId: string) => {
       if (!productId) return;
       if (reservingId) return;
 
+      // ✅ multi-tenant: não cria order sem tenant
+      if (!companyId) {
+        Alert.alert(
+          "Atenção",
+          "Não foi possível identificar o estabelecimento (companyId). Faça login novamente.",
+        );
+        return;
+      }
+
       try {
         setReservingId(productId);
 
-        trackEvent("add_to_cart_attempt", {
-          page: normalizePage(pathname || "/"),
-          from: "products",
-          productId,
-          quantity: 1,
-        });
+        try {
+          trackEvent("add_to_cart_attempt", {
+            page: normalizePage(pathname || "/"),
+            from: "products",
+            productId,
+            quantity: 1,
+            companyId,
+          });
+        } catch {}
 
         const res = await api.post<{
           ok: boolean;
@@ -1125,25 +1166,31 @@ export default function Products() {
 
         if (!res?.ok || !orderId) throw new Error("invalid_response");
 
-        trackEvent("add_to_cart_success", {
-          page: normalizePage(pathname || "/"),
-          from: "products",
-          productId,
-          quantity: 1,
-          orderId: String(orderId),
-        });
+        try {
+          trackEvent("add_to_cart_success", {
+            page: normalizePage(pathname || "/"),
+            from: "products",
+            productId,
+            quantity: 1,
+            orderId: String(orderId),
+            companyId,
+          });
+        } catch {}
 
         setPendingCartOrderId(String(orderId));
         await fetchPendingCart();
 
         router.push({ pathname: "/client/cart", params: { orderId } });
       } catch (err) {
-        trackEvent("add_to_cart_error", {
-          page: normalizePage(pathname || "/"),
-          from: "products",
-          productId,
-          message: String((err as any)?.message ?? "error"),
-        });
+        try {
+          trackEvent("add_to_cart_error", {
+            page: normalizePage(pathname || "/"),
+            from: "products",
+            productId,
+            message: String((err as any)?.message ?? "error"),
+            companyId,
+          });
+        } catch {}
 
         console.log("[reserve] error:", err);
         Alert.alert(
@@ -1154,10 +1201,12 @@ export default function Products() {
         setReservingId(null);
       }
     },
-    [fetchPendingCart, reservingId, router, pathname],
+    [fetchPendingCart, reservingId, router, pathname, companyId],
   );
 
   const fetchAllProducts = useCallback(async () => {
+    if (!companyId) return;
+
     if (fetchingRef.current) return;
     fetchingRef.current = true;
 
@@ -1276,9 +1325,11 @@ export default function Products() {
       didProductsRef.current = true;
       recomputeReady();
     }
-  }, [activeCategory, recomputeReady]);
+  }, [activeCategory, recomputeReady, companyId]);
 
   const fetchFeaturedProducts = useCallback(async () => {
+    if (!companyId) return;
+
     if (featuredFetchingRef.current) return;
     featuredFetchingRef.current = true;
 
@@ -1348,28 +1399,53 @@ export default function Products() {
       setFeaturedLoading(false);
       featuredFetchingRef.current = false;
     }
-  }, []);
+  }, [companyId]);
 
   useFocusEffect(
     useCallback(() => {
-      // ✅ reset dedupe por sessão de tela
-      seenProductIdsRef.current = new Set();
-      seenFeaturedIdsRef.current = new Set();
-      lastViewedKeyRef.current = "";
+      let alive = true;
 
-      // ✅ page_viewed padrão (rota real)
-      trackPageViewed();
+      (async () => {
+        // ✅ reset dedupe por sessão de tela
+        seenProductIdsRef.current = new Set();
+        seenFeaturedIdsRef.current = new Set();
+        lastViewedKeyRef.current = "";
 
-      fetchAllProducts();
-      fetchPendingCart();
-      fetchPendingReview();
-      fetchFeaturedProducts();
+        // ✅ multi-tenant gate: tenta garantir companyId antes de qualquer request
+        if (!companyId) {
+          try {
+            await refreshMe();
+          } catch {}
+
+          if (alive && !companyId) {
+            if (!warnedMissingCompanyRef.current) {
+              warnedMissingCompanyRef.current = true;
+              Alert.alert(
+                "Atenção",
+                "Não foi possível identificar o estabelecimento (companyId). Faça login novamente ou tente atualizar seu perfil.",
+              );
+            }
+            return;
+          }
+        }
+
+        // ✅ page_viewed padrão (rota real)
+        trackPageViewed();
+
+        fetchAllProducts();
+        fetchPendingCart();
+        fetchPendingReview();
+        fetchFeaturedProducts();
+      })();
 
       return () => {
+        alive = false;
         // ao sair, permite registrar de novo quando voltar
         lastViewedKeyRef.current = "";
       };
     }, [
+      companyId,
+      refreshMe,
       fetchAllProducts,
       fetchPendingCart,
       fetchPendingReview,
@@ -1433,12 +1509,17 @@ export default function Products() {
   const onSelectCategory = useCallback(
     (id: string) => {
       setActiveCategory(id);
-      trackEvent("filter_category", {
-        page: normalizePage(pathname || "/"),
-        category: id,
-      });
+
+      if (!companyId) return;
+      try {
+        trackEvent("filter_category", {
+          page: normalizePage(pathname || "/"),
+          category: id,
+          companyId,
+        });
+      } catch {}
     },
-    [pathname],
+    [pathname, companyId],
   );
 
   // ✅ search tracking com debounce
@@ -1447,17 +1528,20 @@ export default function Products() {
     (v: string) => {
       setSearch(v);
 
+      if (!companyId) return;
+
       try {
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
         searchTimerRef.current = setTimeout(() => {
           trackEvent("search_change", {
             page: normalizePage(pathname || "/"),
             queryLen: String(v ?? "").trim().length,
+            companyId,
           });
         }, 600);
       } catch {}
     },
-    [pathname],
+    [pathname, companyId],
   );
 
   // ✅ Impressions na grid (só quando aparece na tela)
@@ -1468,6 +1552,9 @@ export default function Products() {
 
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: Array<ViewToken> }) => {
+      // ✅ multi-tenant: sem tenant não trackeia impression
+      if (!companyId) return;
+
       try {
         for (const v of viewableItems) {
           const item = v?.item as Product | undefined;
@@ -1483,6 +1570,7 @@ export default function Products() {
               placement: "grid",
               isOutOfStock: !!item.isOutOfStock,
               category: item.category ?? null,
+              companyId,
             });
           }
         }
@@ -1492,6 +1580,8 @@ export default function Products() {
 
   const onImpressionFeatured = useCallback(
     (id: string) => {
+      if (!companyId) return;
+
       try {
         if (!id) return;
         if (seenFeaturedIdsRef.current.has(id)) return;
@@ -1501,10 +1591,11 @@ export default function Products() {
           page: normalizePage(pathname || "/"),
           productId: id,
           placement: "featured",
+          companyId,
         });
       } catch {}
     },
-    [pathname],
+    [pathname, companyId],
   );
 
   const ListHeader = useMemo(
@@ -1544,16 +1635,20 @@ export default function Products() {
 
   const onPressBirthday = useCallback(() => {
     if (!birthdayBadgeLabel) return;
+    if (!companyId) return;
 
-    trackEvent("action_click", {
-      page: normalizePage(pathname || "/"),
-      action: "birthday_badge",
-    });
+    try {
+      trackEvent("action_click", {
+        page: normalizePage(pathname || "/"),
+        action: "birthday_badge",
+        companyId,
+      });
+    } catch {}
 
     Alert.alert(
       "Parabéns pra você! 🎂 \nAproveite os descontos especiais para aniversariantes.",
     );
-  }, [birthdayBadgeLabel, pathname]);
+  }, [birthdayBadgeLabel, pathname, companyId]);
 
   return (
     <ScreenGate dataReady={dataReady} skeleton={<ProductsSkeleton />}>
@@ -1601,11 +1696,16 @@ export default function Products() {
                     userLevelStyle?.container,
                   ]}
                   onPress={() => {
-                    trackEvent("action_click", {
-                      page: normalizePage(pathname || "/"),
-                      action: "level_chip",
-                      level: userLevelLabel,
-                    });
+                    if (!companyId) return;
+
+                    try {
+                      trackEvent("action_click", {
+                        page: normalizePage(pathname || "/"),
+                        action: "level_chip",
+                        level: userLevelLabel,
+                        companyId,
+                      });
+                    } catch {}
                   }}
                   hitSlop={8}
                 >

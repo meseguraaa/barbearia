@@ -5,13 +5,15 @@ import { prisma } from "@/lib/prisma";
 type MobileTokenPayload = {
   sub: string;
   role?: "CLIENT" | "BARBER" | "ADMIN";
+  companyId: string; // ✅ multi-tenant obrigatório
 };
 
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    // ✅ inclui x-company-id (mesmo se você não usar aqui, padroniza o app)
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-company-id",
   };
 }
 
@@ -27,28 +29,52 @@ async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
   if (!token) throw new Error("Token ausente");
 
   const { payload } = await jwtVerify(token, getJwtSecretKey());
-  return payload as any;
+
+  const sub = String((payload as any)?.sub || "").trim();
+  if (!sub) throw new Error("Token inválido");
+
+  const companyId =
+    typeof (payload as any)?.companyId === "string"
+      ? String((payload as any).companyId).trim()
+      : "";
+  if (!companyId) throw new Error("companyId ausente no token");
+
+  return {
+    sub,
+    role: (payload as any).role,
+    companyId,
+  };
 }
 
 export async function OPTIONS() {
-  return NextResponse.json({}, { headers: corsHeaders() });
+  return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
 
 export async function GET(req: Request) {
+  const headers = corsHeaders();
+
   try {
     const payload = await requireMobileAuth(req);
     const userId = payload.sub;
+    const companyId = payload.companyId;
 
-    // ✅ agora é findMany: pega TODAS as pendentes
+    // ✅ agora é findMany: pega TODAS as pendentes (✅ tenant-safe)
     const appointments = await prisma.appointment.findMany({
       where: {
+        companyId,
         clientId: userId,
         status: "DONE",
         reviewModalShown: false,
         review: { is: null },
       },
       orderBy: { scheduleAt: "desc" },
-      include: { barber: true, service: true },
+      select: {
+        id: true,
+        scheduleAt: true,
+        barber: { select: { name: true } },
+        service: { select: { name: true } },
+        description: true, // fallback
+      },
       take: 50, // limite seguro (ajuste se quiser)
     });
 
@@ -56,24 +82,35 @@ export async function GET(req: Request) {
       appointmentId: a.id,
       scheduleAt: a.scheduleAt,
       barberName: a.barber?.name ?? "Profissional",
-      serviceName: a.service?.name ?? "Atendimento",
+      serviceName: a.service?.name ?? a.description ?? "Atendimento",
     }));
 
-    // tags continuam globais (admin cadastra)
+    // ✅ tags por tenant (admin cadastra por company)
     const tags = await prisma.reviewTag.findMany({
-      where: { isActive: true },
+      where: { companyId, isActive: true },
       orderBy: { label: "asc" },
       select: { id: true, label: true },
     });
 
-    return NextResponse.json(
-      { ok: true, pendings, tags },
-      { headers: corsHeaders() },
-    );
+    const res = NextResponse.json({ ok: true, pendings, tags }, { headers });
+
+    // ✅ debug leve: devolve tenant no header
+    res.headers.set("x-company-id", companyId);
+
+    return res;
   } catch (err: any) {
+    const msg = String(err?.message ?? "Erro inesperado.");
+    const lower = msg.toLowerCase();
+
+    const isAuth =
+      lower.includes("token") ||
+      lower.includes("jwt") ||
+      lower.includes("signature") ||
+      lower.includes("companyid");
+
     return NextResponse.json(
-      { ok: false, error: err?.message ?? "Erro inesperado." },
-      { status: 401, headers: corsHeaders() },
+      { ok: false, error: isAuth ? "Não autorizado" : msg },
+      { status: isAuth ? 401 : 500, headers },
     );
   }
 }

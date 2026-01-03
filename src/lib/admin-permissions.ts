@@ -1,11 +1,13 @@
 // src/lib/admin-permissions.ts
 import { redirect } from "next/navigation";
+import { Prisma } from "@prisma/client";
 
 import { prisma } from "./prisma";
 import { getCurrentPainelUser } from "./painel-session";
 
 export type AdminModule =
   | "DASHBOARD"
+  | "REPORTS"
   | "APPOINTMENTS"
   | "CHECKOUT"
   | "CLIENTS"
@@ -22,17 +24,21 @@ export type AdminWithPermissions = {
   name: string;
   email: string;
 
-  // já existia
+  // ✅ multi-tenant
+  companyId: string;
+
+  // ✅ papel dentro da company (via CompanyMember)
   isOwner: boolean;
   modules: AdminModule[];
 
-  // ✅ multi-unidade (novo)
+  // ✅ multi-unidade
   unitId: string | null;
   canSeeAllUnits: boolean;
 };
 
 export const ALL_ADMIN_MODULES: AdminModule[] = [
   "DASHBOARD",
+  "REPORTS",
   "APPOINTMENTS",
   "CHECKOUT",
   "CLIENTS",
@@ -45,9 +51,9 @@ export const ALL_ADMIN_MODULES: AdminModule[] = [
   "SETTINGS",
 ];
 
-// 🔹 Tipo das chaves de permissão usadas no sistema (para o login, settings etc.)
 export type AdminPermissionKey =
   | "canAccessDashboard"
+  | "canAccessReports"
   | "canAccessAppointments"
   | "canAccessCheckout"
   | "canAccessClients"
@@ -60,29 +66,23 @@ export type AdminPermissionKey =
   | "canAccessSettings";
 
 type AdminAccess = {
-  // ✅ multi-unidade (se já tiver no schema/migration)
-  unitId?: string | null;
+  unitId: string | null;
 
-  canAccessDashboard?: boolean;
-  canAccessAppointments?: boolean;
-  canAccessCheckout?: boolean;
-  canAccessClients?: boolean;
-  canAccessClientLevels?: boolean;
-  canAccessProfessionals?: boolean;
-  canAccessServices?: boolean;
-  canAccessFinance?: boolean;
+  canAccessDashboard: boolean;
+  canAccessReports: boolean;
 
-  // (no seu schema atual existem também:)
-  canAccessReviews?: boolean;
-  canAccessProducts?: boolean;
-
-  // ⚠️ se existir no schema, beleza. Se não existir ainda, vamos criar depois.
-  canAccessSettings?: boolean;
+  canAccessAppointments: boolean;
+  canAccessCheckout: boolean;
+  canAccessClients: boolean;
+  canAccessClientLevels: boolean;
+  canAccessProfessionals: boolean;
+  canAccessServices: boolean;
+  canAccessReviews: boolean;
+  canAccessProducts: boolean;
+  canAccessFinance: boolean;
+  canAccessSettings: boolean;
 };
 
-/**
- * Mapeia os booleans de adminAccess para a lista de módulos.
- */
 function deriveModulesFromAdminAccess(
   access: AdminAccess | null | undefined,
 ): AdminModule[] {
@@ -91,6 +91,8 @@ function deriveModulesFromAdminAccess(
   const modules: AdminModule[] = [];
 
   if (access.canAccessDashboard) modules.push("DASHBOARD");
+  if (access.canAccessReports) modules.push("REPORTS");
+
   if (access.canAccessAppointments) modules.push("APPOINTMENTS");
   if (access.canAccessCheckout) modules.push("CHECKOUT");
   if (access.canAccessClients) modules.push("CLIENTS");
@@ -100,57 +102,155 @@ function deriveModulesFromAdminAccess(
   if (access.canAccessReviews) modules.push("REVIEWS");
   if (access.canAccessProducts) modules.push("PRODUCTS");
   if (access.canAccessFinance) modules.push("FINANCE");
-
-  // ✅ SETTINGS por permissão (quando existir no schema)
   if (access.canAccessSettings) modules.push("SETTINGS");
 
   return modules;
 }
 
 /**
+ * 🔑 Fonte da verdade do tenant do painel (ENV)
+ * - Quando definido: single-tenant e toda permissão/membership deve bater nele.
+ * - Quando não definido: mantém compat (resolve company via membership).
+ */
+function getPainelCompanyIdFromEnv(): string | null {
+  const raw = process.env.PAINEL_COMPANY_ID;
+  const companyId = raw?.trim();
+  return companyId && companyId.length > 0 ? companyId : null;
+}
+
+/**
+ * Resolve o tenant (company) do admin.
+ * Regras:
+ * 1) Se PAINEL_COMPANY_ID existir: ele manda (e valida membership nessa company).
+ * 2) Caso contrário: usa companyId do token do painel (payload.companyId).
+ * 3) Caso ainda não tenha: fallback compat por membership "primeira ativa".
+ */
+async function resolveCompanyContext(userId: string, tokenCompanyId?: string) {
+  const envCompanyId = getPainelCompanyIdFromEnv();
+  const companyId =
+    envCompanyId ?? (tokenCompanyId ? String(tokenCompanyId) : null);
+
+  if (companyId) {
+    return prisma.companyMember.findFirst({
+      where: {
+        userId,
+        isActive: true,
+        companyId, // ✅ tenant obrigatório quando conhecido
+      },
+      select: {
+        companyId: true,
+        role: true,
+      },
+    });
+  }
+
+  // compat: sem ENV e sem companyId no token, pega a primeira membership ativa
+  return prisma.companyMember.findFirst({
+    where: { userId, isActive: true },
+    orderBy: { createdAt: "asc" },
+    select: {
+      companyId: true,
+      role: true,
+    },
+  });
+}
+
+/**
+ * Carrega permissões do admin dentro da company atual.
+ * (Evita depender do nome do relation no User e fica tenant-safe)
+ */
+async function resolveAdminAccess(
+  userId: string,
+  companyId: string,
+): Promise<AdminAccess | null> {
+  // ✅ select tipado (sem "as any")
+  const select = {
+    unitId: true,
+
+    canAccessDashboard: true,
+    canAccessReports: true,
+
+    canAccessAppointments: true,
+    canAccessCheckout: true,
+    canAccessClients: true,
+    canAccessClientLevels: true,
+    canAccessProfessionals: true,
+    canAccessServices: true,
+    canAccessReviews: true,
+    canAccessProducts: true,
+    canAccessFinance: true,
+    canAccessSettings: true,
+  } satisfies Prisma.AdminAccessSelect;
+
+  const access = await prisma.adminAccess.findFirst({
+    where: { userId, companyId },
+    select,
+  });
+
+  // Prisma retorna exatamente os campos acima, ou null
+  return access as AdminAccess | null;
+}
+
+/**
+ * Garante que uma unit pertence à company atual.
+ * Se não pertencer, retorna null (protege contra cross-tenant).
+ */
+async function validateUnitBelongsToCompany(
+  unitId: string | null,
+  companyId: string,
+): Promise<string | null> {
+  if (!unitId) return null;
+
+  const found = await prisma.unit.findFirst({
+    where: { id: unitId, companyId },
+    select: { id: true },
+  });
+
+  return found?.id ?? null;
+}
+
+/**
  * Versão "FORTE": exige admin logado e ativo.
- * Usa painel_session (não NextAuth).
  */
 export async function requireAdminWithPermissions(): Promise<AdminWithPermissions> {
   const payload = await getCurrentPainelUser();
 
-  if (!payload) {
-    redirect("/painel/login");
-  }
+  if (!payload) redirect("/painel/login");
+  if (payload.role !== "ADMIN") redirect("/painel/login?error=permissao");
 
-  if (payload.role !== "ADMIN") {
-    redirect("/painel/login?error=permissao");
-  }
+  // ✅ Em modo tenant fixo, o payload já foi validado contra o ENV no verifySessionToken.
+  // Ainda assim, pegamos o companyId do payload para scoping e para compat.
+  const tokenCompanyId = payload.companyId
+    ? String(payload.companyId)
+    : undefined;
 
-  // Carrega o usuário + adminAccess
   const user = await prisma.user.findUnique({
     where: { id: payload.sub },
-    include: {
-      adminAccess: true,
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      isActive: true,
     },
   });
 
-  if (!user || !user.isActive) {
-    redirect("/painel/login");
-  }
+  if (!user || !user.isActive) redirect("/painel/login");
 
-  const isOwner = !!user.isOwner;
-  const adminAccess = user.adminAccess as unknown as AdminAccess | null;
-  const unitId = adminAccess?.unitId ?? null;
+  // ✅ resolve membership SEMPRE scoping por company quando possível
+  const membership = await resolveCompanyContext(user.id, tokenCompanyId);
+  if (!membership?.companyId) redirect("/painel/login?error=permissao");
 
-  // ✅ Regra multi-unidade:
-  // - Dono vê tudo
-  // - Admin não-dono precisa ter unitId (senão não entra no painel)
-  if (!isOwner && !unitId) {
-    redirect("/painel/login?error=permissao");
-  }
+  const companyId = String(membership.companyId);
+  const membershipRole = String(membership.role ?? "");
+  const isOwner = membershipRole === "OWNER";
 
-  // Dono SEMPRE tem acesso a tudo
+  // ✅ Owner: acesso total na company, vê todas as unidades
   if (isOwner) {
     return {
       id: user.id,
       name: user.name ?? payload.name ?? "",
       email: user.email ?? payload.email,
+      companyId,
       isOwner: true,
       modules: ALL_ADMIN_MODULES,
 
@@ -159,16 +259,31 @@ export async function requireAdminWithPermissions(): Promise<AdminWithPermission
     };
   }
 
-  const modulesFromAccess = deriveModulesFromAdminAccess(adminAccess);
+  // ✅ Não-owner: precisa existir um AdminAccess para ESTE companyId
+  const adminAccess = await resolveAdminAccess(user.id, companyId);
+  if (!adminAccess) {
+    redirect("/painel/login?error=permissao");
+  }
 
-  // Se não tiver nada configurado, libera tudo (ou ajusta se quiser mais restrito)
-  const modules =
-    modulesFromAccess.length > 0 ? modulesFromAccess : ALL_ADMIN_MODULES;
+  // unitId vindo do adminAccess (por company)
+  let unitId: string | null = adminAccess.unitId ?? null;
+
+  // blindagem: unit precisa ser da mesma company
+  unitId = await validateUnitBelongsToCompany(unitId, companyId);
+
+  // regra multi-unidade: admin não-owner precisa ter unitId válido
+  if (!unitId) {
+    redirect("/painel/login?error=permissao");
+  }
+
+  // ✅ Default deny: se não tem flags, não tem módulos
+  const modules = deriveModulesFromAdminAccess(adminAccess);
 
   return {
     id: user.id,
     name: user.name ?? payload.name ?? "",
     email: user.email ?? payload.email,
+    companyId,
     isOwner: false,
     modules,
 
@@ -179,39 +294,40 @@ export async function requireAdminWithPermissions(): Promise<AdminWithPermission
 
 /**
  * Versão "SUAVE": NÃO redireciona.
- * Usada em layout/menu/cabeçalho. Se não tiver admin logado, retorna null.
  */
 export async function getOptionalAdminWithPermissions(): Promise<AdminWithPermissions | null> {
   const payload = await getCurrentPainelUser();
+  if (!payload || payload.role !== "ADMIN") return null;
 
-  if (!payload || payload.role !== "ADMIN") {
-    return null;
-  }
+  const tokenCompanyId = payload.companyId
+    ? String(payload.companyId)
+    : undefined;
 
   const user = await prisma.user.findUnique({
     where: { id: payload.sub },
-    include: {
-      adminAccess: true,
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      isActive: true,
     },
   });
 
-  if (!user || !user.isActive) {
-    return null;
-  }
+  if (!user || !user.isActive) return null;
 
-  const isOwner = !!user.isOwner;
-  const adminAccess = user.adminAccess as unknown as AdminAccess | null;
-  const unitId = adminAccess?.unitId ?? null;
+  const membership = await resolveCompanyContext(user.id, tokenCompanyId);
+  if (!membership?.companyId) return null;
 
-  if (!isOwner && !unitId) {
-    return null;
-  }
+  const companyId = String(membership.companyId);
+  const membershipRole = String(membership.role ?? "");
+  const isOwner = membershipRole === "OWNER";
 
   if (isOwner) {
     return {
       id: user.id,
       name: user.name ?? payload.name ?? "",
       email: user.email ?? payload.email,
+      companyId,
       isOwner: true,
       modules: ALL_ADMIN_MODULES,
 
@@ -220,15 +336,21 @@ export async function getOptionalAdminWithPermissions(): Promise<AdminWithPermis
     };
   }
 
-  const modulesFromAccess = deriveModulesFromAdminAccess(adminAccess);
+  const adminAccess = await resolveAdminAccess(user.id, companyId);
+  if (!adminAccess) return null;
 
-  const modules =
-    modulesFromAccess.length > 0 ? modulesFromAccess : ALL_ADMIN_MODULES;
+  let unitId: string | null = adminAccess.unitId ?? null;
+  unitId = await validateUnitBelongsToCompany(unitId, companyId);
+
+  if (!unitId) return null;
+
+  const modules = deriveModulesFromAdminAccess(adminAccess);
 
   return {
     id: user.id,
     name: user.name ?? payload.name ?? "",
     email: user.email ?? payload.email,
+    companyId,
     isOwner: false,
     modules,
 
@@ -243,6 +365,8 @@ export async function getOptionalAdminWithPermissions(): Promise<AdminWithPermis
 export function getAdminDefaultPath(admin: AdminWithPermissions): string {
   const priority: { module: AdminModule; path: string }[] = [
     { module: "DASHBOARD", path: "/admin/dashboard" },
+    { module: "REPORTS", path: "/admin/reports" },
+
     { module: "APPOINTMENTS", path: "/admin/appointments" },
     { module: "CHECKOUT", path: "/admin/checkout" },
     { module: "CLIENTS", path: "/admin/clients" },
@@ -256,19 +380,17 @@ export function getAdminDefaultPath(admin: AdminWithPermissions): string {
   ];
 
   const found = priority.find((item) => admin.modules.includes(item.module));
-
-  return found?.path ?? "/painel/login";
+  return found?.path ?? "/painel/login?error=permissao";
 }
 
 /**
- * Garante acesso a um módulo. Se não tiver, redireciona para a primeira rota permitida.
+ * Garante acesso a um módulo.
  */
 export async function requireAdminForModule(module: AdminModule) {
   const admin = await requireAdminWithPermissions();
 
   if (!admin.modules.includes(module)) {
-    const target = getAdminDefaultPath(admin);
-    redirect(target);
+    redirect(getAdminDefaultPath(admin));
   }
 
   return admin;
@@ -278,9 +400,13 @@ export async function requireAdminForModule(module: AdminModule) {
  * Compatibilidade antiga:
  * await requireAdminPermission("canAccessDashboard")
  */
-export async function requireAdminPermission(permissionKey: string) {
+export async function requireAdminPermission(
+  permissionKey: AdminPermissionKey | string,
+) {
   const map: Record<string, AdminModule | undefined> = {
     canAccessDashboard: "DASHBOARD",
+    canAccessReports: "REPORTS",
+
     canAccessAppointments: "APPOINTMENTS",
     canAccessCheckout: "CHECKOUT",
     canAccessClients: "CLIENTS",
@@ -293,10 +419,9 @@ export async function requireAdminPermission(permissionKey: string) {
     canAccessSettings: "SETTINGS",
   };
 
-  const module = map[permissionKey];
+  const module = map[String(permissionKey)];
 
   if (!module) {
-    // chave desconhecida → só garante que é admin
     return requireAdminWithPermissions();
   }
 

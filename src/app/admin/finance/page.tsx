@@ -49,42 +49,67 @@ type BarberMonthlyEarnings = {
 
 /* ======================================================
  * UNIDADE (MESMA REGRA DO CHECKOUT)
+ * + companyId SEMPRE
  * ======================================================*/
-async function resolveUnitScope(admin: {
+async function resolveUnitScope(params: {
   unitId: string | null;
   canSeeAllUnits: boolean;
+  companyId: string;
 }) {
-  if (!admin.canSeeAllUnits) return admin.unitId;
+  const { unitId, canSeeAllUnits, companyId } = params;
+
+  // Se não pode ver todas, força a unidade do admin (e valida que pertence à empresa).
+  if (!canSeeAllUnits) {
+    if (!unitId) return null;
+
+    const ok = await prisma.unit.findFirst({
+      where: { id: unitId, companyId },
+      select: { id: true },
+    });
+
+    return ok?.id ?? null;
+  }
 
   const cookieStore = await cookies();
   const cookieValue =
     cookieStore.get(UNIT_COOKIE_NAME)?.value ?? UNIT_ALL_VALUE;
 
   if (!cookieValue || cookieValue === UNIT_ALL_VALUE) return null;
-  return cookieValue;
+
+  // ✅ Importante: mesmo "vendo tudo", a unit escolhida tem que ser da empresa
+  const ok = await prisma.unit.findFirst({
+    where: { id: cookieValue, companyId },
+    select: { id: true },
+  });
+
+  return ok?.id ?? null;
 }
 
-function withUnitWhere<T extends Record<string, any>>(
+function withCompanyUnitWhere<T extends Record<string, any>>(
   base: T,
-  unitId: string | null,
+  params: { companyId: string; unitId: string | null },
 ) {
-  if (!unitId) return base;
-  return { ...(base as any), unitId } as T;
+  const { companyId, unitId } = params;
+  if (!unitId) return { ...(base as any), companyId } as T;
+  return { ...(base as any), companyId, unitId } as T;
 }
 
 /* ======================================================
- * RECORRÊNCIA DE DESPESAS (POR UNIDADE)
+ * RECORRÊNCIA DE DESPESAS (POR UNIDADE) + companyId
  * ======================================================*/
-async function seedRecurringExpensesForMonth(
-  monthStart: Date,
-  monthEnd: Date,
-  activeUnitId: string | null,
-) {
+async function seedRecurringExpensesForMonth(params: {
+  monthStart: Date;
+  monthEnd: Date;
+  activeUnitId: string | null;
+  companyId: string;
+}) {
+  const { monthStart, monthEnd, activeUnitId, companyId } = params;
+
   const previousMonthStart = startOfMonth(addMonths(monthStart, -1));
   const previousMonthEnd = endOfMonth(previousMonthStart);
 
   const lastMonthRecurringExpenses = await prisma.expense.findMany({
-    where: withUnitWhere(
+    where: withCompanyUnitWhere(
       {
         isRecurring: true,
         dueDate: {
@@ -92,7 +117,7 @@ async function seedRecurringExpensesForMonth(
           lte: previousMonthEnd,
         },
       },
-      activeUnitId,
+      { companyId, unitId: activeUnitId },
     ) as any,
     select: {
       description: true,
@@ -100,6 +125,7 @@ async function seedRecurringExpensesForMonth(
       amount: true,
       dueDate: true,
       unitId: true,
+      companyId: true,
     },
   });
 
@@ -113,6 +139,7 @@ async function seedRecurringExpensesForMonth(
 
     const exists = await prisma.expense.findFirst({
       where: {
+        companyId,
         isRecurring: true,
         description: expense.description,
         category: expense.category,
@@ -122,12 +149,14 @@ async function seedRecurringExpensesForMonth(
           lte: monthEnd,
         },
       },
+      select: { id: true },
     });
 
     if (exists) continue;
 
     await prisma.expense.create({
       data: {
+        companyId, // ✅ multi-tenant hard lock
         description: expense.description,
         category: expense.category,
         amount: expense.amount,
@@ -136,6 +165,7 @@ async function seedRecurringExpensesForMonth(
         dueDate: new Date(year, monthIndex, day),
         unitId: expense.unitId,
       },
+      select: { id: true },
     });
   }
 }
@@ -148,9 +178,16 @@ export default async function AdminFinancePage({
 }: AdminFinancePageProps) {
   const admin = (await requireAdminPermission("canAccessFinance")) as any;
 
+  const companyId: string | null = admin?.companyId ?? null;
+  if (!companyId) {
+    // Se não tem companyId, é melhor falhar duro do que vazar dado.
+    redirect("/admin");
+  }
+
   const activeUnitId = await resolveUnitScope({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
+    companyId,
   });
 
   const { month: monthParam } = await searchParams;
@@ -162,7 +199,12 @@ export default async function AdminFinancePage({
   const monthStart = startOfMonth(referenceDate);
   const monthEnd = endOfMonth(referenceDate);
 
-  await seedRecurringExpensesForMonth(monthStart, monthEnd, activeUnitId);
+  await seedRecurringExpensesForMonth({
+    monthStart,
+    monthEnd,
+    activeUnitId,
+    companyId,
+  });
 
   const monthQuery = format(referenceDate, "yyyy-MM");
 
@@ -172,8 +214,10 @@ export default async function AdminFinancePage({
   /* ======================================================
    * 🔒 REGRA DE OURO
    * Financeiro = SOMENTE Order COMPLETED
+   * + companyId SEMPRE
    * ======================================================*/
   const paidOrdersWhere = {
+    companyId,
     status: "COMPLETED" as const,
     createdAt: { gte: monthStart, lte: monthEnd },
     ...(activeUnitId ? { unitId: activeUnitId } : {}),
@@ -181,11 +225,11 @@ export default async function AdminFinancePage({
 
   const [expenses, paidOrders, productSales, barbers] = await Promise.all([
     prisma.expense.findMany({
-      where: withUnitWhere(
+      where: withCompanyUnitWhere(
         {
           dueDate: { gte: monthStart, lte: monthEnd },
         },
-        activeUnitId,
+        { companyId, unitId: activeUnitId },
       ) as any,
       orderBy: { dueDate: "asc" },
     }),
@@ -210,6 +254,7 @@ export default async function AdminFinancePage({
 
     prisma.productSale.findMany({
       where: {
+        companyId,
         soldAt: { gte: monthStart, lte: monthEnd },
         ...(activeUnitId ? { unitId: activeUnitId } : {}),
       },
@@ -221,6 +266,7 @@ export default async function AdminFinancePage({
 
     prisma.barber.findMany({
       where: {
+        companyId,
         isActive: true,
         ...(activeUnitId
           ? { units: { some: { unitId: activeUnitId, isActive: true } } }
@@ -424,7 +470,7 @@ export default async function AdminFinancePage({
         currencyFormatter={currencyFormatter}
       />
 
-      {/* HEADER DO CADASTRO + BOTÃO (VOLTOU A VIDA) */}
+      {/* HEADER DO CADASTRO + BOTÃO */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h2 className="text-subtitle text-content-primary">

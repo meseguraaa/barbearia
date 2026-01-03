@@ -7,6 +7,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { validatePassword } from "@/lib/password-policy";
+import { requireAdminForModule } from "@/lib/admin-permissions";
 
 type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -38,6 +39,10 @@ const updateAdminSchema = z.object({
 const permissionsSchema = z.object({
   userId: z.string().min(1),
   canAccessDashboard: z.coerce.boolean().optional(),
+
+  // ✅ NOVO: Relatórios
+  canAccessReports: z.coerce.boolean().optional(),
+
   canAccessCheckout: z.coerce.boolean().optional(),
   canAccessAppointments: z.coerce.boolean().optional(),
   canAccessProfessionals: z.coerce.boolean().optional(),
@@ -101,22 +106,54 @@ function firstZodErrorMessage(err: z.ZodError): string {
 
 function looksLikeUnknownFieldError(err: unknown, field: string) {
   const msg = String((err as any)?.message ?? "");
-  // Prisma varia a mensagem dependendo da versão
   return msg.includes("Unknown arg") && msg.includes(`\`${field}\``);
 }
 
 async function hashPassword(raw: string) {
-  // 12 é um bom “equilíbrio” (segurança vs performance) pra painel
   return bcrypt.hash(raw, 12);
 }
 
+async function assertUnitBelongsToCompany(unitId: string, companyId: string) {
+  const unit = await prisma.unit.findFirst({
+    where: { id: unitId, companyId },
+    select: { id: true, isActive: true },
+  });
+  if (!unit) return null;
+  return unit;
+}
+
+async function assertUserIsAdminMemberOfCompany(
+  userId: string,
+  companyId: string,
+) {
+  const member = await prisma.companyMember.findFirst({
+    where: {
+      companyId,
+      userId,
+      isActive: true,
+      role: { in: ["OWNER", "ADMIN"] },
+    },
+    select: { id: true, role: true },
+  });
+  return member;
+}
+
 /* =========================================================
- * CREATE ADMIN
+ * CREATE ADMIN (multi-tenant)
  * =======================================================*/
 
 export async function createAdminAction(
   formData: FormData,
 ): Promise<ActionResult> {
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
+
+  // (opcional) só OWNER cria admin
+  // se você quiser liberar ADMIN também, remove esse if.
+  if (!admin.isOwner) {
+    return { ok: false, error: "Apenas o dono pode criar administradores." };
+  }
+
   const parsed = createAdminSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
@@ -138,34 +175,22 @@ export async function createAdminAction(
   const phone = normalizeOptionalText(parsed.data.phone);
   const birthday = normalizeBirthday(parsed.data.birthday);
 
-  // ✅ senha obrigatória
   const password = String(parsed.data.password ?? "");
-
-  // ✅ política de senha (fonte da verdade)
   const passCheck = validatePassword(password);
   if (!passCheck.ok) {
     return { ok: false, error: passCheck.errors[0] ?? "Senha inválida." };
   }
 
   try {
-    // ✅ garante que a unidade existe (evita salvar id lixo)
-    const unit = await prisma.unit.findUnique({
-      where: { id: unitId },
-      select: { id: true, isActive: true },
-    });
-
-    if (!unit) {
-      return { ok: false, error: "Unidade não encontrada." };
-    }
-
-    // Se você quiser proibir admin em unidade inativa:
-    // if (!unit.isActive) return { ok: false, error: "Unidade está inativa." };
+    // ✅ unidade deve ser da empresa atual
+    const unit = await assertUnitBelongsToCompany(unitId, companyId);
+    if (!unit) return { ok: false, error: "Unidade não encontrada." };
 
     const passwordHash = await hashPassword(password);
 
     await prisma.$transaction(async (tx) => {
-      // 1) cria o usuário ADMIN (AGORA com passwordHash ✅)
-      const created = await tx.user.create({
+      // 1) cria o usuário global (role ADMIN por compatibilidade)
+      const createdUser = await tx.user.create({
         data: {
           name,
           email,
@@ -174,18 +199,28 @@ export async function createAdminAction(
           role: "ADMIN",
           isActive: true,
           isOwner: false,
-
-          // ✅ ESSENCIAL pro login funcionar
           passwordHash,
         } as any,
         select: { id: true },
       });
 
-      // 2) cria o adminAccess com permissões default
-      //    tenta gravar unitId junto (se teu schema tiver esse campo)
+      // 2) cria membership dessa company (admin "real" no multi-tenant)
+      await tx.companyMember.create({
+        data: {
+          companyId,
+          userId: createdUser.id,
+          role: "ADMIN",
+          isActive: true,
+          lastUnitId: unitId,
+        },
+        select: { id: true },
+      });
+
+      // 3) cria/upsert AdminAccess (multi-tenant exige companyId)
       const baseAccess = {
-        userId: created.id,
         canAccessDashboard: false,
+        canAccessReports: false, // ✅ NOVO
+
         canAccessCheckout: false,
         canAccessAppointments: false,
         canAccessProfessionals: false,
@@ -198,19 +233,36 @@ export async function createAdminAction(
       };
 
       try {
-        await tx.adminAccess.create({
-          data: {
+        await tx.adminAccess.upsert({
+          where: {
+            companyId_userId: { companyId, userId: createdUser.id },
+          },
+          update: {
             ...baseAccess,
-            unitId, // ✅ vínculo (se existir)
+            unitId: unitId || null,
+          } as any,
+          create: {
+            companyId,
+            userId: createdUser.id,
+            unitId: unitId || null,
+            ...baseAccess,
           } as any,
           select: { id: true },
         });
       } catch (err) {
-        // fallback: se adminAccess não tem unitId ainda, não quebra o create
+        // fallback se por algum motivo o schema ainda não tem unitId em AdminAccess
         if (!looksLikeUnknownFieldError(err, "unitId")) throw err;
 
-        await tx.adminAccess.create({
-          data: baseAccess as any,
+        await tx.adminAccess.upsert({
+          where: {
+            companyId_userId: { companyId, userId: createdUser.id },
+          },
+          update: { ...baseAccess } as any,
+          create: {
+            companyId,
+            userId: createdUser.id,
+            ...baseAccess,
+          } as any,
           select: { id: true },
         });
       }
@@ -232,12 +284,15 @@ export async function createAdminAction(
 }
 
 /* =========================================================
- * UPDATE ADMIN
+ * UPDATE ADMIN (multi-tenant)
  * =======================================================*/
 
 export async function updateAdminAction(
   formData: FormData,
 ): Promise<ActionResult> {
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
+
   const parsed = updateAdminSchema.safeParse({
     userId: formData.get("userId"),
     name: formData.get("name"),
@@ -258,12 +313,22 @@ export async function updateAdminAction(
   const phone = normalizeOptionalText(parsed.data.phone);
   const birthday = normalizeBirthday(parsed.data.birthday);
 
-  // ✅ senha opcional: se vier preenchida, troca
   const maybePasswordRaw =
     typeof parsed.data.password === "string" ? parsed.data.password : "";
   const passwordToSet = maybePasswordRaw.trim();
 
   try {
+    // ✅ só edita admin que é membro dessa company
+    const member = await assertUserIsAdminMemberOfCompany(userId, companyId);
+    if (!member) {
+      return { ok: false, error: "Administrador não pertence a esta empresa." };
+    }
+
+    // (opcional) só OWNER pode editar outros admins
+    if (!admin.isOwner && admin.id !== userId) {
+      return { ok: false, error: "Sem permissão para editar este admin." };
+    }
+
     const dataToUpdate: any = {
       name,
       email,
@@ -276,7 +341,6 @@ export async function updateAdminAction(
       if (!passCheck.ok) {
         return { ok: false, error: passCheck.errors[0] ?? "Senha inválida." };
       }
-
       dataToUpdate.passwordHash = await hashPassword(passwordToSet);
     }
 
@@ -302,15 +366,27 @@ export async function updateAdminAction(
 }
 
 /* =========================================================
- * UPDATE ADMIN PERMISSIONS
+ * UPDATE ADMIN PERMISSIONS (multi-tenant)
  * =======================================================*/
 
 export async function updateAdminPermissions(
   formData: FormData,
 ): Promise<ActionResult> {
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
+
+  // (opcional) só OWNER muda permissões
+  if (!admin.isOwner) {
+    return { ok: false, error: "Apenas o dono pode alterar permissões." };
+  }
+
   const parsed = permissionsSchema.safeParse({
     userId: formData.get("userId"),
     canAccessDashboard: formData.get("canAccessDashboard"),
+
+    // ✅ NOVO: Relatórios
+    canAccessReports: formData.get("canAccessReports"),
+
     canAccessCheckout: formData.get("canAccessCheckout"),
     canAccessAppointments: formData.get("canAccessAppointments"),
     canAccessProfessionals: formData.get("canAccessProfessionals"),
@@ -333,66 +409,66 @@ export async function updateAdminPermissions(
   const p = parsed.data;
 
   try {
-    // ✅ tenta gravar canAccessClientLevels junto (se o schema já tiver)
+    // ✅ garante que o alvo é membro admin/owner dessa company
+    const member = await assertUserIsAdminMemberOfCompany(p.userId, companyId);
+    if (!member) {
+      return { ok: false, error: "Administrador não pertence a esta empresa." };
+    }
+
+    // se for OWNER, você pode decidir travar permissões (opcional)
+    // if (member.role === "OWNER") return { ok:false, error:"Não é possível alterar permissões do dono." }
+
+    const updatePayload: any = {
+      canAccessDashboard: !!p.canAccessDashboard,
+      canAccessReports: !!p.canAccessReports, // ✅ NOVO
+
+      canAccessCheckout: !!p.canAccessCheckout,
+      canAccessAppointments: !!p.canAccessAppointments,
+      canAccessProfessionals: !!p.canAccessProfessionals,
+      canAccessServices: !!p.canAccessServices,
+      canAccessReviews: !!p.canAccessReviews,
+      canAccessProducts: !!p.canAccessProducts,
+      canAccessClients: !!p.canAccessClients,
+      canAccessFinance: !!p.canAccessFinance,
+    };
+
+    // tenta incluir client levels se existir
+    if (p.canAccessClientLevels !== undefined) {
+      updatePayload.canAccessClientLevels = !!p.canAccessClientLevels;
+    }
+
     try {
       await prisma.adminAccess.upsert({
-        where: { userId: p.userId },
-        update: {
-          canAccessDashboard: !!p.canAccessDashboard,
-          canAccessCheckout: !!p.canAccessCheckout,
-          canAccessAppointments: !!p.canAccessAppointments,
-          canAccessProfessionals: !!p.canAccessProfessionals,
-          canAccessServices: !!p.canAccessServices,
-          canAccessReviews: !!p.canAccessReviews,
-          canAccessProducts: !!p.canAccessProducts,
-          canAccessClients: !!p.canAccessClients,
-          canAccessClientLevels: !!p.canAccessClientLevels,
-          canAccessFinance: !!p.canAccessFinance,
-        } as any,
+        where: {
+          companyId_userId: { companyId, userId: p.userId },
+        },
+        update: updatePayload,
         create: {
+          companyId,
           userId: p.userId,
-          canAccessDashboard: !!p.canAccessDashboard,
-          canAccessCheckout: !!p.canAccessCheckout,
-          canAccessAppointments: !!p.canAccessAppointments,
-          canAccessProfessionals: !!p.canAccessProfessionals,
-          canAccessServices: !!p.canAccessServices,
-          canAccessReviews: !!p.canAccessReviews,
-          canAccessProducts: !!p.canAccessProducts,
-          canAccessClients: !!p.canAccessClients,
-          canAccessClientLevels: !!p.canAccessClientLevels,
-          canAccessFinance: !!p.canAccessFinance,
+          unitId: null,
+          ...updatePayload,
+          // se não veio canAccessClientLevels no schema, cai no fallback
         } as any,
         select: { id: true },
       });
     } catch (err) {
-      // fallback: se o schema ainda não tem canAccessClientLevels, salva o resto sem quebrar
+      // fallback sem canAccessClientLevels (se o schema antigo ainda existir)
       if (!looksLikeUnknownFieldError(err, "canAccessClientLevels")) throw err;
 
+      const { canAccessClientLevels, ...rest } = updatePayload;
+
       await prisma.adminAccess.upsert({
-        where: { userId: p.userId },
-        update: {
-          canAccessDashboard: !!p.canAccessDashboard,
-          canAccessCheckout: !!p.canAccessCheckout,
-          canAccessAppointments: !!p.canAccessAppointments,
-          canAccessProfessionals: !!p.canAccessProfessionals,
-          canAccessServices: !!p.canAccessServices,
-          canAccessReviews: !!p.canAccessReviews,
-          canAccessProducts: !!p.canAccessProducts,
-          canAccessClients: !!p.canAccessClients,
-          canAccessFinance: !!p.canAccessFinance,
+        where: {
+          companyId_userId: { companyId, userId: p.userId },
         },
+        update: rest,
         create: {
+          companyId,
           userId: p.userId,
-          canAccessDashboard: !!p.canAccessDashboard,
-          canAccessCheckout: !!p.canAccessCheckout,
-          canAccessAppointments: !!p.canAccessAppointments,
-          canAccessProfessionals: !!p.canAccessProfessionals,
-          canAccessServices: !!p.canAccessServices,
-          canAccessReviews: !!p.canAccessReviews,
-          canAccessProducts: !!p.canAccessProducts,
-          canAccessClients: !!p.canAccessClients,
-          canAccessFinance: !!p.canAccessFinance,
-        },
+          unitId: null,
+          ...rest,
+        } as any,
         select: { id: true },
       });
     }
@@ -406,26 +482,41 @@ export async function updateAdminPermissions(
 }
 
 /* =========================================================
- * TOGGLE ADMIN STATUS
+ * TOGGLE ADMIN STATUS (multi-tenant)
  * =======================================================*/
 
 export async function toggleAdminStatusAction(
   formData: FormData,
 ): Promise<ActionResult> {
+  const admin = await requireAdminForModule("SETTINGS");
+  const companyId = admin.companyId;
+
+  // (opcional) só OWNER desativa admin
+  if (!admin.isOwner) {
+    return { ok: false, error: "Apenas o dono pode alterar o status." };
+  }
+
   const userId = String(formData.get("userId") || "");
   if (!userId) return { ok: false, error: "Usuário inválido." };
 
   try {
+    // ✅ só mexe em admin que é membro dessa company
+    const member = await assertUserIsAdminMemberOfCompany(userId, companyId);
+    if (!member) {
+      return { ok: false, error: "Administrador não pertence a esta empresa." };
+    }
+
+    // não desativa OWNER
+    if (member.role === "OWNER") {
+      return { ok: false, error: "Não é possível desativar o admin dono." };
+    }
+
     const current = await prisma.user.findUnique({
       where: { id: userId },
-      select: { isActive: true, isOwner: true, role: true },
+      select: { isActive: true, role: true },
     });
 
     if (!current) return { ok: false, error: "Usuário não encontrado." };
-
-    if (current.isOwner) {
-      return { ok: false, error: "Não é possível desativar o admin dono." };
-    }
 
     if (current.role !== "ADMIN") {
       return { ok: false, error: "Apenas usuários ADMIN podem ser alterados." };

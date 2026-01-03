@@ -66,23 +66,60 @@ async function resolveUnitScope(admin: {
   return cookieValue;
 }
 
+/**
+ * Garante que um unitId (vindo do cookie) pertence à company atual.
+ * Se não pertencer, ignora e cai no "all".
+ */
+async function sanitizeUnitScope(params: {
+  companyId: string;
+  activeUnitId: string | null;
+}) {
+  const { companyId, activeUnitId } = params;
+
+  if (!activeUnitId) return null;
+
+  const belongs = await prisma.unit.findFirst({
+    where: { id: activeUnitId, companyId },
+    select: { id: true },
+  });
+
+  return belongs ? activeUnitId : null;
+}
+
 export default async function ProductsPage() {
   const admin = (await requireAdminPermission("canAccessProducts")) as any;
 
-  const activeUnitId = await resolveUnitScope({
+  const companyId = String(admin?.companyId ?? "").trim();
+  if (!companyId) {
+    throw new Error("Contexto inválido: companyId ausente (multi-tenant).");
+  }
+
+  const rawActiveUnitId = await resolveUnitScope({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
   });
 
+  const activeUnitId = await sanitizeUnitScope({
+    companyId,
+    activeUnitId: rawActiveUnitId,
+  });
+
   const units = await prisma.unit.findMany({
-    where: activeUnitId ? { id: activeUnitId } : {},
+    where: {
+      companyId,
+      ...(activeUnitId ? { id: activeUnitId } : {}),
+    },
     orderBy: { name: "asc" },
     select: { id: true, name: true, isActive: true },
   });
 
   // ✅ Traz explicitamente tudo que o modal precisa (sem depender de action extra)
   const productsPrisma = await prisma.product.findMany({
-    where: activeUnitId ? { unitId: activeUnitId } : {},
+    where: {
+      ...(activeUnitId ? { unitId: activeUnitId } : {}),
+      // 🔒 multi-tenant: produto precisa pertencer à company via unidade
+      unit: { companyId },
+    },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: {
       id: true,
@@ -173,14 +210,14 @@ export default async function ProductsPage() {
       <section className="overflow-x-auto rounded-xl border border-border-primary bg-background-tertiary">
         <table className="w-full table-fixed border-collapse text-sm">
           <colgroup>
-            <col className="w-[380px]" />
-            <col className="w-[220px]" />
-            <col className="w-[110px]" />
-            <col className="w-[110px]" />
-            <col className="w-[110px]" />
-            <col className="w-[110px]" />
-            <col className="w-[110px]" />
-            <col className="w-[110px]" />
+            <col className="w-95" />
+            <col className="w-55" />
+            <col className="w-27.5" />
+            <col className="w-27.5" />
+            <col className="w-27.5" />
+            <col className="w-27.5" />
+            <col className="w-27.5" />
+            <col className="w-27.5" />
             <col className="w-60" />
           </colgroup>
 

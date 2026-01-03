@@ -12,59 +12,68 @@ import { Input } from "@/components/ui/input";
 import { redirect } from "next/navigation";
 import { updateService } from "@/app/admin/services/actions";
 import { prisma } from "@/lib/prisma";
+import { requireAdminWithPermissions } from "@/lib/admin-permissions";
 
 type ServiceEditDialogProps = {
   service: Service;
 };
 
+type AdminContext = {
+  companyId?: string;
+};
+
+function toStringNumberOrEmpty(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const n = Number(value);
+  return Number.isFinite(n) ? String(n) : "";
+}
+
 export async function ServiceEditDialog({ service }: ServiceEditDialogProps) {
-  const rawBarberPercentage = (service as any).barberPercentage as
-    | number
-    | null
-    | undefined;
+  // ✅ tenant context (fonte da verdade)
+  const currentAdmin = (await requireAdminWithPermissions()) as AdminContext;
+  const companyId = currentAdmin.companyId?.trim();
 
-  const barberPercentageDefault =
-    rawBarberPercentage !== undefined && rawBarberPercentage !== null
-      ? String(Number(rawBarberPercentage))
-      : "";
+  if (!companyId) {
+    throw new Error(
+      "[ServiceEditDialog] ADMIN sem companyId. Este painel é multi-tenant: vincule o admin a uma empresa (companyId).",
+    );
+  }
 
-  const rawCancelLimitHours = (service as any).cancelLimitHours as
-    | number
-    | null
-    | undefined;
+  // ✅ defesa: garante que o serviço pertence ao tenant
+  const serviceExistsInTenant = await prisma.service.findFirst({
+    where: { id: service.id, companyId },
+    select: { id: true },
+  });
 
-  const cancelLimitHoursDefault =
-    rawCancelLimitHours !== undefined && rawCancelLimitHours !== null
-      ? String(Number(rawCancelLimitHours))
-      : "";
+  if (!serviceExistsInTenant) {
+    throw new Error("Serviço não encontrado para esta empresa.");
+  }
 
-  const rawCancelFeePercentage = (service as any).cancelFeePercentage as
-    | number
-    | null
-    | undefined;
+  const barberPercentageDefault = toStringNumberOrEmpty(
+    (service as any).barberPercentage,
+  );
+  const cancelLimitHoursDefault = toStringNumberOrEmpty(
+    (service as any).cancelLimitHours,
+  );
+  const cancelFeePercentageDefault = toStringNumberOrEmpty(
+    (service as any).cancelFeePercentage,
+  );
 
-  const cancelFeePercentageDefault =
-    rawCancelFeePercentage !== undefined && rawCancelFeePercentage !== null
-      ? String(Number(rawCancelFeePercentage))
-      : "";
-
-  // 🔹 Carrega todos os profissionais ativos + quais estão vinculados a este serviço
+  // 🔹 Carrega profissionais ativos do tenant + vínculos deste serviço (scoped)
   const [barbers, serviceProfessionals] = await Promise.all([
     prisma.barber.findMany({
       where: {
+        companyId,
         isActive: true,
       },
-      orderBy: {
-        name: "asc",
-      },
+      orderBy: { name: "asc" },
     }),
     prisma.serviceProfessional.findMany({
       where: {
+        companyId,
         serviceId: service.id,
       },
-      select: {
-        barberId: true,
-      },
+      select: { barberId: true },
     }),
   ]);
 
@@ -160,7 +169,7 @@ export async function ServiceEditDialog({ service }: ServiceEditDialogProps) {
             />
           </div>
 
-          {/* LIMITE DE CANCELAMENTO — AGORA OBRIGATÓRIO */}
+          {/* LIMITE DE CANCELAMENTO */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
               Limite para cobrança de taxa (horas antes do horário){" "}
@@ -177,7 +186,7 @@ export async function ServiceEditDialog({ service }: ServiceEditDialogProps) {
             />
           </div>
 
-          {/* TAXA DE CANCELAMENTO — AGORA OBRIGATÓRIO */}
+          {/* TAXA DE CANCELAMENTO */}
           <div className="space-y-1">
             <label className="text-label-small text-content-secondary">
               Taxa de cancelamento (%) <span className="text-red-500">*</span>
@@ -195,7 +204,7 @@ export async function ServiceEditDialog({ service }: ServiceEditDialogProps) {
             />
           </div>
 
-          {/* PROFISSIONAIS QUE REALIZAM O SERVIÇO */}
+          {/* PROFISSIONAIS */}
           <div className="space-y-2">
             <p className="text-label-small text-content-secondary">
               Profissionais que realizam este serviço{" "}

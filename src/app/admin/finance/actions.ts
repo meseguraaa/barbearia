@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { format } from "date-fns";
+import { requireAdminPermission } from "@/lib/admin-permissions";
 
 type ActionResult =
   | { ok: true; monthQuery?: string }
@@ -39,32 +40,62 @@ const updateExpenseSchema = z.object({
   isPaid: z.boolean(),
 });
 
+async function getCompanyIdOrThrow() {
+  const admin = (await requireAdminPermission("canAccessFinance")) as any;
+  const companyId: string | null = admin?.companyId ?? null;
+
+  if (!companyId) {
+    throw new Error("Admin sem companyId. Acesso negado.");
+  }
+
+  return { admin, companyId };
+}
+
 /**
  * Resolve um unitId:
  * - tenta pegar do form (se existir)
  * - senão, pega a primeira unit (prioriza ativa)
  *
- * Mantém compatibilidade enquanto alguma UI não manda unitId.
+ * ✅ multi-tenant: sempre dentro do companyId
+ * ✅ se vier unitId do form, valida que pertence à empresa
  */
-async function getUnitIdFromFormOrDefault(formData: FormData): Promise<string> {
+async function getUnitIdFromFormOrDefault(
+  formData: FormData,
+  companyId: string,
+): Promise<string> {
   const raw = formData.get("unitId");
   const fromForm = String(raw ?? "").trim();
-  if (fromForm) return fromForm;
+
+  if (fromForm) {
+    const unit = await prisma.unit.findFirst({
+      where: { id: fromForm, companyId },
+      select: { id: true },
+    });
+
+    if (!unit) {
+      throw new Error(
+        "Unidade inválida (não encontrada ou não pertence à sua empresa).",
+      );
+    }
+
+    return unit.id;
+  }
 
   const unit =
     (await prisma.unit.findFirst({
-      where: { isActive: true },
+      where: { companyId, isActive: true },
       select: { id: true },
       orderBy: { createdAt: "asc" },
     })) ??
     (await prisma.unit.findFirst({
+      where: { companyId },
       select: { id: true },
       orderBy: { createdAt: "asc" },
     }));
 
   if (!unit) {
     throw new Error(
-      "Nenhuma unidade encontrada. Crie uma unidade antes de cadastrar despesas.",
+      "Nenhuma unidade encontrada nesta empresa. Crie uma unidade antes de cadastrar despesas.",
     );
   }
 
@@ -77,6 +108,8 @@ async function getUnitIdFromFormOrDefault(formData: FormData): Promise<string> {
 
 export async function createExpense(formData: FormData): Promise<ActionResult> {
   try {
+    const { companyId } = await getCompanyIdOrThrow();
+
     const rawIsRecurring = formData.get("isRecurring");
     const rawIsPaid = formData.get("isPaid");
 
@@ -124,10 +157,11 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
 
     const parsed = result.data;
 
-    const unitId = await getUnitIdFromFormOrDefault(formData);
+    const unitId = await getUnitIdFromFormOrDefault(formData, companyId);
 
     await prisma.expense.create({
       data: {
+        companyId, // ✅ multi-tenant REAL
         description: parsed.description,
         category: parsed.category,
         amount: parsed.amount,
@@ -135,9 +169,10 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
         isRecurring: parsed.isRecurring,
         isPaid: parsed.isPaid,
 
-        // ✅ obrigatório agora
-        unit: { connect: { id: unitId } },
+        // ✅ obrigatório
+        unitId,
       },
+      select: { id: true },
     });
 
     const monthQuery = format(dueDate, "yyyy-MM");
@@ -147,8 +182,12 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
   } catch (err) {
     console.error("[createExpense] Erro:", err);
     const msg =
-      err instanceof Error && err.message.includes("Nenhuma unidade")
-        ? err.message
+      err instanceof Error
+        ? err.message.includes("Nenhuma unidade") ||
+          err.message.includes("Unidade inválida") ||
+          err.message.includes("companyId")
+          ? err.message
+          : "Erro ao criar despesa."
         : "Erro ao criar despesa.";
     return { ok: false, error: msg };
   }
@@ -160,6 +199,8 @@ export async function createExpense(formData: FormData): Promise<ActionResult> {
 
 export async function updateExpense(formData: FormData): Promise<ActionResult> {
   try {
+    const { companyId } = await getCompanyIdOrThrow();
+
     const id = String(formData.get("id") || "");
     if (!id) {
       console.warn("[updateExpense] ID vazio");
@@ -174,15 +215,16 @@ export async function updateExpense(formData: FormData): Promise<ActionResult> {
     const amountNumber = Number(formData.get("amount") || 0);
     const recurringDayRaw = formData.get("recurringDay");
 
-    const existing = await prisma.expense.findUnique({
-      where: { id },
+    // ✅ multi-tenant REAL: sempre buscar dentro do companyId
+    const existing = await prisma.expense.findFirst({
+      where: { id, companyId },
       select: {
         id: true,
         dueDate: true,
         isRecurring: true,
         description: true,
         category: true,
-        unitId: true, // ✅ CRÍTICO para não vazar entre unidades
+        unitId: true, // ✅ ainda crítico pro “updateMany da série”
       },
     });
 
@@ -227,6 +269,7 @@ export async function updateExpense(formData: FormData): Promise<ActionResult> {
 
     await prisma.$transaction(async (tx) => {
       const updated = await tx.expense.update({
+        // ✅ trava por companyId
         where: { id: parsed.id },
         data: {
           description: parsed.description,
@@ -241,15 +284,23 @@ export async function updateExpense(formData: FormData): Promise<ActionResult> {
           isRecurring: true,
           amount: true,
           description: true,
+          companyId: true,
+          unitId: true,
         },
       });
+
+      // Paranoia boa: impede update cross-tenant caso alguém tente forçar ID
+      if (updated.companyId !== companyId) {
+        throw new Error("Acesso negado (empresa inválida).");
+      }
 
       // Se não é mais recorrente, não propaga série
       if (!updated.isRecurring) return;
 
-      // ✅ Propaga ajustes só para a MESMA série e MESMA UNIDADE
+      // ✅ Propaga ajustes só para a MESMA série, MESMA UNIDADE e MESMA EMPRESA
       await tx.expense.updateMany({
         where: {
+          companyId,
           unitId: existing.unitId,
           isRecurring: true,
           description: existing.description,
@@ -271,7 +322,11 @@ export async function updateExpense(formData: FormData): Promise<ActionResult> {
     return { ok: true, monthQuery };
   } catch (err) {
     console.error("[updateExpense] Erro:", err);
-    return { ok: false, error: "Erro ao atualizar despesa." };
+    const msg =
+      err instanceof Error && err.message.includes("Acesso negado")
+        ? err.message
+        : "Erro ao atualizar despesa.";
+    return { ok: false, error: msg };
   }
 }
 
@@ -283,6 +338,8 @@ export async function toggleExpensePaid(
   formData: FormData,
 ): Promise<ActionResult> {
   try {
+    const { companyId } = await getCompanyIdOrThrow();
+
     const expenseId = String(formData.get("expenseId") || "");
 
     if (!expenseId) {
@@ -290,8 +347,9 @@ export async function toggleExpensePaid(
       return { ok: false, error: "Despesa inválida." };
     }
 
-    const expense = await prisma.expense.findUnique({
-      where: { id: expenseId },
+    // ✅ multi-tenant REAL
+    const expense = await prisma.expense.findFirst({
+      where: { id: expenseId, companyId },
       select: { id: true, isPaid: true, dueDate: true },
     });
 
@@ -324,6 +382,8 @@ export async function toggleExpensePaid(
 
 export async function deleteExpense(formData: FormData): Promise<ActionResult> {
   try {
+    const { companyId } = await getCompanyIdOrThrow();
+
     const expenseId = String(formData.get("expenseId") || "");
 
     if (!expenseId) {
@@ -331,15 +391,16 @@ export async function deleteExpense(formData: FormData): Promise<ActionResult> {
       return { ok: false, error: "Despesa inválida." };
     }
 
-    const expense = await prisma.expense.findUnique({
-      where: { id: expenseId },
+    // ✅ multi-tenant REAL
+    const expense = await prisma.expense.findFirst({
+      where: { id: expenseId, companyId },
       select: {
         id: true,
         dueDate: true,
         isRecurring: true,
         description: true,
         category: true,
-        unitId: true, // ✅ CRÍTICO para não apagar série de outra unidade
+        unitId: true,
       },
     });
 
@@ -363,9 +424,10 @@ export async function deleteExpense(formData: FormData): Promise<ActionResult> {
     }
 
     await prisma.$transaction(async (tx) => {
-      // ✅ deleta a série (da data pra frente) SOMENTE da mesma unidade
+      // ✅ deleta a série (da data pra frente) SOMENTE da mesma unidade e empresa
       await tx.expense.deleteMany({
         where: {
+          companyId,
           unitId: expense.unitId,
           isRecurring: true,
           description: expense.description,
@@ -376,9 +438,10 @@ export async function deleteExpense(formData: FormData): Promise<ActionResult> {
         },
       });
 
-      // ✅ encontra a recorrente anterior (mesma unidade) e “quebra” a série nela
+      // ✅ encontra a recorrente anterior (mesma unidade/empresa) e “quebra” a série nela
       const previousRecurring = await tx.expense.findFirst({
         where: {
+          companyId,
           unitId: expense.unitId,
           isRecurring: true,
           description: expense.description,
@@ -408,6 +471,10 @@ export async function deleteExpense(formData: FormData): Promise<ActionResult> {
     return { ok: true, monthQuery };
   } catch (err) {
     console.error("[deleteExpense] Erro:", err);
-    return { ok: false, error: "Erro ao excluir despesa." };
+    const msg =
+      err instanceof Error && err.message.includes("Acesso negado")
+        ? err.message
+        : "Erro ao excluir despesa.";
+    return { ok: false, error: msg };
   }
 }

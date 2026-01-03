@@ -10,15 +10,29 @@ import { Input } from "@/components/ui/input";
 import { redirect } from "next/navigation";
 import { createService } from "@/app/admin/services/actions";
 import { prisma } from "@/lib/prisma";
+import { requireAdminWithPermissions } from "@/lib/admin-permissions";
+
+type AdminContext = {
+  companyId?: string;
+};
 
 export async function ServiceNewDialog() {
+  // ✅ tenant context (fonte da verdade)
+  const currentAdmin = (await requireAdminWithPermissions()) as AdminContext;
+  const companyId = currentAdmin.companyId?.trim();
+
+  if (!companyId) {
+    throw new Error(
+      "[ServiceNewDialog] ADMIN sem companyId. Este painel é multi-tenant: vincule o admin a uma empresa (companyId).",
+    );
+  }
+
   const barbers = await prisma.barber.findMany({
     where: {
+      companyId,
       isActive: true,
     },
-    orderBy: {
-      name: "asc",
-    },
+    orderBy: { name: "asc" },
   });
 
   return (
@@ -115,7 +129,7 @@ export async function ServiceNewDialog() {
             />
           </div>
 
-          {/* LIMITE DE CANCELAMENTO — AGORA OBRIGATÓRIO */}
+          {/* LIMITE DE CANCELAMENTO */}
           <div className="space-y-1">
             <label
               className="text-label-small text-content-secondary"
@@ -135,7 +149,7 @@ export async function ServiceNewDialog() {
             />
           </div>
 
-          {/* TAXA DE CANCELAMENTO — AGORA OBRIGATÓRIO */}
+          {/* TAXA DE CANCELAMENTO */}
           <div className="space-y-1">
             <label
               className="text-label-small text-content-secondary"
@@ -156,7 +170,7 @@ export async function ServiceNewDialog() {
             />
           </div>
 
-          {/* PROFISSIONAIS QUE REALIZAM O SERVIÇO */}
+          {/* PROFISSIONAIS */}
           <div className="space-y-2">
             <p className="text-label-small text-content-secondary">
               Profissionais que realizam este serviço{" "}

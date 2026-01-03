@@ -1,59 +1,14 @@
-// app/barber/dashboard/page.tsx
-import { prisma } from "@/lib/prisma";
-import { cookies } from "next/headers";
+// src/app/barber/calendar/page.tsx
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { jwtVerify } from "jose";
-import { Metadata } from "next";
 import { startOfDay, endOfDay } from "date-fns";
+
+import { prisma } from "@/lib/prisma";
+import { getCurrentPainelUser } from "@/lib/painel-session";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { markAppointmentDone, cancelAppointment } from "./actions";
-
-const SESSION_COOKIE_NAME = "painel_session";
-
-function getJwtSecretKey() {
-  const secret = process.env.PAINEL_JWT_SECRET;
-  if (!secret) {
-    throw new Error("PAINEL_JWT_SECRET não definido no .env");
-  }
-  return new TextEncoder().encode(secret);
-}
-
-type PainelSessionPayload = {
-  sub: string;
-  role: "CLIENT" | "BARBER" | "ADMIN";
-  email: string;
-  name?: string | null;
-};
-
-async function getCurrentBarber() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!token) {
-    redirect("/painel/login");
-  }
-
-  let payload: PainelSessionPayload | null = null;
-
-  try {
-    const { payload: raw } = await jwtVerify(token, getJwtSecretKey());
-    payload = raw as PainelSessionPayload;
-  } catch {
-    redirect("/painel/login");
-  }
-
-  if (!payload || payload.role !== "BARBER") {
-    redirect("/painel/login");
-  }
-
-  // Tenta vincular pelo userId (quando houver) ou pelo e-mail
-  const barber = await prisma.barber.findUnique({
-    where: { email: payload.email },
-  });
-
-  return { barber, session: payload };
-}
 
 export const dynamic = "force-dynamic";
 
@@ -61,18 +16,44 @@ export const metadata: Metadata = {
   title: "Barbeiro | Minha agenda",
 };
 
-export default async function BarberDashboardPage() {
-  const { barber } = await getCurrentBarber();
+async function getCurrentBarberScopeOrRedirect(): Promise<{
+  barberId: string;
+  companyId: string;
+}> {
+  const session = await getCurrentPainelUser();
 
-  // Se não achou um registro de Barber ligado a esse usuário
+  if (!session) redirect("/painel/login");
+  if (session.role !== "BARBER") redirect("/painel/login?error=permissao");
+  if (!session.companyId) redirect("/painel/login?error=missing_company");
+
+  const barber = await prisma.barber.findUnique({
+    where: { userId: session.sub },
+    select: {
+      id: true,
+      // companyId pode existir no seu schema, mas aqui não é nossa fonte da verdade
+      companyId: true,
+    },
+  });
+
   if (!barber) {
+    // mantém UX semelhante ao que você tinha
+    return { barberId: "", companyId: session.companyId };
+  }
+
+  return { barberId: barber.id, companyId: session.companyId };
+}
+
+export default async function BarberCalendarPage() {
+  const { barberId, companyId } = await getCurrentBarberScopeOrRedirect();
+
+  if (!barberId || !companyId) {
     return (
       <main className="p-6 space-y-4">
         <h1 className="text-2xl font-semibold tracking-tight">Minha agenda</h1>
         <p className="text-sm text-muted-foreground">
-          Sua conta ainda não está vinculada a um barbeiro cadastrado. Peça para
-          um administrador associar seu usuário a um barbeiro na área
-          administrativa.
+          Sua conta ainda não está vinculada a um barbeiro (ou a uma empresa)
+          cadastrada. Peça para um administrador associar seu usuário a um
+          barbeiro na área administrativa.
         </p>
       </main>
     );
@@ -82,9 +63,11 @@ export default async function BarberDashboardPage() {
   const start = startOfDay(today);
   const end = endOfDay(today);
 
+  // ✅ Multi-tenant REAL: companyId vem do token (tenant lock)
   const appointments = await prisma.appointment.findMany({
     where: {
-      barberId: barber.id,
+      companyId,
+      barberId,
       scheduleAt: {
         gte: start,
         lte: end,

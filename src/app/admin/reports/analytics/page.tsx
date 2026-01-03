@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { parse, subMonths, subYears, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,46 @@ type AdminReportsAnalyticsPageProps = {
 const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
 const UNIT_COOKIE_NAME = "admin_unit_context";
 const UNIT_ALL_VALUE = "all";
+const COMPANY_COOKIE_NAME = "admin_company_context";
+
+// ===============================
+// ✅ Company resolver (sem te jogar pro login)
+// ===============================
+async function resolveCompanyIdOrThrow(admin: any): Promise<string> {
+  const cookieStore = await cookies();
+  const fromCookie = cookieStore.get(COMPANY_COOKIE_NAME)?.value;
+  if (fromCookie) return fromCookie;
+
+  const fromAdmin =
+    (typeof admin?.companyId === "string" && admin.companyId) ||
+    (typeof admin?.company?.id === "string" && admin.company.id);
+  if (fromAdmin) return fromAdmin;
+
+  const userId =
+    (typeof admin?.userId === "string" && admin.userId) ||
+    (typeof admin?.id === "string" && admin.id) ||
+    (typeof admin?.sub === "string" && admin.sub);
+
+  if (!userId) {
+    throw new Error(
+      "Não consegui resolver o userId do admin para achar a company.",
+    );
+  }
+
+  const membership = await prisma.companyMember.findFirst({
+    where: { userId, isActive: true },
+    select: { companyId: true },
+    orderBy: { createdAt: "asc" } as any,
+  });
+
+  if (!membership?.companyId) {
+    throw new Error(
+      `Company não definida para este admin. (cookie "${COMPANY_COOKIE_NAME}" ausente e sem membership ativa).`,
+    );
+  }
+
+  return membership.companyId;
+}
 
 // ===============================
 // Timezone helpers (SP)
@@ -223,6 +264,9 @@ export default async function AdminReportsAnalyticsPage({
 }: AdminReportsAnalyticsPageProps) {
   const admin = (await requireAdminPermission("canAccessDashboard")) as any;
 
+  // ✅ resolve companyId sem depender do cookie (não redireciona pro login)
+  const companyId = await resolveCompanyIdOrThrow(admin);
+
   if (!admin?.canSeeAllUnits && !admin?.unitId) {
     throw new Error(
       "Admin de unidade sem unitId definido. Vincule este admin a uma unidade.",
@@ -230,6 +274,7 @@ export default async function AdminReportsAnalyticsPage({
   }
 
   const cookieStore = await cookies();
+
   const unitCookieValue =
     cookieStore.get(UNIT_COOKIE_NAME)?.value ?? UNIT_ALL_VALUE;
 
@@ -241,6 +286,15 @@ export default async function AdminReportsAnalyticsPage({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
   });
+
+  // 🔒 sanity check: unidade pertence à empresa
+  if (activeUnitId) {
+    const ok = await prisma.unit.findFirst({
+      where: { id: activeUnitId, companyId, isActive: true },
+      select: { id: true },
+    });
+    if (!ok) redirect("/admin/reports");
+  }
 
   const { month: monthParam, compare } = await searchParams;
 
@@ -263,19 +317,19 @@ export default async function AdminReportsAnalyticsPage({
 
   const monthLabel = format(referenceDate, "MMMM 'de' yyyy", { locale: ptBR });
 
-  // ===== Unidades (para filtro)
+  // ===== Unidades (para filtro) ✅ companyId
   let units: UnitOption[] = [];
   let fixedUnitName: string | null = null;
 
   if (admin?.canSeeAllUnits) {
     units = await prisma.unit.findMany({
-      where: { isActive: true },
+      where: { companyId, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
   } else if (admin?.unitId) {
-    const u = await prisma.unit.findUnique({
-      where: { id: admin.unitId },
+    const u = await prisma.unit.findFirst({
+      where: { id: admin.unitId, companyId },
       select: { name: true },
     });
     fixedUnitName = u?.name ?? null;
@@ -290,7 +344,7 @@ export default async function AdminReportsAnalyticsPage({
     : (fixedUnitName ?? "");
 
   // ===============================
-  // Analytics query
+  // Analytics query ✅ companyId
   // ===============================
   const TRACKED = [
     "page_viewed",
@@ -316,6 +370,7 @@ export default async function AdminReportsAnalyticsPage({
   const [baseEvents, compareEvents] = await Promise.all([
     prisma.analyticsEvent.findMany({
       where: {
+        companyId,
         ts: { gte: monthStart, lte: monthEnd },
         name: { in: TRACKED as any },
         ...whereUnit(activeUnitId),
@@ -333,6 +388,7 @@ export default async function AdminReportsAnalyticsPage({
     }) as any as Promise<AE[]>,
     prisma.analyticsEvent.findMany({
       where: {
+        companyId,
         ts: { gte: compareStart, lte: compareEnd },
         name: { in: TRACKED as any },
         ...whereUnit(activeUnitId),
@@ -486,7 +542,7 @@ export default async function AdminReportsAnalyticsPage({
   const dailyRows: DayRow[] = monthDays.map((d) => dailyBucket.get(d.key)!);
 
   // ===============================
-  // Heatmap (Page views por DIA DO MÊS x HORA) ✅
+  // Heatmap (Page views por DIA DO MÊS x HORA)
   // ===============================
   const dayIndex = new Map<string, number>();
   monthDays.forEach((d, i) => dayIndex.set(d.key, i));
@@ -572,9 +628,10 @@ export default async function AdminReportsAnalyticsPage({
 
   const productIds = productsAgg.map((p) => p.productId).filter(Boolean);
 
+  // ✅ products também são tenant-scoped
   const productsInfo = productIds.length
     ? await prisma.product.findMany({
-        where: { id: { in: productIds } },
+        where: { companyId, id: { in: productIds } },
         select: { id: true, name: true },
       })
     : [];
@@ -605,7 +662,9 @@ export default async function AdminReportsAnalyticsPage({
     if (productsAgg[0]?.productId) {
       const name = productNameMap.get(productsAgg[0].productId);
       insights.push(
-        `Produto mais quente: ${name ?? productsAgg[0].productId} (ATC: ${productsAgg[0].atc}).`,
+        `Produto mais quente: ${name ?? productsAgg[0].productId} (ATC: ${
+          productsAgg[0].atc
+        }).`,
       );
     }
 
@@ -708,9 +767,11 @@ export default async function AdminReportsAnalyticsPage({
         <KpiCard
           title="Cliques em produto"
           value={formatInt(baseClicks)}
-          sub={`vs ${compareLabel(compareMode)}: ${formatInt(cmpClicks)} (${formatSignedInt(
-            clickDelta,
-          )} | ${formatSignedPct(clickDeltaPct)}) • CTR: ${
+          sub={`vs ${compareLabel(compareMode)}: ${formatInt(
+            cmpClicks,
+          )} (${formatSignedInt(clickDelta)} | ${formatSignedPct(
+            clickDeltaPct,
+          )}) • CTR: ${
             Number.isFinite(baseCTR) ? `${Math.round(baseCTR)}%` : "—"
           }${
             Number.isFinite(ctrDeltaPP)
@@ -749,7 +810,9 @@ export default async function AdminReportsAnalyticsPage({
             Number.isFinite(cmpATCRate) ? `${Math.round(cmpATCRate)}%` : "—"
           }${
             Number.isFinite(atcRateDeltaPP)
-              ? ` (${atcRateDeltaPP > 0 ? "+" : ""}${Math.round(atcRateDeltaPP)} p.p.)`
+              ? ` (${atcRateDeltaPP > 0 ? "+" : ""}${Math.round(
+                  atcRateDeltaPP,
+                )} p.p.)`
               : ""
           }`}
         />
@@ -824,7 +887,7 @@ export default async function AdminReportsAnalyticsPage({
           </div>
         ) : (
           <div className="mt-4 overflow-x-auto">
-            <table className="min-w-[980px] text-left text-[12px]">
+            <table className="min-w-245 text-left text-[12px]">
               <thead>
                 <tr className="border-b border-border-primary text-content-secondary">
                   <th className="py-2 pr-3">Dia</th>

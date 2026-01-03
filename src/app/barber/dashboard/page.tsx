@@ -27,7 +27,7 @@ function getJwtSecretKey() {
 }
 
 type PainelSessionPayload = {
-  sub: string;
+  sub: string; // geralmente userId
   role: "CLIENT" | "BARBER" | "ADMIN";
   email: string;
   name?: string | null;
@@ -54,11 +54,24 @@ async function getCurrentBarber() {
     redirect("/painel/login");
   }
 
+  // ✅ BarberWhereUniqueInput não aceita { email } no seu schema.
+  // Pelo erro, os uniques são: id, userId, companyId_email (composto).
+  // Então buscamos por userId (payload.sub).
   const barber = await prisma.barber.findUnique({
-    where: { email: payload.email },
+    where: { userId: payload.sub },
   });
 
-  return { barber, session: payload };
+  // fallback seguro (caso algum token antigo tenha sub diferente)
+  // findFirst aceita email sem ser unique
+  const resolvedBarber =
+    barber ??
+    (await prisma.barber.findFirst({
+      where: { email: payload.email },
+    }));
+
+  const companyId = (resolvedBarber as any)?.companyId as string | undefined;
+
+  return { barber: resolvedBarber, companyId, session: payload };
 }
 
 export const dynamic = "force-dynamic";
@@ -95,9 +108,10 @@ function parseDateParam(dateStr?: string): Date | null {
 }
 
 // ===== Services helper (igual ao admin) =====
-async function getServices(): Promise<Service[]> {
+async function getServices(companyId: string): Promise<Service[]> {
   const services = await prisma.service.findMany({
     where: {
+      companyId, // ✅ scoping por empresa
       isActive: true,
     },
     orderBy: {
@@ -150,7 +164,7 @@ type BarberDashboardPageProps = {
 export default async function BarberDashboardPage({
   searchParams,
 }: BarberDashboardPageProps) {
-  const { barber } = await getCurrentBarber();
+  const { barber, companyId } = await getCurrentBarber();
 
   if (!barber) {
     return (
@@ -160,6 +174,19 @@ export default async function BarberDashboardPage({
           Sua conta ainda não está vinculada a um barbeiro cadastrado. Peça para
           um administrador associar seu usuário a um barbeiro na área
           administrativa.
+        </p>
+      </div>
+    );
+  }
+
+  // 🔒 Multi-tenant REAL: se não tem companyId, não pode listar nada
+  if (!companyId) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-title text-content-primary">Minha agenda</h2>
+        <p className="text-paragraph-medium text-content-secondary">
+          Seu usuário está sem vínculo de empresa (companyId). Peça para um
+          administrador corrigir o cadastro do barbeiro.
         </p>
       </div>
     );
@@ -181,6 +208,7 @@ export default async function BarberDashboardPage({
   const [appointments, monthAppointments, services] = await Promise.all([
     prisma.appointment.findMany({
       where: {
+        companyId, // ✅ scoping por empresa
         barberId: barber.id,
         scheduleAt: {
           gte: start,
@@ -204,6 +232,7 @@ export default async function BarberDashboardPage({
     }),
     prisma.appointment.findMany({
       where: {
+        companyId, // ✅ scoping por empresa
         barberId: barber.id,
         scheduleAt: {
           gte: monthStart,
@@ -216,7 +245,7 @@ export default async function BarberDashboardPage({
         cancelFeeApplied: true,
       },
     }),
-    getServices(),
+    getServices(companyId),
   ]);
 
   // lista que o AppointmentForm usa (igual admin)

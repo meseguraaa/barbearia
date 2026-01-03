@@ -2,7 +2,35 @@
 
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import z from "zod";
+import { requireAdminPermission } from "@/lib/admin-permissions";
+
+const COMPANY_COOKIE_NAME = "admin_company_context";
+
+/**
+ * Fonte da verdade do tenant:
+ * - Prioriza companyId vindo do <form> (hidden input)
+ * - Fallback: cookie admin_company_context (compat)
+ */
+async function getCompanyIdOrThrow(formData?: FormData) {
+  const fromForm = formData
+    ? String(formData.get("companyId") ?? "").trim()
+    : "";
+
+  if (fromForm) return fromForm;
+
+  const cookieStore = await cookies();
+  const fromCookie = cookieStore.get(COMPANY_COOKIE_NAME)?.value?.trim();
+
+  if (!fromCookie) {
+    throw new Error(
+      `[review-tags/actions] companyId ausente (formData.companyId e cookie "${COMPANY_COOKIE_NAME}")`,
+    );
+  }
+
+  return fromCookie;
+}
 
 const createReviewTagSchema = z.object({
   label: z.string().min(1, "Informe uma descrição.").max(80),
@@ -10,6 +38,10 @@ const createReviewTagSchema = z.object({
 
 export async function createReviewTagAction(formData: FormData): Promise<void> {
   try {
+    await requireAdminPermission("canAccessReviews");
+
+    const companyId = await getCompanyIdOrThrow(formData);
+
     const raw = {
       label: String(formData.get("label") ?? "").trim(),
     };
@@ -29,6 +61,7 @@ export async function createReviewTagAction(formData: FormData): Promise<void> {
     await prisma.reviewTag.create({
       data: {
         label,
+        companyId,
         // isActive: default true
         // isNegative: default false
       },
@@ -44,31 +77,40 @@ export async function toggleReviewTagStatusAction(
   formData: FormData,
 ): Promise<void> {
   try {
+    await requireAdminPermission("canAccessReviews");
+
+    const companyId = await getCompanyIdOrThrow(formData);
+
     const tagId = String(formData.get("tagId") ?? "").trim();
     if (!tagId) {
       console.error("[toggleReviewTagStatusAction] tagId vazio");
       return;
     }
 
-    const existing = await prisma.reviewTag.findUnique({
-      where: { id: tagId },
-      select: {
-        id: true,
-        isActive: true,
-      },
+    const existing = await prisma.reviewTag.findFirst({
+      where: { id: tagId, companyId },
+      select: { id: true, isActive: true },
     });
 
     if (!existing) {
-      console.error("[toggleReviewTagStatusAction] motivo não encontrado");
+      console.error(
+        "[toggleReviewTagStatusAction] motivo não encontrado (ou não pertence à company)",
+      );
       return;
     }
 
-    await prisma.reviewTag.update({
-      where: { id: tagId },
-      data: {
-        isActive: !existing.isActive,
-      },
+    // updateMany = não depende de unique composto (id+companyId)
+    const updated = await prisma.reviewTag.updateMany({
+      where: { id: tagId, companyId },
+      data: { isActive: !existing.isActive },
     });
+
+    if (updated.count === 0) {
+      console.error(
+        "[toggleReviewTagStatusAction] nada foi atualizado (company scope)",
+      );
+      return;
+    }
 
     revalidatePath("/admin/review-tags");
   } catch (error) {
@@ -81,31 +123,39 @@ export async function toggleReviewTagNegativeAction(
   formData: FormData,
 ): Promise<void> {
   try {
+    await requireAdminPermission("canAccessReviews");
+
+    const companyId = await getCompanyIdOrThrow(formData);
+
     const tagId = String(formData.get("tagId") ?? "").trim();
     if (!tagId) {
       console.error("[toggleReviewTagNegativeAction] tagId vazio");
       return;
     }
 
-    const existing = await prisma.reviewTag.findUnique({
-      where: { id: tagId },
-      select: {
-        id: true,
-        isNegative: true,
-      },
+    const existing = await prisma.reviewTag.findFirst({
+      where: { id: tagId, companyId },
+      select: { id: true, isNegative: true },
     });
 
     if (!existing) {
-      console.error("[toggleReviewTagNegativeAction] motivo não encontrado");
+      console.error(
+        "[toggleReviewTagNegativeAction] motivo não encontrado (ou não pertence à company)",
+      );
       return;
     }
 
-    await prisma.reviewTag.update({
-      where: { id: tagId },
-      data: {
-        isNegative: !existing.isNegative,
-      },
+    const updated = await prisma.reviewTag.updateMany({
+      where: { id: tagId, companyId },
+      data: { isNegative: !existing.isNegative },
     });
+
+    if (updated.count === 0) {
+      console.error(
+        "[toggleReviewTagNegativeAction] nada foi atualizado (company scope)",
+      );
+      return;
+    }
 
     revalidatePath("/admin/review-tags");
   } catch (error) {
@@ -123,6 +173,10 @@ export async function updateReviewTagLabelAction(
   formData: FormData,
 ): Promise<void> {
   try {
+    await requireAdminPermission("canAccessReviews");
+
+    const companyId = await getCompanyIdOrThrow(formData);
+
     const raw = {
       tagId: String(formData.get("tagId") ?? "").trim(),
       label: String(formData.get("label") ?? "").trim(),
@@ -140,12 +194,17 @@ export async function updateReviewTagLabelAction(
 
     const { tagId, label } = parsed.data;
 
-    await prisma.reviewTag.update({
-      where: { id: tagId },
-      data: {
-        label,
-      },
+    const updated = await prisma.reviewTag.updateMany({
+      where: { id: tagId, companyId },
+      data: { label },
     });
+
+    if (updated.count === 0) {
+      console.error(
+        "[updateReviewTagLabelAction] nada foi atualizado (company scope)",
+      );
+      return;
+    }
 
     revalidatePath("/admin/review-tags");
   } catch (error) {

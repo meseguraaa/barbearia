@@ -1,5 +1,6 @@
 // src/app/api/mobile/orders/[id]/route.ts
 import { NextResponse } from "next/server";
+import { CustomerLevel } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { verifyAppJwt } from "@/lib/app-jwt";
 
@@ -8,27 +9,70 @@ type Role = "CLIENT" | "BARBER" | "ADMIN";
 type MobileTokenPayload = {
   sub: string;
   role: Role;
+  companyId: string; // ✅ multi-tenant obrigatório
 };
 
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-company-id",
   };
 }
 
+// ✅ header case-insensitive
+function getHeaderCI(req: Request, key: string): string | null {
+  const target = key.toLowerCase();
+  for (const [k, v] of req.headers.entries()) {
+    if (k.toLowerCase() === target) {
+      const s = String(v ?? "").trim();
+      return s.length ? s : null;
+    }
+  }
+  return null;
+}
+
 async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
-  const auth = req.headers.get("authorization") || "";
+  // ✅ usar case-insensitive também no authorization (não muda contrato)
+  const auth = getHeaderCI(req, "authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!token) throw new Error("missing_token");
-  return await verifyAppJwt(token);
+
+  const payload = await verifyAppJwt(token);
+
+  const sub =
+    typeof (payload as any)?.sub === "string"
+      ? String((payload as any).sub).trim()
+      : "";
+
+  if (!sub) throw new Error("invalid_token");
+
+  let companyId =
+    typeof (payload as any)?.companyId === "string"
+      ? String((payload as any).companyId).trim()
+      : "";
+
+  if (!companyId) {
+    const h = getHeaderCI(req, "x-company-id");
+    if (h) companyId = h;
+  }
+
+  if (!companyId) throw new Error("missing_company_id");
+
+  const membership = await prisma.companyMember.findFirst({
+    where: { userId: sub, companyId, isActive: true },
+    select: { id: true },
+  });
+
+  if (!membership) throw new Error("forbidden_company");
+
+  return { ...(payload as any), sub, companyId } as MobileTokenPayload;
 }
 
 /* ---------------------------------------------------------
- * 🔥 MOTOR DE PREÇO (Mobile) - mesmo do /products
+ * 🔥 MOTOR DE PREÇO (Mobile) - DESCONTO (%)
+ * (mesmo padrão do /products)
  * ---------------------------------------------------------*/
-type CustomerLevel = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
 
 const LEVEL_FALLBACK: Record<CustomerLevel, CustomerLevel[]> = {
   DIAMANTE: ["DIAMANTE", "OURO", "PRATA", "BRONZE"],
@@ -72,51 +116,123 @@ function isWithinInclusive(date: Date, start: Date, end: Date) {
   return t >= start.getTime() && t <= end.getTime();
 }
 
+function coerceCustomerLevel(value: unknown): CustomerLevel | null {
+  return value === "BRONZE" ||
+    value === "PRATA" ||
+    value === "OURO" ||
+    value === "DIAMANTE"
+    ? (value as CustomerLevel)
+    : null;
+}
+
+function clampPct(n: number) {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, Math.floor(n)));
+}
+
+function roundMoney(n: number) {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
+}
+
+function calcFinalPrice(basePrice: number, discountPct: number) {
+  const pct = clampPct(discountPct);
+  const base = Number.isFinite(basePrice) ? basePrice : 0;
+  const final = base * (1 - pct / 100);
+  return roundMoney(final);
+}
+
+function money(n: number) {
+  const v = Number(n ?? 0);
+  if (!Number.isFinite(v)) return 0;
+  return Math.round(v * 100) / 100;
+}
+
+// ✅ nível real do cliente na unidade
+async function getCustomerLevelForUnit(args: {
+  companyId: string;
+  userId: string;
+  unitId: string | null;
+}): Promise<CustomerLevel> {
+  if (!args.unitId) return "BRONZE";
+
+  const s = await prisma.customerLevelState.findFirst({
+    where: {
+      companyId: args.companyId,
+      userId: args.userId,
+      unitId: args.unitId,
+    },
+    select: { levelCurrent: true },
+  });
+
+  const lvl = coerceCustomerLevel(s?.levelCurrent);
+  return lvl ?? "BRONZE";
+}
+
 async function resolveProductUnitPrice(args: {
   productId: string;
   clientId: string | null;
   effectiveLevel?: CustomerLevel;
   timeZone?: string;
   now?: Date;
+  companyId: string;
 }) {
   const timeZone = args.timeZone ?? "America/Sao_Paulo";
   const now = args.now ?? new Date();
   const effectiveLevel: CustomerLevel = args.effectiveLevel ?? "BRONZE";
 
+  const clientPromise = args.clientId
+    ? prisma.user.findUnique({
+        where: { id: args.clientId },
+        select: { id: true, birthday: true },
+      })
+    : Promise.resolve(null);
+
   const [product, client] = await Promise.all([
-    prisma.product.findUnique({
-      where: { id: args.productId },
+    prisma.product.findFirst({
+      where: {
+        id: args.productId,
+        isActive: true,
+        companyId: args.companyId,
+        unit: { companyId: args.companyId },
+      },
       select: {
         id: true,
         price: true,
         unitId: true,
         birthdayBenefitEnabled: true,
         birthdayPriceLevel: true,
-        // ✅ REMOVIDO: prices (não existe no Prisma Client atual)
       },
     }),
-    args.clientId
-      ? prisma.user.findUnique({
-          where: { id: args.clientId },
-          select: { id: true, birthday: true },
-        })
-      : Promise.resolve(null),
+    clientPromise,
   ]);
 
   if (!product) throw new Error("Produto não encontrado.");
 
-  // ✅ Como o campo relacional `prices` não existe no schema atual,
-  // mantemos um fallback seguro: BRONZE = product.price
-  const baseBronze = Number(product.price);
+  const discountRows = await prisma.productDiscountByLevel.findMany({
+    where: {
+      productId: product.id,
+      companyId: args.companyId,
+    },
+    select: { level: true, discountPct: true },
+  });
 
-  function pickPrice(level: CustomerLevel) {
-    // Mantém a lógica/assinatura do motor, mas sem tabela de preços por nível ainda.
-    // (Quando o schema estiver com a relação correta, a gente reativa aqui.)
-    for (const _l of LEVEL_FALLBACK[level]) {
-      // nada a resolver sem price table
-    }
-    return { level: "BRONZE" as CustomerLevel, price: baseBronze };
+  const discountByLevel = new Map<CustomerLevel, number>();
+  for (const row of discountRows) {
+    const lvl = coerceCustomerLevel(row.level);
+    if (!lvl) continue;
+    discountByLevel.set(lvl, clampPct(Number(row.discountPct)));
   }
+
+  function pickDiscount(level: CustomerLevel) {
+    for (const l of LEVEL_FALLBACK[level]) {
+      if (discountByLevel.has(l)) {
+        return { level: l, discountPct: discountByLevel.get(l)! };
+      }
+    }
+    return { level: "BRONZE" as CustomerLevel, discountPct: 0 };
+  }
+
+  const basePrice = Number(product.price);
 
   let inBirthdayWindow = false;
 
@@ -136,33 +252,35 @@ async function resolveProductUnitPrice(args: {
     inBirthdayWindow = isWithinInclusive(todayAnchor, start, end);
   }
 
-  // ✅ Mantemos a janela de aniversário calculada.
-  // Sem tabela de preços por nível, o preço final = base.
   if (inBirthdayWindow && product.birthdayBenefitEnabled) {
-    const chosen = ((product.birthdayPriceLevel as CustomerLevel | null) ??
-      "DIAMANTE") as CustomerLevel;
+    const chosen = (coerceCustomerLevel(product.birthdayPriceLevel) ??
+      ("DIAMANTE" as CustomerLevel)) as CustomerLevel;
 
-    const picked = pickPrice(chosen);
+    const picked = pickDiscount(chosen);
+    const finalPrice = calcFinalPrice(basePrice, picked.discountPct);
 
     return {
       unitId: product.unitId,
-      basePrice: baseBronze,
-      finalPrice: picked.price,
+      basePrice,
+      finalPrice,
+      discountPct: picked.discountPct,
       appliedLevel: picked.level,
       appliedBecause: "BIRTHDAY" as const,
       inBirthdayWindow: true,
     };
   }
 
-  const picked = pickPrice(effectiveLevel);
+  const picked = pickDiscount(effectiveLevel);
+  const finalPrice = calcFinalPrice(basePrice, picked.discountPct);
 
   return {
     unitId: product.unitId,
-    basePrice: baseBronze,
-    finalPrice: picked.price,
+    basePrice,
+    finalPrice,
+    discountPct: picked.discountPct,
     appliedLevel: picked.level,
     appliedBecause:
-      picked.level === "BRONZE" ? ("BASE" as const) : ("LEVEL" as const),
+      picked.discountPct > 0 ? ("LEVEL" as const) : ("BASE" as const),
     inBirthdayWindow: false,
   };
 }
@@ -179,6 +297,7 @@ export async function GET(
 
   try {
     const auth = await requireMobileAuth(req);
+    const companyId = auth.companyId;
 
     if (auth.role !== "CLIENT") {
       return NextResponse.json(
@@ -198,7 +317,11 @@ export async function GET(
     }
 
     const o = await prisma.order.findFirst({
-      where: { id: orderId, clientId: auth.sub },
+      where: {
+        id: orderId,
+        companyId,
+        clientId: auth.sub,
+      },
       select: {
         id: true,
         status: true,
@@ -234,52 +357,105 @@ export async function GET(
       );
     }
 
-    const customerLevel: CustomerLevel = "BRONZE";
     const clientId = auth.sub;
+
+    // ✅ nível real do cliente nessa unidade
+    const customerLevel = await getCustomerLevelForUnit({
+      companyId,
+      userId: clientId,
+      unitId: o.unitId ?? null,
+    });
 
     const enrichedItems = await Promise.all(
       (o.items ?? []).map(async (it) => {
+        const qty = Math.max(1, Number(it.quantity ?? 1));
+        const storedUnit = money(Number(it.unitPrice));
+        const storedLine = money(Number(it.totalPrice));
+
         if (!it.productId) {
           return {
             id: it.id,
-            productId: it.productId,
-            quantity: it.quantity,
-            unitPrice: Number(it.unitPrice),
-            totalPrice: Number(it.totalPrice),
+            productId: null as string | null,
+            quantity: qty,
+            unitPrice: storedUnit,
+            totalPrice: storedLine,
             product: null,
           };
         }
 
-        const pricing = await resolveProductUnitPrice({
-          productId: it.productId,
-          clientId,
-          effectiveLevel: customerLevel,
-          timeZone: "America/Sao_Paulo",
-        });
+        const pid = String(it.productId);
 
-        const basePrice = Number(pricing.basePrice);
-        const finalPrice = Number(pricing.finalPrice);
+        let pricing: Awaited<
+          ReturnType<typeof resolveProductUnitPrice>
+        > | null = null;
+
+        try {
+          pricing = await resolveProductUnitPrice({
+            productId: pid,
+            clientId,
+            effectiveLevel: customerLevel,
+            timeZone: "America/Sao_Paulo",
+            companyId,
+          });
+
+          // ✅ defesa: se pricing.unitId não bate com o pedido, não arrisca recomputar
+          if (
+            pricing?.unitId &&
+            o.unitId &&
+            String(pricing.unitId) !== String(o.unitId)
+          ) {
+            pricing = null;
+          }
+        } catch {
+          pricing = null;
+        }
+
+        if (!pricing) {
+          return {
+            id: it.id,
+            productId: pid,
+            quantity: qty,
+            unitPrice: storedUnit,
+            totalPrice: storedLine,
+            product: it.product
+              ? {
+                  id: it.product.id,
+                  name: it.product.name,
+                  imageUrl: it.product.imageUrl ?? null,
+                  category: it.product.category ?? null,
+                }
+              : null,
+          };
+        }
+
+        const basePrice = money(Number(pricing.basePrice));
+        const finalPrice = money(Number(pricing.finalPrice));
+        const discountPct = clampPct(Number(pricing.discountPct ?? 0));
+
+        const computedUnitPrice = Number.isFinite(finalPrice)
+          ? finalPrice
+          : storedUnit;
+
+        const computedTotalPrice = money(computedUnitPrice * qty);
 
         const hasDiscount =
           Number.isFinite(basePrice) &&
-          Number.isFinite(finalPrice) &&
-          finalPrice < basePrice;
+          Number.isFinite(computedUnitPrice) &&
+          computedUnitPrice < basePrice;
 
-        // ✅ Badge só se houver desconto de verdade
-        const badge = !hasDiscount
-          ? null
-          : pricing.appliedBecause === "BIRTHDAY"
+        const badge =
+          pricing.appliedBecause === "BIRTHDAY"
             ? { type: "BIRTHDAY" as const, label: "🎂 Aniversário" }
-            : pricing.appliedBecause === "LEVEL"
-              ? { type: "LEVEL" as const, label: "⭐ Oferta do seu nível" }
+            : hasDiscount
+              ? { type: "LEVEL" as const, label: `${discountPct}% OFF` }
               : null;
 
         return {
           id: it.id,
-          productId: it.productId,
-          quantity: it.quantity,
-          unitPrice: Number(it.unitPrice),
-          totalPrice: Number(it.totalPrice),
+          productId: pid,
+          quantity: qty,
+          unitPrice: computedUnitPrice,
+          totalPrice: computedTotalPrice,
           product: it.product
             ? {
                 id: it.product.id,
@@ -287,7 +463,7 @@ export async function GET(
                 imageUrl: it.product.imageUrl ?? null,
                 category: it.product.category ?? null,
                 basePrice,
-                finalPrice,
+                finalPrice: computedUnitPrice,
                 hasDiscount,
                 badge,
               }
@@ -296,12 +472,19 @@ export async function GET(
       }),
     );
 
+    const computedTotalAmount = money(
+      enrichedItems.reduce(
+        (acc, it) => acc + money((it as any)?.totalPrice),
+        0,
+      ),
+    );
+
     const order = {
       id: o.id,
       status: o.status,
       createdAt: o.createdAt,
       reservedUntil: o.reservedUntil,
-      totalAmount: Number(o.totalAmount),
+      totalAmount: computedTotalAmount,
       unitId: o.unitId,
       unitName: o.unit?.name ?? "—",
       items: enrichedItems,
@@ -321,10 +504,25 @@ export async function GET(
       );
     }
 
+    if (msg.includes("missing_company_id")) {
+      return NextResponse.json(
+        { error: "missing_company_id" },
+        { status: 401, headers },
+      );
+    }
+
+    if (msg.includes("forbidden_company")) {
+      return NextResponse.json(
+        { error: "forbidden_company" },
+        { status: 403, headers },
+      );
+    }
+
     if (
       msg.includes("Invalid token") ||
       msg.includes("JWT") ||
-      msg.includes("token")
+      msg.includes("token") ||
+      msg.includes("invalid_token")
     ) {
       return NextResponse.json(
         { error: "invalid_token" },

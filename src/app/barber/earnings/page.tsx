@@ -14,7 +14,7 @@ const SESSION_COOKIE_NAME = "painel_session";
 const SAO_PAULO_TIMEZONE = "America/Sao_Paulo";
 
 type PainelSessionPayload = {
-  sub: string;
+  sub: string; // userId
   role: "CLIENT" | "BARBER" | "ADMIN";
   email: string;
   name?: string | null;
@@ -49,11 +49,22 @@ async function getCurrentBarber() {
     redirect("/painel/login");
   }
 
-  const barber = await prisma.barber.findUnique({
-    where: { email: payload.email },
+  // ✅ BarberWhereUniqueInput não aceita { email } no seu schema.
+  // Uniques: id, userId, companyId_email. Então buscamos por userId (payload.sub).
+  const barberByUserId = await prisma.barber.findUnique({
+    where: { userId: payload.sub },
   });
 
-  return { barber, session: payload };
+  // fallback seguro (para tokens antigos)
+  const barber =
+    barberByUserId ??
+    (await prisma.barber.findFirst({
+      where: { email: payload.email },
+    }));
+
+  const companyId = (barber as any)?.companyId as string | undefined;
+
+  return { barber, companyId, session: payload };
 }
 
 function getSaoPauloToday(): Date {
@@ -96,7 +107,7 @@ type BarberEarningsPageProps = {
 export default async function BarberEarningsPage({
   searchParams,
 }: BarberEarningsPageProps) {
-  const { barber } = await getCurrentBarber();
+  const { barber, companyId } = await getCurrentBarber();
 
   if (!barber) {
     return (
@@ -106,6 +117,19 @@ export default async function BarberEarningsPage({
           Sua conta ainda não está vinculada a um barbeiro cadastrado. Peça para
           um administrador associar seu usuário a um barbeiro na área
           administrativa.
+        </p>
+      </div>
+    );
+  }
+
+  // 🔒 Multi-tenant REAL: sem companyId, sem dados
+  if (!companyId) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-title text-content-primary">Ganhos</h2>
+        <p className="text-paragraph-medium text-content-secondary">
+          Seu usuário está sem vínculo de empresa (companyId). Peça para um
+          administrador corrigir o cadastro do barbeiro.
         </p>
       </div>
     );
@@ -134,13 +158,14 @@ export default async function BarberEarningsPage({
     dayProductSales,
     monthProductSales,
 
-    // ✅ NOVO: multas de cancelamento (financeiro do barbeiro)
+    // ✅ MULTAS DE CANCELAMENTO (financeiro do barbeiro)
     dayCancellationFees,
     monthCancellationFees,
   ] = await Promise.all([
     // Atendimentos concluídos do DIA
     prisma.appointment.findMany({
       where: {
+        companyId, // ✅ scoping
         barberId: barber.id,
         status: "DONE",
         scheduleAt: {
@@ -158,6 +183,7 @@ export default async function BarberEarningsPage({
     // Atendimentos CANCELADOS do DIA
     prisma.appointment.findMany({
       where: {
+        companyId, // ✅ scoping
         barberId: barber.id,
         status: "CANCELED",
         scheduleAt: {
@@ -169,6 +195,7 @@ export default async function BarberEarningsPage({
     // Atendimentos concluídos do MÊS
     prisma.appointment.findMany({
       where: {
+        companyId, // ✅ scoping
         barberId: barber.id,
         status: "DONE",
         scheduleAt: {
@@ -186,6 +213,7 @@ export default async function BarberEarningsPage({
     // Atendimentos CANCELADOS do MÊS
     prisma.appointment.findMany({
       where: {
+        companyId, // ✅ scoping
         barberId: barber.id,
         status: "CANCELED",
         scheduleAt: {
@@ -197,6 +225,7 @@ export default async function BarberEarningsPage({
     // VENDAS DE PRODUTOS DO DIA (deste barbeiro)
     prisma.productSale.findMany({
       where: {
+        companyId, // ✅ scoping
         barberId: barber.id,
         soldAt: {
           gte: dayStart,
@@ -210,6 +239,7 @@ export default async function BarberEarningsPage({
     // VENDAS DE PRODUTOS DO MÊS (deste barbeiro)
     prisma.productSale.findMany({
       where: {
+        companyId, // ✅ scoping
         barberId: barber.id,
         soldAt: {
           gte: monthStart,
@@ -221,9 +251,10 @@ export default async function BarberEarningsPage({
       },
     }),
 
-    // ✅ MULTAS DO DIA (pela criação do lançamento)
+    // ✅ MULTAS DO DIA
     prisma.barberCancellationFee.findMany({
       where: {
+        companyId, // ✅ scoping
         barberId: barber.id,
         createdAt: {
           gte: dayStart,
@@ -240,6 +271,7 @@ export default async function BarberEarningsPage({
     // ✅ MULTAS DO MÊS
     prisma.barberCancellationFee.findMany({
       where: {
+        companyId, // ✅ scoping
         barberId: barber.id,
         createdAt: {
           gte: monthStart,
@@ -397,8 +429,7 @@ export default async function BarberEarningsPage({
       ? totalCancelFeeMonthFromTable
       : totalCancelFeeMonthFallback;
 
-  // 🔗 Ganhos totais
-  // ✅ Agora inclui taxa do DIA também
+  // 🔗 Ganhos totais (inclui taxas)
   const totalEarningsDay =
     totalServiceEarningsDay + totalProductEarningsDay + totalCancelFeeDay;
 
@@ -428,6 +459,12 @@ export default async function BarberEarningsPage({
     productEarningsDayLabel: currencyFormatter.format(totalProductEarningsDay),
     productEarningsMonthLabel: currencyFormatter.format(
       totalProductEarningsMonth,
+    ),
+
+    // (mantive esses dois, caso você use no componente)
+    totalProductsRevenueDay: currencyFormatter.format(totalProductsRevenueDay),
+    totalProductsRevenueMonth: currencyFormatter.format(
+      totalProductsRevenueMonth,
     ),
   };
 

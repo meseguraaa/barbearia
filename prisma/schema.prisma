@@ -9,7 +9,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  //url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL")
 }
 
 // ============
@@ -20,6 +20,18 @@ enum Role {
   CLIENT
   BARBER
   ADMIN
+}
+
+enum CompanySegment {
+  BARBERSHOP
+  AESTHETIC
+}
+
+enum CompanyMemberRole {
+  OWNER
+  ADMIN
+  STAFF
+  CLIENT
 }
 
 enum AppointmentStatus {
@@ -49,23 +61,14 @@ enum ClientPlanStatus {
 
 // ⭐ STATUS DO PEDIDO
 enum OrderStatus {
-  // Pedido criado, aguardando alguma ação (ex: iniciado pelo admin/barbeiro)
   PENDING
-
-  // Pedido feito pelo cliente fora da barbearia, aguardando ele chegar para concluir
   PENDING_CHECKIN
-
-  // ✅ Reserva expirada (prazo acabou e voltou pro estoque)
   EXPIRED
-
-  // Venda efetivamente concluída (estoque abatido, entra no financeiro)
   COMPLETED
-
-  // Pedido cancelado (não mexe em estoque, não entra no financeiro)
   CANCELED
 }
 
-// ✅ NOVO: níveis de cliente (gamificação)
+// ✅ níveis de cliente (gamificação)
 enum CustomerLevel {
   BRONZE
   PRATA
@@ -73,7 +76,7 @@ enum CustomerLevel {
   DIAMANTE
 }
 
-// ✅ NOVO: tipos de regra especial de nível
+// ✅ tipos de regra especial de nível
 enum CustomerLevelRuleType {
   HAS_ACTIVE_PLAN
 }
@@ -81,6 +84,76 @@ enum CustomerLevelRuleType {
 // ============
 // MODELS
 // ============
+
+model Company {
+  id String @id @default(cuid())
+
+  name     String
+  segment  CompanySegment @default(BARBERSHOP)
+  isActive Boolean        @default(true)
+
+  // relations
+  members CompanyMember[]
+  units   Unit[]
+
+  createdAt                  DateTime                   @default(now())
+  updatedAt                  DateTime                   @updatedAt
+  customerLevelConfigs       CustomerLevelConfig[]
+  customerLevelRules         CustomerLevelRule[]
+  customerLevelStates        CustomerLevelState[]
+  customerLevelPeriods       CustomerLevelPeriod[]
+  barberUnits                BarberUnit[]
+  unitWeeklyAvailabilities   UnitWeeklyAvailability[]
+  unitDailyAvailabilities    UnitDailyAvailability[]
+  barbers                    Barber[]
+  services                   Service[]
+  serviceProfessionals       ServiceProfessional[]
+  plans                      Plan[]
+  planServices               PlanService[]
+  clientPlans                ClientPlan[]
+  appointments               Appointment[]
+  barberCancellationFees     BarberCancellationFee[]
+  products                   Product[]
+  productDiscountByLevels    ProductDiscountByLevel[]
+  productSales               ProductSale[]
+  orders                     Order[]
+  orderItems                 OrderItem[]
+  expenses                   Expense[]
+  barberWeeklyAvailabilities BarberWeeklyAvailability[]
+  barberDailyAvailabilities  BarberDailyAvailability[]
+  appointmentReviews         AppointmentReview[]
+  reviewTags                 ReviewTag[]
+  adminAccesses              AdminAccess[]
+  analyticsEvents            AnalyticsEvent[]
+
+  @@index([segment])
+  @@map("companies")
+}
+
+model CompanyMember {
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role     CompanyMemberRole @default(CLIENT)
+  isActive Boolean           @default(true)
+
+  // opcional: última unidade usada nessa empresa (melhora UX)
+  lastUnitId String?
+  lastUnit   Unit?   @relation(fields: [lastUnitId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([companyId, userId])
+  @@index([userId])
+  @@index([companyId, role])
+  @@map("company_members")
+}
 
 model User {
   id String @id @default(cuid())
@@ -92,23 +165,26 @@ model User {
   phone         String?
   passwordHash  String?
 
-  // 🎂 Data de aniversário do cliente (opcional)
   birthday DateTime?
 
+  // ⚠️ Mantido por compatibilidade com seu código atual.
+  // No multi-tenant, o "papel real" por empresa vai ficar em CompanyMember.role.
   role Role @default(CLIENT)
 
-  // 🔹 Indica se esse usuário é o DONO do estabelecimento
+  // ⚠️ Mantido por compatibilidade.
+  // No multi-tenant, "dono" por empresa vai ficar em CompanyMember.role = OWNER.
   isOwner Boolean @default(false)
 
   isActive Boolean @default(true)
 
-  // ✅ agendamentos como CLIENTE
+  // memberships
+  companyMemberships CompanyMember[]
+
+  // agendamentos como CLIENTE
   appointmentsAsClient Appointment[] @relation("ClientAppointments")
 
-  // ✅ auditoria: agendamentos CONCLUÍDOS por este usuário (ADMIN/BARBER logado via User)
+  // auditoria
   appointmentsConcluded Appointment[] @relation("AppointmentConcludedByUser")
-
-  // ✅ auditoria: agendamentos CANCELADOS por este usuário (ADMIN/BARBER logado via User)
   appointmentsCancelled Appointment[] @relation("AppointmentCancelledByUser")
 
   clientPlans ClientPlan[]
@@ -118,31 +194,22 @@ model User {
   accounts Account[]
   sessions Session[]
 
-  // ⭐ PEDIDOS DO CLIENTE
-  orders Order[]
-
-  // ⭐ AVALIAÇÕES FEITAS PELO CLIENTE
+  orders  Order[]
   reviews AppointmentReview[]
 
-  // 🔹 Permissões de acesso ao painel admin (quando role = ADMIN)
-  adminAccess AdminAccess?
+  adminAccesses AdminAccess[]
 
-  // ✅ NOVO: estado de nível por unidade (nível vigente/earned com defasagem M -> M+1)
   customerLevelStates  CustomerLevelState[]
   customerLevelPeriods CustomerLevelPeriod[]
 
-  // ✅ FIX: relacionamento correto (antes estava MobileAnalyticsEvent[])
   analyticsEvents AnalyticsEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-
-  // 🚫 REMOVIDO: appointments Appointment[]
-  // Esse campo estava "solto" e quebrava o Prisma (sem relação inversa no Appointment).
 }
 
 // =======================
-// NEXTAUTH
+// NEXTAUTH (GLOBAL)
 // =======================
 
 model Account {
@@ -191,34 +258,30 @@ model VerificationToken {
 model Unit {
   id String @id @default(cuid())
 
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   name     String
   phone    String?
   address  String?
   isActive Boolean @default(true)
 
-  // 🔹 Horários da unidade (igual padrão do barbeiro)
   weeklyAvailabilities UnitWeeklyAvailability[]
   dailyAvailabilities  UnitDailyAvailability[]
 
-  // 🔹 Profissionais vinculados (N:N)
   barbers BarberUnit[]
 
-  // 🔹 Entidades “particionadas” por unidade
   appointments Appointment[]
   products     Product[]
   orders       Order[]
   expenses     Expense[]
 
-  // ✅ vendas de produtos por unidade
   productSales ProductSale[]
 
-  // ✅ NOVO: admins vinculados via AdminAccess
   adminAccesses AdminAccess[]
 
-  // ✅ NOVO: lançamentos de multa de cancelamento (financeiro do barbeiro)
   cancellationFees BarberCancellationFee[]
 
-  // ✅ NOVO: gamificação / nível do cliente (config + regras + histórico por período + estado vigente)
   customerLevelConfigs CustomerLevelConfig[]
   customerLevelRules   CustomerLevelRule[]
   customerLevelStates  CustomerLevelState[]
@@ -230,24 +293,27 @@ model Unit {
   barberDailyAvailabilities  BarberDailyAvailability[]
   services                   Service[]
 
-  // ✅ FIX: relacionamento correto (antes estava MobileAnalyticsEvent[])
   analyticsEvents AnalyticsEvent[]
 
+  // reverse relation from CompanyMember.lastUnit
+  lastUsedByMembers CompanyMember[]
+
+  @@index([companyId])
   @@map("units")
 }
 
-// ✅ NOVO: CONFIGURAÇÃO POR NÍVEL (por unidade/tenant)
+// ✅ CONFIGURAÇÃO POR NÍVEL (por unidade)
 model CustomerLevelConfig {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   unitId String
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
   level CustomerLevel
 
-  // ✅ Contagem do MÊS (calendário) baseada em:
-  // - agendamentos status = DONE
-  // - pedidos status = COMPLETED
   minAppointmentsDone Int @default(0)
   minOrdersCompleted  Int @default(0)
 
@@ -255,36 +321,39 @@ model CustomerLevelConfig {
   updatedAt DateTime @updatedAt
 
   @@unique([unitId, level])
+  @@index([companyId])
   @@index([unitId])
   @@map("customer_level_configs")
 }
 
-// ✅ NOVO: REGRAS ESPECIAIS (por unidade/tenant)
 model CustomerLevelRule {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   unitId String
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
-  type CustomerLevelRuleType
-
-  // Ex: HAS_ACTIVE_PLAN => DIAMANTE
+  type        CustomerLevelRuleType
   targetLevel CustomerLevel
 
-  // Maior = mais prioridade (para futuros tipos de regra)
   priority  Int     @default(100)
   isEnabled Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([companyId, isEnabled])
   @@index([unitId, isEnabled])
   @@map("customer_level_rules")
 }
 
-// ✅ NOVO: ESTADO DO NÍVEL VIGENTE (por unidade + cliente)
 model CustomerLevelState {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   unitId String
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
@@ -300,14 +369,17 @@ model CustomerLevelState {
   updatedAt DateTime @updatedAt
 
   @@unique([unitId, userId])
+  @@index([companyId])
   @@index([userId])
   @@index([unitId])
   @@map("customer_level_states")
 }
 
-// ✅ NOVO: HISTÓRICO POR PERÍODO (por unidade + cliente + mês)
 model CustomerLevelPeriod {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   unitId String
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
@@ -328,6 +400,7 @@ model CustomerLevelPeriod {
   updatedAt DateTime @updatedAt
 
   @@unique([unitId, userId, periodKey])
+  @@index([companyId, periodKey])
   @@index([unitId, periodKey])
   @@index([userId, periodKey])
   @@map("customer_level_periods")
@@ -336,6 +409,9 @@ model CustomerLevelPeriod {
 // ⭐ Pivot: BARBEIRO x UNIDADE (N:N)
 model BarberUnit {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   barberId String
   barber   Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
@@ -349,17 +425,22 @@ model BarberUnit {
   updatedAt DateTime @updatedAt
 
   @@unique([barberId, unitId])
+  @@index([companyId])
   @@index([unitId])
   @@index([barberId])
   @@map("barber_units")
 }
 
 // =======================
-// HORÁRIO DA UNIDADE (igual ao barbeiro)
+// HORÁRIO DA UNIDADE
 // =======================
 
 model UnitWeeklyAvailability {
-  id     String @id @default(cuid())
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   unitId String
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
@@ -372,6 +453,7 @@ model UnitWeeklyAvailability {
   updatedAt DateTime @updatedAt
 
   @@unique([unitId, weekday])
+  @@index([companyId])
   @@map("unit_weekly_availabilities")
 }
 
@@ -390,7 +472,11 @@ model UnitWeeklyTimeInterval {
 }
 
 model UnitDailyAvailability {
-  id     String @id @default(cuid())
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   unitId String
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
@@ -403,6 +489,7 @@ model UnitDailyAvailability {
   updatedAt DateTime @updatedAt
 
   @@unique([unitId, date])
+  @@index([companyId])
   @@map("unit_daily_availabilities")
 }
 
@@ -425,13 +512,16 @@ model UnitDailyTimeInterval {
 // =======================
 
 model Barber {
-  id       String  @id @default(cuid())
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   name     String
-  email    String  @unique
+  email    String
   phone    String?
   isActive Boolean @default(true)
 
-  // ✅ FOTO DO PROFISSIONAL (URL pública)
   imageUrl String?
 
   createdAt DateTime @default(now())
@@ -440,35 +530,27 @@ model Barber {
   userId String? @unique
   user   User?   @relation(fields: [userId], references: [id])
 
-  // 🔹 vínculo do profissional em uma ou mais unidades
   units BarberUnit[]
 
   appointments Appointment[]
 
-  // ✅ auditoria: agendamentos CONCLUÍDOS por este barbeiro
   appointmentsConcluded Appointment[] @relation("AppointmentConcludedByBarber")
-
-  // ✅ auditoria: agendamentos CANCELADOS por este barbeiro
   appointmentsCancelled Appointment[] @relation("AppointmentCancelledByBarber")
 
   weeklyAvailabilities BarberWeeklyAvailability[]
   dailyAvailabilities  BarberDailyAvailability[]
 
-  // ⭐ VENDAS DE PRODUTO
   productSales ProductSale[]
+  orders       Order[]
 
-  // ⭐ PEDIDOS LIGADOS AO BARBEIRO (quem fez a venda / atendeu)
-  orders Order[]
-
-  // 🔹 Serviços que esse profissional executa
   services ServiceProfessional[]
 
-  // ⭐ AVALIAÇÕES RECEBIDAS PELO PROFISSIONAL
   reviews AppointmentReview[]
 
-  // ✅ NOVO: lançamentos de multa de cancelamento (financeiro do barbeiro)
   cancellationFees BarberCancellationFee[]
 
+  @@unique([companyId, email])
+  @@index([companyId])
   @@map("barbers")
 }
 
@@ -478,6 +560,12 @@ model Barber {
 
 model Service {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  unitId String?
+  unit   Unit?   @relation(fields: [unitId], references: [id])
 
   name                String
   price               Decimal  @db.Decimal(10, 2)
@@ -495,15 +583,17 @@ model Service {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  unit      Unit?    @relation(fields: [unitId], references: [id])
-  unitId    String?
 
+  @@index([companyId])
+  @@index([unitId])
   @@map("services")
 }
 
-// ⭐ TABELA PIVOT: SERVIÇO x BARBEIRO/PROFISSIONAL
 model ServiceProfessional {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   serviceId String
   barberId  String
@@ -515,6 +605,7 @@ model ServiceProfessional {
   updatedAt DateTime @updatedAt
 
   @@unique([serviceId, barberId])
+  @@index([companyId])
   @@index([barberId])
   @@map("service_professionals")
 }
@@ -524,7 +615,11 @@ model ServiceProfessional {
 // =======================
 
 model Plan {
-  id   String @id @default(cuid())
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   name String
 
   description       String?
@@ -540,11 +635,15 @@ model Plan {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([companyId])
   @@map("plans")
 }
 
 model PlanService {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   planId    String
   serviceId String
@@ -556,11 +655,16 @@ model PlanService {
   updatedAt DateTime @updatedAt
 
   @@unique([planId, serviceId])
+  @@index([companyId])
   @@map("plan_services")
 }
 
 model ClientPlan {
-  id       String @id @default(cuid())
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   clientId String
   planId   String
 
@@ -577,13 +681,18 @@ model ClientPlan {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([companyId])
   @@index([clientId])
   @@index([planId])
   @@map("client_plans")
 }
 
 model Appointment {
-  id     String @id @default(cuid())
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   unitId String
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
@@ -612,14 +721,12 @@ model Appointment {
   cancelledByRole  Role?
   concludedByRole  Role?
 
-  // ✅ NOVO: auditoria - quem CONCLUIU (nome/ator real)
   concludedByUserId String?
   concludedByUser   User?   @relation("AppointmentConcludedByUser", fields: [concludedByUserId], references: [id], onDelete: SetNull)
 
   concludedByBarberId String?
   concludedByBarber   Barber? @relation("AppointmentConcludedByBarber", fields: [concludedByBarberId], references: [id], onDelete: SetNull)
 
-  // ✅ NOVO: auditoria - quem CANCELOU (nome/ator real)
   cancelledByUserId String?
   cancelledByUser   User?   @relation("AppointmentCancelledByUser", fields: [cancelledByUserId], references: [id], onDelete: SetNull)
 
@@ -629,7 +736,6 @@ model Appointment {
   clientPlanId String?
   clientPlan   ClientPlan? @relation(fields: [clientPlanId], references: [id])
 
-  // ⭐ PEDIDO VINCULADO A ESSE ATENDIMENTO (opcional)
   order Order? @relation("AppointmentOrder")
 
   reviewModalShown Boolean            @default(false)
@@ -640,6 +746,7 @@ model Appointment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([companyId])
   @@index([unitId])
   @@index([clientId])
   @@index([barberId])
@@ -655,11 +762,14 @@ model Appointment {
 }
 
 // =======================
-// ✅ NOVO: LANÇAMENTO FINANCEIRO DE MULTA (CANCELAMENTO)
+// MULTA CANCELAMENTO
 // =======================
 
 model BarberCancellationFee {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   appointmentId String      @unique
   appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
@@ -674,17 +784,22 @@ model BarberCancellationFee {
 
   createdAt DateTime @default(now())
 
+  @@index([companyId, createdAt])
   @@index([barberId, createdAt])
   @@index([unitId, createdAt])
   @@map("barber_cancellation_fees")
 }
 
 // =======================
-// ⭐ PRODUCTS + STOCK
+// PRODUCTS + STOCK
 // =======================
 
 model Product {
-  id     String @id @default(cuid())
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   unitId String
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
@@ -712,12 +827,16 @@ model Product {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 
+  @@index([companyId])
   @@index([unitId])
   @@index([isFeatured])
 }
 
 model ProductDiscountByLevel {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -729,12 +848,16 @@ model ProductDiscountByLevel {
   updatedAt DateTime @updatedAt
 
   @@unique([productId, level])
+  @@index([companyId])
   @@index([level])
   @@map("product_prices_by_level")
 }
 
 model ProductSale {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   unitId String
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
@@ -753,6 +876,7 @@ model ProductSale {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([companyId])
   @@index([unitId])
   @@index([productId])
   @@index([barberId])
@@ -760,11 +884,14 @@ model ProductSale {
 }
 
 // =======================
-// ⭐ PEDIDOS (SERVIÇOS + PRODUTOS)
+// PEDIDOS
 // =======================
 
 model Order {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   unitId String
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
@@ -772,6 +899,7 @@ model Order {
   clientId String?
   client   User?   @relation(fields: [clientId], references: [id])
 
+  // ✅ 1:1 com Appointment (um pedido por agendamento)
   appointmentId String?      @unique
   appointment   Appointment? @relation("AppointmentOrder", fields: [appointmentId], references: [id])
 
@@ -791,6 +919,7 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([companyId])
   @@index([unitId])
   @@index([clientId])
   @@index([appointmentId])
@@ -800,6 +929,9 @@ model Order {
 
 model OrderItem {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   orderId String
   order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -817,6 +949,7 @@ model OrderItem {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([companyId])
   @@index([orderId])
   @@index([productId])
   @@index([serviceId])
@@ -828,7 +961,11 @@ model OrderItem {
 // =======================
 
 model Expense {
-  id     String @id @default(cuid())
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   unitId String
   unit   Unit   @relation(fields: [unitId], references: [id], onDelete: Cascade)
 
@@ -842,17 +979,22 @@ model Expense {
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now())
 
+  @@index([companyId])
   @@index([unitId])
   @@index([dueDate])
   @@map("expenses")
 }
 
 // =======================
-// DISPONIBILIDADE (AGORA POR UNIDADE)
+// DISPONIBILIDADE (POR UNIDADE)
 // =======================
 
 model BarberWeeklyAvailability {
-  id       String @id @default(cuid())
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   barberId String
   barber   Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
 
@@ -867,6 +1009,7 @@ model BarberWeeklyAvailability {
   updatedAt DateTime @updatedAt
 
   @@unique([barberId, unitId, weekday])
+  @@index([companyId])
   @@index([unitId])
   @@index([barberId, weekday])
   @@map("barber_weekly_availabilities")
@@ -886,7 +1029,11 @@ model BarberWeeklyTimeInterval {
 }
 
 model BarberDailyAvailability {
-  id       String @id @default(cuid())
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   barberId String
   barber   Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
 
@@ -901,6 +1048,7 @@ model BarberDailyAvailability {
   updatedAt DateTime @updatedAt
 
   @@unique([barberId, unitId, date])
+  @@index([companyId])
   @@index([unitId])
   @@index([barberId, date])
   @@map("barber_daily_availabilities")
@@ -920,11 +1068,14 @@ model BarberDailyTimeInterval {
 }
 
 // =======================
-// ⭐ AVALIAÇÕES DE ATENDIMENTO
+// AVALIAÇÕES
 // =======================
 
 model AppointmentReview {
   id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   appointmentId String      @unique
   appointment   Appointment @relation(fields: [appointmentId], references: [id])
@@ -945,13 +1096,18 @@ model AppointmentReview {
 
   tags AppointmentReviewTag[]
 
+  @@index([companyId])
   @@index([clientId])
   @@index([barberId])
   @@map("appointment_reviews")
 }
 
 model ReviewTag {
-  id         String  @id @default(cuid())
+  id String @id @default(cuid())
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
   label      String
   isActive   Boolean @default(true)
   isNegative Boolean @default(false)
@@ -961,7 +1117,8 @@ model ReviewTag {
 
   reviews AppointmentReviewTag[]
 
-  @@unique([label])
+  @@unique([companyId, label])
+  @@index([companyId])
   @@map("review_tags")
 }
 
@@ -983,19 +1140,26 @@ model AppointmentReviewTag {
 }
 
 // =======================
-// ⭐ PERMISSÕES DE ADMIN
+// PERMISSÕES DE ADMIN
 // =======================
 
 model AdminAccess {
   id String @id @default(cuid())
 
-  userId String @unique
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   unitId String?
   unit   Unit?   @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
-  canAccessDashboard     Boolean @default(false)
+  canAccessDashboard Boolean @default(false)
+
+  // ✅ NOVO: Relatórios
+  canAccessReports Boolean @default(false)
+
   canAccessCheckout      Boolean @default(false)
   canAccessAppointments  Boolean @default(false)
   canAccessProfessionals Boolean @default(false)
@@ -1007,10 +1171,17 @@ model AdminAccess {
   canAccessClientLevels Boolean @default(false)
   canAccessFinance      Boolean @default(false)
 
+  // ✅ novo: módulo Configurações
+  canAccessSettings Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([companyId, userId])
+  @@index([companyId])
   @@index([unitId])
+  @@index([userId])
+  @@map("admin_access")
 }
 
 // =======================
@@ -1020,34 +1191,36 @@ model AdminAccess {
 model AnalyticsEvent {
   id String @id @default(cuid())
 
+  // ✅ multi-tenant
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
   // Quem gerou
   userId String?
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  // Por unidade (tenant)
+  // Por unidade
   unitId String?
   unit   Unit?   @relation(fields: [unitId], references: [id], onDelete: SetNull)
 
   // Evento
   name String
-  ts   DateTime @default(now()) // timestamp do evento (do client, quando válido)
+  ts   DateTime @default(now())
 
-  // Contexto útil pra heatmap/atribuição
   source           String?
   pushId           String?
   pushType         String?
   secondsSincePush Int?
 
-  // Dados extras (livres)
   payload Json?
   context Json?
 
-  // Debug/forense
   ip        String?
   userAgent String?
 
   createdAt DateTime @default(now())
 
+  @@index([companyId, createdAt])
   @@index([unitId, createdAt])
   @@index([userId, createdAt])
   @@index([name, createdAt])

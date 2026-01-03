@@ -1,4 +1,3 @@
-// app/admin/professional/page.tsx
 import { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { format } from "date-fns";
@@ -6,7 +5,6 @@ import { ptBR } from "date-fns/locale";
 
 import { ProfessionalNewDialog } from "@/components/professional-new-dialog";
 import { ProfessionalEditDialog } from "@/components/professional-edit-dialog/professional-edit-dialog";
-import { ServiceStatusBadge } from "@/components/service-status-badge";
 import { toggleBarberStatus } from "@/app/admin/professional/actions";
 import { Button } from "@/components/ui/button";
 
@@ -17,6 +15,8 @@ import {
   AccordionContent,
 } from "@/components/ui/accordion";
 import { requireAdminPermission } from "@/lib/admin-permissions";
+import { redirect } from "next/navigation";
+import { getCurrentPainelUser } from "@/lib/painel-session";
 
 export const dynamic = "force-dynamic";
 
@@ -90,7 +90,6 @@ type ProfessionalRow = {
   dailyAvailabilities: DailyAvailabilityRow[];
   reviewStats: ProfessionalReviewStats | null;
 
-  // ✅ unidades vinculadas
   units: ProfessionalUnitRow[];
 };
 
@@ -125,14 +124,12 @@ function buildExceptionsSummaryLabel(daily: DailyAvailabilityRow[]) {
   const custom = daily.filter((d) => d.type === "CUSTOM").length;
 
   const parts: string[] = [];
-  if (dayOff > 0) {
+  if (dayOff > 0)
     parts.push(dayOff === 1 ? "1 dia de folga" : `${dayOff} dias de folga`);
-  }
-  if (custom > 0) {
+  if (custom > 0)
     parts.push(
       custom === 1 ? "1 ajuste de horário" : `${custom} ajustes de horário`,
     );
-  }
 
   return parts.join(" • ") || "Exceções cadastradas";
 }
@@ -148,42 +145,51 @@ function buildUnitsSummaryLabel(units: ProfessionalUnitRow[]): string {
   return `${activeLinks.length} unidades`;
 }
 
-export default async function ProfessionalsPage() {
-  // 🔐 Permissão: precisa ter acesso a Profissionais (ou ser Dono)
-  await requireAdminPermission("canAccessProfessionals");
+/**
+ * ✅ CompanyId do painel vem do painel_session
+ * - padroniza redirects para /painel/login
+ */
+async function requireCompanyId(): Promise<string> {
+  const payload = await getCurrentPainelUser();
 
-  // ✅ Units ativas para o onboarding (obrigatório ter pelo menos 1)
+  if (!payload) redirect("/painel/login");
+  if (payload.role !== "ADMIN") redirect("/painel/login?error=permissao");
+
+  const companyId = payload.companyId ? String(payload.companyId) : "";
+  if (!companyId) redirect("/painel/login?error=missing_company");
+
+  return companyId;
+}
+
+export default async function ProfessionalsPage() {
+  await requireAdminPermission("canAccessProfessionals");
+  const companyId = await requireCompanyId();
+
   const units: UnitOption[] = await prisma.unit.findMany({
-    where: { isActive: true },
+    where: { isActive: true, companyId },
     orderBy: { name: "asc" },
     select: { id: true, name: true, isActive: true },
   });
 
   const barbers = await prisma.barber.findMany({
+    where: { companyId },
     orderBy: { name: "asc" },
     include: {
       user: true,
 
-      // ✅ vínculos N:N com unidade
       units: {
-        include: {
-          unit: true,
+        where: {
+          companyId, // ✅ redundância segura
+          unit: { companyId },
         },
+        include: { unit: true },
       },
 
-      weeklyAvailabilities: {
-        include: { intervals: true },
-      },
-      dailyAvailabilities: {
-        include: { intervals: true },
-      },
+      weeklyAvailabilities: { include: { intervals: true } },
+      dailyAvailabilities: { include: { intervals: true } },
       reviews: {
         include: {
-          tags: {
-            include: {
-              tag: true,
-            },
-          },
+          tags: { include: { tag: true } },
         },
       },
     },
@@ -216,18 +222,14 @@ export default async function ProfessionalsPage() {
       }
       const topTags = Array.from(tagMap.entries())
         .map(([label, count]) => ({ label, count }))
-        .sort((a, b) => {
-          if (b.count !== a.count) return b.count - a.count;
-          return a.label.localeCompare(b.label);
-        })
+        .sort((a, b) =>
+          b.count !== a.count
+            ? b.count - a.count
+            : a.label.localeCompare(b.label),
+        )
         .slice(0, 5);
 
-      reviewStats = {
-        avgRating,
-        totalReviews,
-        ratingsCount,
-        topTags,
-      };
+      reviewStats = { avgRating, totalReviews, ratingsCount, topTags };
     }
 
     const unitsRow: ProfessionalUnitRow[] = (barber.units ?? []).map((bu) => ({
@@ -242,7 +244,10 @@ export default async function ProfessionalsPage() {
       name: barber.name,
       email: barber.email,
       phone: barber.phone ?? "—",
-      imageUrl: barber.user?.image ?? null,
+
+      // ✅ imagem preferencial: Barber.imageUrl; fallback: User.image
+      imageUrl: barber.imageUrl ?? barber.user?.image ?? null,
+
       isActive: barber.isActive,
       createdAt: barber.createdAt,
       updatedAt: barber.updatedAt,
@@ -283,7 +288,6 @@ export default async function ProfessionalsPage() {
     const review = row.reviewStats;
     const avgRatingDisplay = review ? review.avgRating.toFixed(2) : "—";
 
-    // ✅ ids das unidades vinculadas (somente vínculos ativos + unidade ativa)
     const selectedUnitIds = row.units
       .filter((u) => u.linkIsActive && u.isActive)
       .map((u) => u.id);
@@ -294,9 +298,7 @@ export default async function ProfessionalsPage() {
         value={row.id}
         className="border border-border-primary rounded-xl bg-background-tertiary"
       >
-        {/* LINHA SUPERIOR */}
         <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,2fr)_minmax(0,2fr)_auto] items-center gap-6 px-4 py-3">
-          {/* COL 1: Trigger */}
           <AccordionTrigger className="flex items-center gap-3 min-w-0 hover:no-underline px-0 py-0">
             <div className="flex items-center gap-3 min-w-0">
               <div className="h-10 w-10 rounded-full bg-background-secondary border border-border-primary overflow-hidden flex items-center justify-center shrink-0">
@@ -335,19 +337,16 @@ export default async function ProfessionalsPage() {
             </div>
           </AccordionTrigger>
 
-          {/* COL 2 */}
           <div className="hidden md:block min-w-0 whitespace-nowrap text-xs text-content-primary truncate">
             <span className="text-content-secondary mr-1">Escala semanal:</span>
             {weeklySummary}
           </div>
 
-          {/* COL 3 */}
           <div className="hidden md:block min-w-0 whitespace-nowrap text-xs text-content-primary truncate">
             <span className="text-content-secondary mr-1">Exceções:</span>
             {exceptionsSummary}
           </div>
 
-          {/* COL 4 */}
           <div className="flex items-center justify-end gap-2 whitespace-nowrap">
             <ProfessionalEditDialog
               barber={{
@@ -379,10 +378,8 @@ export default async function ProfessionalsPage() {
           </div>
         </div>
 
-        {/* CONTEÚDO */}
         <AccordionContent className="border-t border-border-primary px-4 py-4">
           <div className="space-y-6">
-            {/* BLOCO: Unidades */}
             <div className="rounded-2xl border border-border-primary bg-background-secondary p-4 space-y-3">
               <div>
                 <h2 className="text-label-small text-content-primary">
@@ -415,7 +412,6 @@ export default async function ProfessionalsPage() {
               )}
             </div>
 
-            {/* BLOCO: Reputação */}
             <div className="rounded-2xl border border-border-primary bg-background-secondary p-4 space-y-4">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                 <div>
@@ -427,6 +423,7 @@ export default async function ProfessionalsPage() {
                     atendimentos deste profissional.
                   </p>
                 </div>
+
                 {review && (
                   <div className="text-right">
                     <p className="text-paragraph-small text-content-secondary">
@@ -501,7 +498,6 @@ export default async function ProfessionalsPage() {
               )}
             </div>
 
-            {/* BLOCO: Disponibilidade semanal */}
             <div className="rounded-2xl border border-border-primary bg-background-secondary p-4 space-y-4">
               <div>
                 <h2 className="text-label-small text-content-primary">
@@ -588,7 +584,6 @@ export default async function ProfessionalsPage() {
               </p>
             </div>
 
-            {/* BLOCO: Exceções */}
             <div className="space-y-2">
               <h3 className="text-label-small text-content-primary">
                 Exceções por dia
@@ -668,7 +663,6 @@ export default async function ProfessionalsPage() {
           </p>
         </div>
 
-        {/* ✅ Agora é obrigatório passar units */}
         <ProfessionalNewDialog units={units} />
       </header>
 

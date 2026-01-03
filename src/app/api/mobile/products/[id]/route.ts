@@ -2,19 +2,32 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyAppJwt } from "@/lib/app-jwt";
+import { CustomerLevel } from "@prisma/client";
 
 type Role = "CLIENT" | "BARBER" | "ADMIN";
 
 type MobileTokenPayload = {
   sub: string;
   role: Role;
+  companyId: string;
 };
+
+function getCompanyIdFromHeader(req: Request): string | null {
+  const raw =
+    req.headers.get("x-company-id") ||
+    req.headers.get("X-Company-Id") ||
+    req.headers.get("x-companyid") ||
+    req.headers.get("X-CompanyId");
+
+  const v = typeof raw === "string" ? raw.trim() : "";
+  return v.length ? v : null;
+}
 
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-company-id",
   };
 }
 
@@ -22,7 +35,17 @@ async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
   const auth = req.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
   if (!token) throw new Error("missing_token");
-  return await verifyAppJwt(token);
+
+  const payload = await verifyAppJwt(token);
+
+  const companyId =
+    typeof (payload as any)?.companyId === "string"
+      ? String((payload as any).companyId).trim()
+      : "";
+
+  if (!companyId) throw new Error("missing_company_id");
+
+  return { ...(payload as any), companyId } as MobileTokenPayload;
 }
 
 export async function OPTIONS() {
@@ -38,7 +61,6 @@ export async function OPTIONS() {
  * - Fallbacks por nível (DIAMANTE -> OURO -> PRATA -> BRONZE)
  * - Regra B: “campo vazio” = 0% (sem registro = 0)
  * ---------------------------------------------------------*/
-type CustomerLevel = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
 
 const LEVEL_FALLBACK: Record<CustomerLevel, CustomerLevel[]> = {
   DIAMANTE: ["DIAMANTE", "OURO", "PRATA", "BRONZE"],
@@ -85,15 +107,12 @@ function isWithinInclusive(date: Date, start: Date, end: Date) {
 
 // ✅ garante que só aceita string válida como CustomerLevel
 function coerceCustomerLevel(value: unknown): CustomerLevel | null {
-  if (
-    value === "BRONZE" ||
+  return value === "BRONZE" ||
     value === "PRATA" ||
     value === "OURO" ||
     value === "DIAMANTE"
-  ) {
-    return value;
-  }
-  return null;
+    ? (value as CustomerLevel)
+    : null;
 }
 
 function clampPct(n: number) {
@@ -107,17 +126,18 @@ function roundMoney(n: number) {
 
 function calcFinalPrice(basePrice: number, discountPct: number) {
   const pct = clampPct(discountPct);
-  const final = basePrice * (1 - pct / 100);
+  const base = Number.isFinite(basePrice) ? basePrice : 0;
+  const final = base * (1 - pct / 100);
   return roundMoney(final);
 }
 
 type PricingInputProduct = {
   id: string;
   unitId: string;
-  price: any; // Decimal
+  price: unknown; // Decimal
   birthdayBenefitEnabled: boolean | null;
-  birthdayPriceLevel: any; // CustomerLevel | null
-  discounts: Array<{ level: any; discountPct: any }>;
+  birthdayPriceLevel: CustomerLevel | null;
+  discounts: Array<{ level: CustomerLevel; discountPct: number }>;
 };
 
 async function resolveProductUnitPriceFromData(args: {
@@ -137,13 +157,8 @@ async function resolveProductUnitPriceFromData(args: {
   const basePrice = Number(product.price);
 
   const discountByLevel = new Map<CustomerLevel, number>();
-  const rows =
-    ((product.discounts ?? []) as Array<{
-      level: unknown;
-      discountPct: unknown;
-    }>) ?? [];
 
-  for (const row of rows) {
+  for (const row of product.discounts ?? []) {
     const lvl = coerceCustomerLevel(row.level);
     const pct = clampPct(Number(row.discountPct));
     if (lvl) discountByLevel.set(lvl, pct);
@@ -180,10 +195,7 @@ async function resolveProductUnitPriceFromData(args: {
 
   // ✅ aniversário ganha prioridade quando habilitado
   if (inBirthdayWindow && product.birthdayBenefitEnabled) {
-    const chosen =
-      coerceCustomerLevel(product.birthdayPriceLevel) ??
-      ("DIAMANTE" as CustomerLevel);
-
+    const chosen = product.birthdayPriceLevel ?? ("DIAMANTE" as CustomerLevel);
     const picked = pickDiscount(chosen);
     const finalPrice = calcFinalPrice(basePrice, picked.discountPct);
 
@@ -219,14 +231,20 @@ async function resolveProductUnitPrice(args: {
   effectiveLevel?: CustomerLevel;
   timeZone?: string;
   now?: Date;
+  companyId: string; // ✅ tenant scope
 }) {
   const timeZone = args.timeZone ?? "America/Sao_Paulo";
   const now = args.now ?? new Date();
   const effectiveLevel: CustomerLevel = args.effectiveLevel ?? "BRONZE";
 
   const [product, client] = await Promise.all([
-    prisma.product.findUnique({
-      where: { id: args.productId },
+    prisma.product.findFirst({
+      where: {
+        id: args.productId,
+        isActive: true,
+        // ✅ trava tenant (pode ser unit.companyId OU product.companyId; aqui mantive unit)
+        unit: { companyId: args.companyId },
+      },
       select: {
         id: true,
         price: true,
@@ -236,7 +254,7 @@ async function resolveProductUnitPrice(args: {
       },
     }),
     args.clientId
-      ? prisma.user.findUnique({
+      ? prisma.user.findFirst({
           where: { id: args.clientId },
           select: { id: true, birthday: true },
         })
@@ -245,12 +263,19 @@ async function resolveProductUnitPrice(args: {
 
   if (!product) throw new Error("Produto não encontrado.");
 
-  // ✅ descontos do produto (tabela mapeada @@map("product_prices_by_level"))
-  // Model correto: ProductDiscountByLevel => prisma.productDiscountByLevel
+  // ✅ descontos tenant-safe + shape mínimo (mata TS2322)
   const discountRows = await prisma.productDiscountByLevel.findMany({
-    where: { productId: product.id },
+    where: {
+      productId: product.id,
+      companyId: args.companyId, // ✅ trava tenant
+    },
     select: { level: true, discountPct: true },
   });
+
+  const discounts = discountRows.map((r) => ({
+    level: r.level,
+    discountPct: r.discountPct,
+  }));
 
   return resolveProductUnitPriceFromData({
     product: {
@@ -259,7 +284,7 @@ async function resolveProductUnitPrice(args: {
       price: product.price,
       birthdayBenefitEnabled: product.birthdayBenefitEnabled ?? false,
       birthdayPriceLevel: product.birthdayPriceLevel ?? null,
-      discounts: discountRows,
+      discounts,
     },
     clientBirthday: client?.birthday ?? null,
     effectiveLevel,
@@ -279,9 +304,19 @@ export async function GET(
 
   try {
     const auth = await requireMobileAuth(req);
+    const companyId = auth.companyId;
+
+    // header opcional: se vier, tem que bater com o token (defesa)
+    const headerCompanyId = getCompanyIdFromHeader(req);
+    if (headerCompanyId && headerCompanyId !== companyId) {
+      return NextResponse.json(
+        { error: "company_id_mismatch" },
+        { status: 400, headers },
+      );
+    }
 
     const { id } = await ctx.params;
-    const productId = (id ?? "").trim();
+    const productId = String(id ?? "").trim();
 
     if (!productId) {
       return NextResponse.json(
@@ -290,8 +325,13 @@ export async function GET(
       );
     }
 
+    // ✅ produto tenant-safe: via unit.companyId
     const p = await prisma.product.findFirst({
-      where: { id: productId, isActive: true },
+      where: {
+        id: productId,
+        isActive: true,
+        unit: { companyId },
+      },
       select: {
         id: true,
         unitId: true,
@@ -302,6 +342,8 @@ export async function GET(
         stockQuantity: true,
         price: true,
         pickupDeadlineDays: true,
+        birthdayBenefitEnabled: true,
+        birthdayPriceLevel: true,
         unit: { select: { id: true, name: true } },
       },
     });
@@ -325,11 +367,15 @@ export async function GET(
 
     const clientId = auth.role === "CLIENT" ? auth.sub : null;
 
-    // ✅ nível do cliente por unidade (detail = 1 unidade)
+    // ✅ nível do cliente por unidade (detail = 1 unidade) + tenant-safe
     let customerLevel: CustomerLevel = "BRONZE";
     if (clientId) {
       const state = await prisma.customerLevelState.findFirst({
-        where: { userId: clientId, unitId: p.unitId },
+        where: {
+          companyId, // ✅ trava tenant
+          userId: clientId,
+          unitId: p.unitId,
+        },
         select: { levelCurrent: true },
       });
       const lvl = coerceCustomerLevel(state?.levelCurrent);
@@ -342,7 +388,16 @@ export async function GET(
       effectiveLevel: customerLevel,
       timeZone: "America/Sao_Paulo",
       now: new Date(),
+      companyId,
     });
+
+    // defesa: se por algum motivo precificação aponta outra unit, bloqueia
+    if (pricing.unitId && pricing.unitId !== p.unitId) {
+      return NextResponse.json(
+        { error: "invalid_product_unit" },
+        { status: 400, headers },
+      );
+    }
 
     const basePrice = Number(pricing.basePrice);
     const finalPrice = Number(pricing.finalPrice);
@@ -351,17 +406,19 @@ export async function GET(
     const hasDiscount =
       Number.isFinite(basePrice) &&
       Number.isFinite(finalPrice) &&
+      basePrice > 0 &&
       finalPrice < basePrice;
 
     const savings = hasDiscount
       ? roundMoney(Math.max(0, basePrice - finalPrice))
       : 0;
 
+    // ✅ compat total com o APP: só "BIRTHDAY" ou "LEVEL"
     const badge =
       pricing.appliedBecause === "BIRTHDAY"
         ? { type: "BIRTHDAY" as const, label: "🎂 Aniversário" }
         : hasDiscount
-          ? { type: "DISCOUNT" as const, label: `${discountPct}% OFF` }
+          ? { type: "LEVEL" as const, label: `${discountPct}% OFF` }
           : null;
 
     const product = {
@@ -398,10 +455,12 @@ export async function GET(
       badge,
     };
 
-    return NextResponse.json(
+    const res = NextResponse.json(
       { ok: true, product, item: product },
       { status: 200, headers },
     );
+    res.headers.set("x-company-id", companyId);
+    return res;
   } catch (e: any) {
     const msg = String(e?.message ?? "");
 
@@ -412,14 +471,29 @@ export async function GET(
       );
     }
 
+    if (msg.includes("missing_company_id")) {
+      return NextResponse.json(
+        { error: "missing_company_id" },
+        { status: 401, headers },
+      );
+    }
+
     if (
       msg.includes("Invalid token") ||
       msg.includes("JWT") ||
-      msg.includes("token")
+      msg.toLowerCase().includes("token")
     ) {
       return NextResponse.json(
         { error: "invalid_token" },
         { status: 401, headers },
+      );
+    }
+
+    // produto não encontrado -> 404 (mesmo que venha do throw)
+    if (msg.toLowerCase().includes("produto não encontrado")) {
+      return NextResponse.json(
+        { error: "not_found" },
+        { status: 404, headers },
       );
     }
 

@@ -1,3 +1,4 @@
+// src/components/service-row.tsx
 import type { Service } from "@prisma/client";
 
 import { Button } from "@/components/ui/button";
@@ -9,34 +10,19 @@ type ServiceRowProps = {
   service: Service;
 };
 
+function toNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function ServiceRow({ service }: ServiceRowProps) {
-  const rawBarberPercentage = (service as any).barberPercentage as
-    | number
-    | null
-    | undefined;
-
-  const barberPercentage =
-    rawBarberPercentage !== undefined && rawBarberPercentage !== null
-      ? Number(rawBarberPercentage)
-      : null;
-
-  const rawCancelLimitHours = (service as any).cancelLimitHours as
-    | number
-    | null
-    | undefined;
-  const cancelLimitHours =
-    rawCancelLimitHours !== undefined && rawCancelLimitHours !== null
-      ? Number(rawCancelLimitHours)
-      : null;
-
-  const rawCancelFeePercentage = (service as any).cancelFeePercentage as
-    | number
-    | null
-    | undefined;
-  const cancelFeePercentage =
-    rawCancelFeePercentage !== undefined && rawCancelFeePercentage !== null
-      ? Number(rawCancelFeePercentage)
-      : null;
+  // Campos opcionais/compat que podem vir como Decimal/string/number
+  const barberPercentage = toNumberOrNull((service as any).barberPercentage);
+  const cancelLimitHours = toNumberOrNull((service as any).cancelLimitHours);
+  const cancelFeePercentage = toNumberOrNull(
+    (service as any).cancelFeePercentage,
+  );
 
   return (
     <tr className="border-t border-border-primary">

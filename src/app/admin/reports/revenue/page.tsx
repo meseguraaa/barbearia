@@ -1,5 +1,6 @@
 // app/admin/reports/revenue/page.tsx
 import type { Metadata } from "next";
+import type React from "react";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { cookies } from "next/headers";
@@ -13,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { parse, subMonths, subYears, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { AppointmentStatus, OrderStatus } from "@prisma/client";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -256,6 +258,9 @@ export default async function AdminReportsRevenuePage({
 }: AdminReportsRevenuePageProps) {
   const admin = (await requireAdminPermission("canAccessDashboard")) as any;
 
+  // ✅ fonte única do tenant
+  const companyId = String(admin.companyId);
+
   if (!admin?.canSeeAllUnits && !admin?.unitId) {
     throw new Error(
       "Admin de unidade sem unitId definido. Vincule este admin a uma unidade.",
@@ -274,6 +279,17 @@ export default async function AdminReportsRevenuePage({
     unitId: admin?.unitId ?? null,
     canSeeAllUnits: !!admin?.canSeeAllUnits,
   });
+
+  // (extra safety) Se tiver unidade ativa, valida que ela pertence à companyId
+  if (activeUnitId) {
+    const ok = await prisma.unit.findFirst({
+      where: { id: activeUnitId, companyId, isActive: true },
+      select: { id: true },
+    });
+    if (!ok) {
+      redirect("/admin/dashboard");
+    }
+  }
 
   const { month: monthParam, barberId, compare } = await searchParams;
 
@@ -296,19 +312,19 @@ export default async function AdminReportsRevenuePage({
 
   const monthLabel = format(referenceDate, "MMMM 'de' yyyy", { locale: ptBR });
 
-  // ===== Unidades (para filtro)
+  // ===== Unidades (para filtro) ✅ companyId
   let units: UnitOption[] = [];
   let fixedUnitName: string | null = null;
 
   if (admin?.canSeeAllUnits) {
     units = await prisma.unit.findMany({
-      where: { isActive: true },
+      where: { companyId, isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
   } else if (admin?.unitId) {
-    const u = await prisma.unit.findUnique({
-      where: { id: admin.unitId },
+    const u = await prisma.unit.findFirst({
+      where: { id: admin.unitId, companyId },
       select: { name: true },
     });
     fixedUnitName = u?.name ?? null;
@@ -322,10 +338,11 @@ export default async function AdminReportsRevenuePage({
     ? (ownerSingleUnitName ?? "Todas as unidades")
     : (fixedUnitName ?? "");
 
-  // ===== Profissionais
+  // ===== Profissionais ✅ companyId
   const barbers = activeUnitId
     ? await prisma.barber.findMany({
         where: {
+          companyId,
           isActive: true,
           units: { some: { unitId: activeUnitId, isActive: true } },
         },
@@ -333,7 +350,7 @@ export default async function AdminReportsRevenuePage({
         orderBy: { name: "asc" },
       })
     : await prisma.barber.findMany({
-        where: { isActive: true },
+        where: { companyId, isActive: true },
         select: { id: true, name: true },
         orderBy: { name: "asc" },
       });
@@ -346,12 +363,13 @@ export default async function AdminReportsRevenuePage({
     : null;
 
   // ===============================
-  // Base queries
+  // Base queries ✅ companyId em TUDO
   // ===============================
   const STATUS_DONE: AppointmentStatus = "DONE";
   const STATUS_ORDER_COMPLETED: OrderStatus = "COMPLETED";
 
   const baseAppointmentsWhere = {
+    companyId,
     scheduleAt: { gte: monthStart, lte: monthEnd },
     status: STATUS_DONE,
     ...whereUnit(activeUnitId),
@@ -359,6 +377,7 @@ export default async function AdminReportsRevenuePage({
   };
 
   const compareAppointmentsWhere = {
+    companyId,
     scheduleAt: { gte: compareStart, lte: compareEnd },
     status: STATUS_DONE,
     ...whereUnit(activeUnitId),
@@ -366,8 +385,8 @@ export default async function AdminReportsRevenuePage({
   };
 
   // Vendas avulsas de produto (pedido COMPLETED e sem vínculo com appointment)
-  // -> no fluxo, isso gera ProductSale, então vai bater certinho.
   const baseStandaloneOrdersWhere = {
+    companyId,
     createdAt: { gte: monthStart, lte: monthEnd },
     status: STATUS_ORDER_COMPLETED,
     appointmentId: null as any,
@@ -376,6 +395,7 @@ export default async function AdminReportsRevenuePage({
   };
 
   const compareStandaloneOrdersWhere = {
+    companyId,
     createdAt: { gte: compareStart, lte: compareEnd },
     status: STATUS_ORDER_COMPLETED,
     appointmentId: null as any,
@@ -383,14 +403,16 @@ export default async function AdminReportsRevenuePage({
     ...(barberIdSafe ? { barberId: barberIdSafe } : {}),
   };
 
-  // Comissão de produtos vem do ProductSale (que é criado no finalize dos produtos)
+  // Comissão de produtos vem do ProductSale
   const baseProductSalesWhere = {
+    companyId,
     soldAt: { gte: monthStart, lte: monthEnd },
     ...whereUnit(activeUnitId),
     ...(barberIdSafe ? { barberId: barberIdSafe } : {}),
   };
 
   const compareProductSalesWhere = {
+    companyId,
     soldAt: { gte: compareStart, lte: compareEnd },
     ...whereUnit(activeUnitId),
     ...(barberIdSafe ? { barberId: barberIdSafe } : {}),
@@ -568,12 +590,12 @@ export default async function AdminReportsRevenuePage({
   // ===============================
   // Quebras
   // ===============================
-  // Por profissional (serviço + produto + comissão + "lucro bruto" simples)
+  // Por profissional
   type BarberRow = {
     barberId: string;
     barberName: string;
     serviceRevenue: number;
-    productRevenue: number; // (produto) via ProductSale.totalPrice
+    productRevenue: number; // via ProductSale.totalPrice
     totalRevenue: number;
     serviceCommission: number;
     productCommission: number;
@@ -660,7 +682,7 @@ export default async function AdminReportsRevenuePage({
 
   barberRows.sort((a, b) => b.totalRevenue - a.totalRevenue);
 
-  // Por serviço (atendimentos DONE)
+  // Por serviço
   type ServiceRow = {
     service: string;
     revenue: number;
@@ -694,7 +716,7 @@ export default async function AdminReportsRevenuePage({
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, 12);
 
-  // Produtos mais vendidos (por receita) via ProductSale
+  // Produtos mais vendidos via ProductSale
   type ProductRow = {
     product: string;
     revenue: number;
@@ -736,13 +758,14 @@ export default async function AdminReportsRevenuePage({
     .slice(0, 12);
 
   // ===============================
-  // Evolução mês a mês (últimos 6 meses)
+  // Evolução mês a mês (últimos 6 meses) ✅ companyId
   // ===============================
   const monthsToShow = 6;
   const rangeStart = startOfMonthSP(subMonths(referenceDate, monthsToShow - 1));
   const rangeEnd = monthEnd;
 
   const evoAppointmentsWhere = {
+    companyId,
     scheduleAt: { gte: rangeStart, lte: rangeEnd },
     status: STATUS_DONE,
     ...whereUnit(activeUnitId),
@@ -750,6 +773,7 @@ export default async function AdminReportsRevenuePage({
   };
 
   const evoStandaloneOrdersWhere = {
+    companyId,
     createdAt: { gte: rangeStart, lte: rangeEnd },
     status: STATUS_ORDER_COMPLETED,
     appointmentId: null as any,
@@ -758,6 +782,7 @@ export default async function AdminReportsRevenuePage({
   };
 
   const evoProductSalesWhere = {
+    companyId,
     soldAt: { gte: rangeStart, lte: rangeEnd },
     ...whereUnit(activeUnitId),
     ...(barberIdSafe ? { barberId: barberIdSafe } : {}),
@@ -857,7 +882,18 @@ export default async function AdminReportsRevenuePage({
     evoBucket.set(key, prev);
   }
 
-  const evolution = [];
+  const evolution: Array<{
+    key: string;
+    label: string;
+    totalRevenue: number;
+    serviceRevenue: number;
+    standaloneRevenue: number;
+    doneCount: number;
+    ticket: number;
+    totalCommission: number;
+    grossProfit: number;
+  }> = [];
+
   for (let i = monthsToShow - 1; i >= 0; i--) {
     const dt = subMonths(referenceDate, i);
     const key = format(dt, "yyyy-MM");
@@ -889,7 +925,7 @@ export default async function AdminReportsRevenuePage({
   }
 
   // ===============================
-  // Insights (resposta do dono + margem)
+  // Insights
   // ===============================
   const insights: string[] = [];
 
@@ -905,16 +941,14 @@ export default async function AdminReportsRevenuePage({
         );
       } else if (countDelta > 0) {
         insights.push(
-          "Crescimento puxado por volume: mais atendimentos realizados.",
+          "Crescimento puxado por volume: mais atendimentos feitos.",
         );
       } else if (ticketDelta > 0) {
         insights.push(
           "Crescimento puxado por venda melhor: ticket médio subiu.",
         );
       } else {
-        insights.push(
-          "Faturamento subiu. Cheque se veio principalmente de pedidos (produtos).",
-        );
+        insights.push("Faturamento subiu. Veja se veio mais de produtos.");
       }
     } else if (revenueDelta < 0) {
       insights.push(
@@ -929,10 +963,11 @@ export default async function AdminReportsRevenuePage({
     }
 
     if (Number.isFinite(baseCommissionRatePct)) {
+      const marginPct = pct(baseGrossProfit, baseTotalRevenue);
       insights.push(
-        `Comissão representa ~${Math.round(baseCommissionRatePct)}% da receita (margem bruta simples ~${Math.round(
-          pct(baseGrossProfit, baseTotalRevenue),
-        )}%).`,
+        `Comissão ~${Math.round(
+          baseCommissionRatePct,
+        )}% da receita (margem bruta simples ~${Math.round(marginPct)}%).`,
       );
     }
 
@@ -1079,7 +1114,13 @@ export default async function AdminReportsRevenuePage({
         <KpiCard
           title="Vendas avulsas"
           value={formatMoneyBRL(baseStandaloneRevenue)}
-          sub={`Comissão produtos: ${formatMoneyBRL(baseProductCommission)}`}
+          sub={`Comissão produtos: ${formatMoneyBRL(
+            baseProductCommission,
+          )} • vs ${compareLabel(compareMode)}: ${formatMoneyBRL(
+            compareStandaloneRevenue,
+          )} (${formatSignedMoney(standaloneDelta)} | ${formatSignedPct(
+            standaloneDeltaPct,
+          )})`}
         />
         <KpiCard
           title="Atendimentos realizados"
@@ -1090,12 +1131,12 @@ export default async function AdminReportsRevenuePage({
         />
       </section>
 
-      {/* Evolução mês a mês */}
+      {/* Evolução */}
       <section className="rounded-xl border border-border-primary bg-background-tertiary p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-label-large text-content-primary">
-              Evolução mês a mês
+              Evolução mês a mês (últimos {monthsToShow})
             </p>
           </div>
           <div className="text-[11px] text-content-tertiary text-right">
@@ -1153,17 +1194,21 @@ export default async function AdminReportsRevenuePage({
             </tbody>
           </table>
         </div>
+
+        {limitedInsights.length ? (
+          <div className="mt-3 text-[11px] text-content-tertiary space-y-1">
+            {limitedInsights.map((t, idx) => (
+              <div key={idx}>• {t}</div>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       {/* Por profissional */}
       <section className="rounded-xl border border-border-primary bg-background-tertiary p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-label-large text-content-primary">
-              Receita, comissão e margem por profissional
-            </p>
-          </div>
-        </div>
+        <p className="text-label-large text-content-primary">
+          Receita, comissão e margem por profissional
+        </p>
 
         {barberRows.length === 0 ? (
           <div
@@ -1236,13 +1281,9 @@ export default async function AdminReportsRevenuePage({
 
       {/* Por serviço */}
       <section className="rounded-xl border border-border-primary bg-background-tertiary p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-label-large text-content-primary">
-              Receita e comissão por serviço
-            </p>
-          </div>
-        </div>
+        <p className="text-label-large text-content-primary">
+          Receita e comissão por serviço
+        </p>
 
         {serviceRows.length === 0 ? (
           <div
@@ -1298,13 +1339,9 @@ export default async function AdminReportsRevenuePage({
 
       {/* Produtos */}
       <section className="rounded-xl border border-border-primary bg-background-tertiary p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-label-large text-content-primary">
-              Produtos (vendas finalizadas)
-            </p>
-          </div>
-        </div>
+        <p className="text-label-large text-content-primary">
+          Produtos (vendas finalizadas)
+        </p>
 
         {productRows.length === 0 ? (
           <div

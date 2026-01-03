@@ -1,74 +1,14 @@
+// src/app/barber/availability/page.tsx
 import { Metadata } from "next";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
+import { getCurrentPainelUser } from "@/lib/painel-session";
 
 import type { WeeklyAvailabilityState } from "@/components/weekly-availability-form/weekly-availability-form";
 
 import { DailyExceptionModal } from "@/components/daily-exception-modal/daily-exception-modal";
 import { DailyExceptionsList } from "@/components/daily-exceptions-list/daily-exceptions-list";
 import { WeeklyAvailabilityClient } from "@/components/weekly-availability-client/weekly-availability-client";
-
-const SESSION_COOKIE_NAME = "painel_session";
-
-type PainelSessionPayload = {
-  sub: string;
-  role: "CLIENT" | "BARBER" | "ADMIN";
-  email: string;
-  name?: string | null;
-};
-
-function getJwtSecretKey() {
-  const secret = process.env.PAINEL_JWT_SECRET;
-  if (!secret) {
-    throw new Error("PAINEL_JWT_SECRET não definido no .env");
-  }
-  return new TextEncoder().encode(secret);
-}
-
-async function getCurrentBarberAndUnitOrThrow() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!token) redirect("/painel/login");
-
-  let payload: PainelSessionPayload | null = null;
-
-  try {
-    const { payload: raw } = await jwtVerify(token, getJwtSecretKey());
-    payload = raw as PainelSessionPayload;
-  } catch {
-    redirect("/painel/login");
-  }
-
-  if (!payload || payload.role !== "BARBER") {
-    redirect("/painel/login");
-  }
-
-  const barber = await prisma.barber.findUnique({
-    where: { email: payload.email },
-  });
-
-  if (!barber) {
-    throw new Error("Barber não encontrado para o usuário logado.");
-  }
-
-  const activeBarberUnit = await prisma.barberUnit.findFirst({
-    where: {
-      barberId: barber.id,
-      isActive: true,
-    },
-    select: { unitId: true },
-    orderBy: { createdAt: "asc" },
-  });
-
-  if (!activeBarberUnit?.unitId) {
-    throw new Error("Este profissional não possui unidade ativa vinculada.");
-  }
-
-  return { barber, unitId: activeBarberUnit.unitId, session: payload };
-}
 
 export const dynamic = "force-dynamic";
 
@@ -88,11 +28,73 @@ function createDefaultWeeklyState(): WeeklyAvailabilityState {
   };
 }
 
+/**
+ * Fonte da verdade do escopo:
+ * - sessão (painel_session) => companyId + userId
+ * - barber => por userId
+ * - unidade ativa => dentro da companyId da sessão
+ */
+async function getCurrentBarberScopeOrRedirect(): Promise<{
+  barberId: string;
+  companyId: string;
+  unitId: string;
+}> {
+  const session = await getCurrentPainelUser();
+
+  if (!session) redirect("/painel/login");
+  if (session.role !== "BARBER") redirect("/painel/login?error=permissao");
+  if (!session.companyId) redirect("/painel/login?error=missing_company");
+
+  // ✅ Barber vinculado ao usuário logado (userId do token)
+  const barber = await prisma.barber.findUnique({
+    where: { userId: session.sub },
+    select: { id: true },
+  });
+
+  if (!barber) {
+    // mantém mensagem amigável como antes, mas via redirect/erro controlado
+    throw new Error("Barber não encontrado para o usuário logado.");
+  }
+
+  // ✅ Unidade ativa do barbeiro, mas AGORA dentro da companyId da sessão (tenant lock)
+  const active = await prisma.barberUnit.findFirst({
+    where: {
+      barberId: barber.id,
+      isActive: true,
+      unit: {
+        isActive: true,
+        companyId: session.companyId,
+      },
+    },
+    select: {
+      unit: { select: { id: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const unitId = active?.unit?.id;
+
+  if (!unitId) {
+    throw new Error("Este profissional não possui unidade ativa vinculada.");
+  }
+
+  return {
+    barberId: barber.id,
+    companyId: session.companyId,
+    unitId,
+  };
+}
+
 export default async function BarberAvailabilityPage() {
-  const { barber, unitId } = await getCurrentBarberAndUnitOrThrow();
+  const { barberId, unitId, companyId } =
+    await getCurrentBarberScopeOrRedirect();
 
   const weeklyAvailabilities = await prisma.barberWeeklyAvailability.findMany({
-    where: { barberId: barber.id, unitId },
+    where: {
+      barberId,
+      unitId,
+      companyId, // ✅ tenant lock (agora vem do token)
+    },
     include: { intervals: true },
     orderBy: { weekday: "asc" },
   });
@@ -133,11 +135,11 @@ export default async function BarberAvailabilityPage() {
         <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-4 space-y-3">
           <WeeklyAvailabilityClient
             initialValue={initialState}
-            leftAction={<DailyExceptionModal barberId={barber.id} />}
+            leftAction={<DailyExceptionModal barberId={barberId} />}
           />
         </div>
 
-        <DailyExceptionsList barberId={barber.id} />
+        <DailyExceptionsList barberId={barberId} />
       </section>
     </div>
   );

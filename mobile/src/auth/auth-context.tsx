@@ -10,7 +10,13 @@ import * as SecureStore from "expo-secure-store";
 import { Image } from "react-native";
 import { router, useSegments } from "expo-router";
 
-import { api, AUTH_TOKEN_KEY } from "../services/api";
+import {
+  api,
+  AUTH_TOKEN_KEY,
+  COMPANY_ID_STORAGE_KEY,
+  setApiAuthToken,
+  setApiCompanyId,
+} from "../services/api";
 
 const AUTH_STORAGE_KEY = "auth_session";
 
@@ -30,16 +36,15 @@ type AuthUser = {
   image?: string | null;
 
   phone?: string | null;
-
-  // 🎂 vindo do backend (ou /me)
   birthday?: string | null;
 
-  // ✅ claim/flag vindo do backend (JWT ou /me)
   profileComplete?: boolean | null;
 
   isOwner?: boolean;
   adminAccess?: any | null;
   customerLevel?: CustomerLevel | null;
+
+  companyId?: string | null;
 };
 
 type StoredSession = {
@@ -52,6 +57,8 @@ type AuthContextValue = {
   user: AuthUser | null;
   sessionJson: string | null;
 
+  companyId: string | null;
+
   isBooting: boolean;
   meLoading: boolean;
   avatarReady: boolean;
@@ -59,6 +66,8 @@ type AuthContextValue = {
   refreshMe: () => Promise<void>;
   signIn: (sessionJson: string) => Promise<void>;
   signOut: () => Promise<void>;
+
+  setCompanyId: (companyId: string | null) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -76,6 +85,36 @@ function pickToken(obj: any): string | null {
     obj?.data?.token,
     obj?.data?.accessToken,
   ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim()) return c.trim();
+  }
+  return null;
+}
+
+function pickCompanyId(obj: any): string | null {
+  const candidates = [
+    obj?.companyId,
+    obj?.company_id,
+    obj?.tenantId,
+    obj?.tenant_id,
+
+    obj?.user?.companyId,
+    obj?.user?.company_id,
+    obj?.user?.tenantId,
+    obj?.user?.tenant_id,
+
+    obj?.session?.companyId,
+    obj?.session?.company_id,
+
+    obj?.data?.companyId,
+    obj?.data?.company_id,
+
+    obj?.company?.id,
+    obj?.tenant?.id,
+    obj?.user?.company?.id,
+    obj?.user?.tenant?.id,
+  ];
+
   for (const c of candidates) {
     if (typeof c === "string" && c.trim()) return c.trim();
   }
@@ -186,14 +225,45 @@ function normalizeCustomerLevel(u: any): CustomerLevel | null {
 function computeProfileComplete(u: AuthUser | null): boolean {
   if (!u) return true;
 
-  // ✅ se backend já mandou o status, confia nele
   if (typeof u.profileComplete === "boolean") return u.profileComplete;
 
-  // fallback: phone + birthday
   const phoneOk = typeof u.phone === "string" && u.phone.trim().length > 0;
   const bdayOk = typeof u.birthday === "string" && u.birthday.trim().length > 0;
 
   return phoneOk && bdayOk;
+}
+
+/**
+ * Compat layer: se alguém plugar axios no futuro.
+ * No fetch-wrapper atual, o header já é injetado via setApiCompanyId.
+ */
+function tryApplyCompanyIdToApi(_companyId: string | null) {
+  try {
+    const anyApi = api as any;
+    if (anyApi?.defaults?.headers?.common) {
+      if (_companyId) {
+        anyApi.defaults.headers.common["x-company-id"] = _companyId;
+      } else {
+        delete anyApi.defaults.headers.common["x-company-id"];
+      }
+    }
+  } catch {
+    // noop
+  }
+}
+
+async function readStoredCompanyId(): Promise<string | null> {
+  try {
+    const raw = await SecureStore.getItemAsync(COMPANY_ID_STORAGE_KEY);
+    const v = typeof raw === "string" ? raw.trim() : "";
+    return v.length ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -203,15 +273,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [sessionJson, setSessionJson] = useState<string | null>(null);
 
+  const [companyId, setCompanyIdState] = useState<string | null>(null);
+
   const [isBooting, setIsBooting] = useState(true);
   const [meLoading, setMeLoading] = useState(false);
 
   const [avatarReady, setAvatarReady] = useState(false);
 
+  // ✅ refs pra matar “closure velha” em fluxos async
+  const appTokenRef = useRef<string | null>(null);
+  const companyIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    appTokenRef.current = appToken ?? null;
+  }, [appToken]);
+  useEffect(() => {
+    companyIdRef.current = companyId ?? null;
+  }, [companyId]);
+
   const fetchedMeForTokenRef = useRef<string | null>(null);
   const lastAvatarUrlRef = useRef<string | null>(null);
   const avatarPrefetchInFlightRef = useRef<Promise<void> | null>(null);
   const avatarRunIdRef = useRef(0);
+
+  // ✅ dedupe de writes no securestore
+  const lastCompanyIdPersistedRef = useRef<string | null>(null);
+
+  // ✅ usado para evitar “deslogar” por race logo após o login
+  const lastSignInAtRef = useRef<number>(0);
 
   const ensureAvatarReady = async (maybeUrl?: string | null): Promise<void> => {
     const runId = avatarRunIdRef.current;
@@ -249,14 +337,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // ✅ setter persistente do companyId (e injeta na API em memória)
+  const setCompanyId = async (nextCompanyId: string | null): Promise<void> => {
+    const cleaned =
+      typeof nextCompanyId === "string" && nextCompanyId.trim()
+        ? nextCompanyId.trim()
+        : null;
+
+    // ✅ injeta imediatamente em memória (mata o race)
+    setApiCompanyId(cleaned);
+    tryApplyCompanyIdToApi(cleaned);
+
+    // ✅ atualiza state/ref imediatamente (não depende do await do SecureStore)
+    setCompanyIdState(cleaned);
+    companyIdRef.current = cleaned;
+
+    // dedupe
+    if (
+      (companyIdRef.current || null) === cleaned &&
+      lastCompanyIdPersistedRef.current === cleaned
+    ) {
+      return;
+    }
+
+    if (!cleaned) {
+      try {
+        await SecureStore.deleteItemAsync(COMPANY_ID_STORAGE_KEY);
+      } catch {}
+      lastCompanyIdPersistedRef.current = null;
+      return;
+    }
+
+    try {
+      if (lastCompanyIdPersistedRef.current !== cleaned) {
+        await SecureStore.setItemAsync(COMPANY_ID_STORAGE_KEY, cleaned);
+        lastCompanyIdPersistedRef.current = cleaned;
+      }
+    } catch {
+      // se falhar, ainda mantém em memória
+      lastCompanyIdPersistedRef.current = cleaned;
+    }
+  };
+
   const signOut = async () => {
-    await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
-    await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+    try {
+      await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+    } catch {}
+    try {
+      await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+    } catch {}
+    try {
+      await SecureStore.deleteItemAsync(COMPANY_ID_STORAGE_KEY);
+    } catch {}
 
     setAppToken(null);
     setUser(null);
     setSessionJson(null);
     fetchedMeForTokenRef.current = null;
+
+    setCompanyIdState(null);
+    lastCompanyIdPersistedRef.current = null;
+
+    // ✅ limpa memória do api
+    setApiAuthToken(null);
+    setApiCompanyId(null);
+    tryApplyCompanyIdToApi(null);
+
+    appTokenRef.current = null;
+    companyIdRef.current = null;
 
     setAvatarReady(false);
     lastAvatarUrlRef.current = null;
@@ -264,14 +412,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     avatarRunIdRef.current += 1;
   };
 
+  // ✅ normaliza leitura do retorno do api.get (às vezes vem em res.data)
+  function extractUserFromApiResponse(res: any) {
+    return res?.user ?? res?.data?.user ?? res?.data ?? res ?? null;
+  }
+
+  // ✅ fetch /me com retry 1x (pra evitar loop de login por race)
+  const fetchMeWithRetry = async () => {
+    const res = await api.get<{ user: any }>("/api/mobile/me");
+    return extractUserFromApiResponse(res);
+  };
+
   const refreshMe = async (): Promise<void> => {
-    if (!appToken) return;
+    if (!appTokenRef.current) return;
 
     try {
       setMeLoading(true);
 
-      const res = await api.get<{ user: any }>("/api/mobile/me");
-      const u = (res as any)?.user;
+      let u: any;
+      try {
+        u = await fetchMeWithRetry();
+      } catch (e: any) {
+        // ✅ se foi logo após signIn, tenta mais 1 vez com delay curto
+        const sinceSignInMs = Date.now() - (lastSignInAtRef.current || 0);
+        if (isAuthInvalidError(e) && sinceSignInMs < 6000) {
+          await sleep(600);
+          u = await fetchMeWithRetry();
+        } else {
+          throw e;
+        }
+      }
 
       const normalizedLevel = normalizeCustomerLevel(u);
 
@@ -291,10 +461,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           isOwner: (u?.isOwner ?? prev.isOwner) as any,
           adminAccess: (u?.adminAccess ?? prev.adminAccess) as any,
           customerLevel: normalizedLevel ?? prev.customerLevel ?? null,
+          companyId: (u?.companyId ?? u?.company?.id ?? prev.companyId) as any,
         };
 
         return next;
       });
+
+      // ✅ resolve tenant vindo do /me (prioritário)
+      const meCompanyId = pickCompanyId(u);
+      if (meCompanyId) {
+        await setCompanyId(meCompanyId);
+      }
 
       await ensureAvatarReady(u?.image ?? null);
     } catch (e: any) {
@@ -312,50 +489,119 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Boot: lê sessão
+  // Boot: lê sessão + tenant
   useEffect(() => {
     let alive = true;
 
     (async () => {
       try {
         const stored = await SecureStore.getItemAsync(AUTH_STORAGE_KEY);
+        const storedCompanyId = await readStoredCompanyId();
+
+        lastCompanyIdPersistedRef.current = storedCompanyId;
 
         if (!stored) {
           if (!alive) return;
+
           setAppToken(null);
           setUser(null);
           setSessionJson(null);
           setAvatarReady(false);
+
+          setCompanyIdState(storedCompanyId);
+          companyIdRef.current = storedCompanyId;
+
+          // ✅ injeta em memória (mesmo sem sessão)
+          setApiAuthToken(null);
+          setApiCompanyId(storedCompanyId);
+          tryApplyCompanyIdToApi(storedCompanyId);
+
           return;
         }
 
         const s = parseSession(stored);
         if (!s) {
-          await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
-          await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+          try {
+            await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+          } catch {}
+          try {
+            await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+          } catch {}
 
           if (!alive) return;
+
           setAppToken(null);
           setUser(null);
           setSessionJson(null);
           setAvatarReady(false);
+
+          setCompanyIdState(storedCompanyId);
+          companyIdRef.current = storedCompanyId;
+
+          setApiAuthToken(null);
+          setApiCompanyId(storedCompanyId);
+          tryApplyCompanyIdToApi(storedCompanyId);
+
           return;
         }
 
         await SecureStore.setItemAsync(AUTH_TOKEN_KEY, s.appToken);
 
         if (!alive) return;
+
         setAppToken(s.appToken);
+        appTokenRef.current = s.appToken;
+
         setUser(s.user);
         setSessionJson(stored);
+
+        const fromSessionObj = (() => {
+          try {
+            return pickCompanyId(JSON.parse(stored));
+          } catch {
+            return null;
+          }
+        })();
+
+        const fromUser = pickCompanyId(s.user);
+        const resolvedCompanyId = fromSessionObj || fromUser || storedCompanyId;
+
+        setCompanyIdState(resolvedCompanyId);
+        companyIdRef.current = resolvedCompanyId;
+
+        // ✅ injeta memória do api imediatamente (ANTES do /me)
+        setApiAuthToken(s.appToken);
+        setApiCompanyId(resolvedCompanyId);
+        tryApplyCompanyIdToApi(resolvedCompanyId);
+
+        if (resolvedCompanyId && resolvedCompanyId !== storedCompanyId) {
+          try {
+            await SecureStore.setItemAsync(
+              COMPANY_ID_STORAGE_KEY,
+              resolvedCompanyId,
+            );
+          } catch {}
+          lastCompanyIdPersistedRef.current = resolvedCompanyId;
+        }
 
         await ensureAvatarReady(s.user?.image ?? null);
       } catch {
         if (!alive) return;
+
         setAppToken(null);
         setUser(null);
         setSessionJson(null);
         setAvatarReady(false);
+
+        const storedCompanyId = await readStoredCompanyId();
+        lastCompanyIdPersistedRef.current = storedCompanyId;
+
+        setCompanyIdState(storedCompanyId);
+        companyIdRef.current = storedCompanyId;
+
+        setApiAuthToken(null);
+        setApiCompanyId(storedCompanyId);
+        tryApplyCompanyIdToApi(storedCompanyId);
       } finally {
         if (alive) setIsBooting(false);
       }
@@ -374,7 +620,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const inAuth = group === "(auth)";
     const inApp = group === "(app)";
 
-    // rota específica do profile (pra evitar loop)
     const inProfile = segments.join("/").includes("(tabs)/profile");
 
     if (!appToken && inApp) {
@@ -387,7 +632,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // ✅ novo: se logado e perfil incompleto, força profile
     if (appToken && inApp) {
       const ok = computeProfileComplete(user);
       if (!ok && !inProfile) {
@@ -411,10 +655,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         setMeLoading(true);
 
-        const res = await api.get<{ user: any }>("/api/mobile/me");
+        let u: any;
+        try {
+          u = await fetchMeWithRetry();
+        } catch (e: any) {
+          const sinceSignInMs = Date.now() - (lastSignInAtRef.current || 0);
+          if (isAuthInvalidError(e) && sinceSignInMs < 6000) {
+            await sleep(600);
+            u = await fetchMeWithRetry();
+          } else {
+            throw e;
+          }
+        }
+
         if (!alive) return;
 
-        const u = (res as any)?.user;
         const normalizedLevel = normalizeCustomerLevel(u);
 
         setUser((prev) => {
@@ -434,10 +689,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             isOwner: (u?.isOwner ?? prev.isOwner) as any,
             adminAccess: (u?.adminAccess ?? prev.adminAccess) as any,
             customerLevel: normalizedLevel ?? prev.customerLevel ?? null,
+            companyId: (u?.companyId ??
+              u?.company?.id ??
+              prev.companyId) as any,
           };
 
           return next;
         });
+
+        const meCompanyId = pickCompanyId(u);
+        if (meCompanyId) {
+          await setCompanyId(meCompanyId);
+        }
 
         await ensureAvatarReady(u?.image ?? null);
       } catch (e: any) {
@@ -482,39 +745,92 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       appToken,
       user,
       sessionJson,
+
+      companyId,
+
       isBooting,
       meLoading,
       avatarReady,
+
       refreshMe,
+      setCompanyId,
 
       signIn: async (newSessionJson: string) => {
         const s = parseSession(newSessionJson);
 
         if (!s) {
-          await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
-          await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+          try {
+            await SecureStore.deleteItemAsync(AUTH_STORAGE_KEY);
+          } catch {}
+          try {
+            await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+          } catch {}
+          try {
+            await SecureStore.deleteItemAsync(COMPANY_ID_STORAGE_KEY);
+          } catch {}
 
           setAppToken(null);
           setUser(null);
           setSessionJson(null);
           fetchedMeForTokenRef.current = null;
 
+          setCompanyIdState(null);
+          lastCompanyIdPersistedRef.current = null;
+
+          setApiAuthToken(null);
+          setApiCompanyId(null);
+          tryApplyCompanyIdToApi(null);
+
+          appTokenRef.current = null;
+          companyIdRef.current = null;
+
           setAvatarReady(false);
           lastAvatarUrlRef.current = null;
           avatarPrefetchInFlightRef.current = null;
-
           avatarRunIdRef.current += 1;
           return;
         }
+
+        // ✅ marca momento do login para tolerar 1 falha transitória do /me
+        lastSignInAtRef.current = Date.now();
 
         await SecureStore.setItemAsync(AUTH_STORAGE_KEY, newSessionJson);
         await SecureStore.setItemAsync(AUTH_TOKEN_KEY, s.appToken);
 
         setAppToken(s.appToken);
+        appTokenRef.current = s.appToken;
+
         setUser(s.user);
         setSessionJson(newSessionJson);
 
         fetchedMeForTokenRef.current = null;
+
+        // ✅ injeta token na memória do api imediatamente
+        setApiAuthToken(s.appToken);
+
+        const fromLoginObj = (() => {
+          try {
+            return pickCompanyId(JSON.parse(newSessionJson));
+          } catch {
+            return null;
+          }
+        })();
+
+        const fromUser = pickCompanyId(s.user);
+        const resolvedCompanyId = fromLoginObj || fromUser || null;
+
+        if (resolvedCompanyId) {
+          await setCompanyId(resolvedCompanyId);
+        } else {
+          const storedCompanyId = await readStoredCompanyId();
+          lastCompanyIdPersistedRef.current = storedCompanyId;
+
+          setCompanyIdState(storedCompanyId);
+          companyIdRef.current = storedCompanyId;
+
+          setApiCompanyId(storedCompanyId);
+          tryApplyCompanyIdToApi(storedCompanyId);
+        }
 
         avatarRunIdRef.current += 1;
         await ensureAvatarReady(s.user?.image ?? null);
@@ -522,7 +838,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       signOut,
     }),
-    [appToken, user, sessionJson, isBooting, meLoading, avatarReady],
+    [
+      appToken,
+      user,
+      sessionJson,
+      companyId,
+      isBooting,
+      meLoading,
+      avatarReady,
+      refreshMe,
+      setCompanyId,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
+import { verifyAppJwt } from "@/lib/app-jwt";
 
 type MobileTokenPayload = {
   sub: string;
   role?: "CLIENT" | "BARBER" | "ADMIN";
+  companyId: string; // ✅ multi-tenant obrigatório
 };
 
 const DEFAULT_RESCHEDULE_WINDOW_HOURS = 24;
@@ -17,18 +18,21 @@ function corsHeaders() {
   };
 }
 
-function getJwtSecretKey() {
-  const secret = process.env.APP_JWT_SECRET;
-  if (!secret) throw new Error("APP_JWT_SECRET não definido no .env");
-  return new TextEncoder().encode(secret);
-}
-
 async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
   const auth = req.headers.get("authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
-  if (!token) throw new Error("Token ausente");
-  const { payload } = await jwtVerify(token, getJwtSecretKey());
-  return payload as unknown as MobileTokenPayload;
+  if (!token) throw new Error("missing_token");
+
+  const payload = (await verifyAppJwt(token)) as any;
+
+  const companyId =
+    typeof payload?.companyId === "string"
+      ? String(payload.companyId).trim()
+      : "";
+
+  if (!companyId) throw new Error("missing_company_id");
+
+  return { ...(payload as any), companyId } as MobileTokenPayload;
 }
 
 function normalizeWindowHours(raw: unknown): number | null {
@@ -59,6 +63,7 @@ function pad2(n: number) {
 }
 
 function toMobileDateISOAndStartTime(scheduleAt: Date) {
+  // dateISO ao meio-dia local (evita bug de timezone no day picker do app)
   const dateISO = new Date(
     scheduleAt.getFullYear(),
     scheduleAt.getMonth(),
@@ -86,6 +91,8 @@ export async function GET(
 ) {
   try {
     const payload = await requireMobileAuth(req);
+    const companyId = payload.companyId;
+
     if (payload.role && payload.role !== "CLIENT") {
       return NextResponse.json(
         { error: "Sem permissão" },
@@ -104,7 +111,12 @@ export async function GET(
     }
 
     const appt = await prisma.appointment.findFirst({
-      where: { id: apptId, clientId: payload.sub, status: { not: "CANCELED" } },
+      where: {
+        id: apptId,
+        companyId, // ✅ tenant scope
+        clientId: payload.sub,
+        status: { not: "CANCELED" },
+      },
       select: {
         id: true,
         status: true,
@@ -119,7 +131,7 @@ export async function GET(
             id: true,
             name: true,
             durationMinutes: true,
-            cancelLimitHours: true,
+            cancelLimitHours: true, // (usado como janela de reagendamento aqui)
           },
         },
       },
@@ -140,7 +152,7 @@ export async function GET(
     const mobileParts = toMobileDateISOAndStartTime(appt.scheduleAt);
 
     const units = await prisma.unit.findMany({
-      where: { isActive: true },
+      where: { companyId, isActive: true }, // ✅ tenant scope
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
@@ -176,11 +188,15 @@ export async function GET(
   } catch (err: any) {
     const msg = String(err?.message ?? "Erro");
 
-    if (
-      msg.toLowerCase().includes("token") ||
+    const isAuth =
+      msg === "missing_token" ||
+      msg === "missing_company_id" ||
+      msg.includes("Invalid token payload") ||
       msg.toLowerCase().includes("jwt") ||
-      msg.toLowerCase().includes("signature")
-    ) {
+      msg.toLowerCase().includes("token") ||
+      msg.toLowerCase().includes("signature");
+
+    if (isAuth) {
       return NextResponse.json(
         { error: "Não autorizado" },
         { status: 401, headers: corsHeaders() },

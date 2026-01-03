@@ -1,89 +1,12 @@
+// src/app/barber/availability/actions.ts
 "use server";
 
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import z from "zod";
-
-const SESSION_COOKIE_NAME = "painel_session";
-
-type PainelSessionPayload = {
-  sub: string;
-  role: "CLIENT" | "BARBER" | "ADMIN";
-  email: string;
-  name?: string | null;
-};
-
-function getJwtSecretKey() {
-  const secret = process.env.PAINEL_JWT_SECRET;
-  if (!secret) {
-    throw new Error("PAINEL_JWT_SECRET não definido no .env");
-  }
-  return new TextEncoder().encode(secret);
-}
-
-async function resolveUnitIdDefault(): Promise<string> {
-  const unit =
-    (await prisma.unit.findFirst({
-      where: { isActive: true },
-      select: { id: true },
-      orderBy: { createdAt: "asc" },
-    })) ??
-    (await prisma.unit.findFirst({
-      select: { id: true },
-      orderBy: { createdAt: "asc" },
-    }));
-
-  if (!unit) {
-    throw new Error(
-      "Nenhuma unidade encontrada. Crie uma unidade antes de configurar disponibilidade.",
-    );
-  }
-
-  return unit.id;
-}
-
-async function getCurrentBarberOrThrow() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!token) {
-    redirect("/painel/login");
-  }
-
-  let payload: PainelSessionPayload | null = null;
-
-  try {
-    const { payload: raw } = await jwtVerify(token, getJwtSecretKey());
-    payload = raw as PainelSessionPayload;
-  } catch {
-    redirect("/painel/login");
-  }
-
-  if (!payload || payload.role !== "BARBER") {
-    redirect("/painel/login");
-  }
-
-  const barber = await prisma.barber.findUnique({
-    where: { email: payload.email },
-    select: {
-      id: true,
-      email: true,
-      userId: true,
-    },
-  });
-
-  if (!barber) {
-    throw new Error("Barber não encontrado para o usuário logado.");
-  }
-
-  // ✅ teu schema não tem user.unitId / barber.unitId, então usamos a unit padrão
-  const unitId = await resolveUnitIdDefault();
-
-  return { barber, unitId, session: payload };
-}
+import { getCurrentPainelUser } from "@/lib/painel-session";
+import { AppointmentStatus } from "@prisma/client";
 
 // ===== Tipos de entrada vindos do front =====
 
@@ -98,12 +21,65 @@ export type SaveWeeklyAvailabilityInput = {
   days: WeeklyDayInput[];
 };
 
-// ===== Action principal: salvar padrão semanal =====
+// =========================================================
+// CONTEXTO (tenant + barber + unit)
+// - companyId vem do token (painel_session)
+// - barber vem do userId do token
+// - unit ativa deve pertencer à companyId do token
+// =========================================================
+
+async function getCurrentBarberContextOrThrow(): Promise<{
+  barber: { id: string; email: string | null; userId: string | null };
+  unitId: string;
+  companyId: string;
+}> {
+  const session = await getCurrentPainelUser();
+
+  if (!session) redirect("/painel/login");
+  if (session.role !== "BARBER") redirect("/painel/login?error=permissao");
+  if (!session.companyId) redirect("/painel/login?error=missing_company");
+
+  // Barber vinculado ao usuário logado
+  const barber = await prisma.barber.findUnique({
+    where: { userId: session.sub },
+    select: { id: true, email: true, userId: true },
+  });
+
+  if (!barber) throw new Error("Barber não encontrado para o usuário logado.");
+
+  // Unidade ativa do barbeiro DENTRO da empresa da sessão
+  const active = await prisma.barberUnit.findFirst({
+    where: {
+      barberId: barber.id,
+      isActive: true,
+      unit: {
+        isActive: true,
+        companyId: session.companyId,
+      },
+    },
+    select: {
+      unit: { select: { id: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const unitId = active?.unit?.id;
+
+  if (!unitId) {
+    throw new Error("Este profissional não possui unidade ativa vinculada.");
+  }
+
+  return { barber, unitId, companyId: session.companyId };
+}
+
+// =========================================================
+// Action principal: salvar padrão semanal
+// =========================================================
 
 export async function saveWeeklyAvailability(
   input: SaveWeeklyAvailabilityInput,
 ) {
-  const { barber, unitId } = await getCurrentBarberOrThrow();
+  const { barber, unitId, companyId } = await getCurrentBarberContextOrThrow();
 
   if (!input?.days || !Array.isArray(input.days)) {
     throw new Error("Payload inválido ao salvar disponibilidade semanal.");
@@ -118,15 +94,16 @@ export async function saveWeeklyAvailability(
       endTime: day.endTime ?? "18:00",
     }));
 
-  // ✅ CRÍTICO: sempre respeitar unitId (senão mexe nos registros da unidade errada)
   const existing = await prisma.barberWeeklyAvailability.findMany({
-    where: { barberId: barber.id, unitId },
+    where: {
+      barberId: barber.id,
+      unitId,
+      companyId,
+    },
   });
 
   const existingByWeekday = new Map<number, (typeof existing)[number]>();
-  for (const item of existing) {
-    existingByWeekday.set(item.weekday, item);
-  }
+  for (const item of existing) existingByWeekday.set(item.weekday, item);
 
   for (const day of sanitizedDays) {
     const existingForDay = existingByWeekday.get(day.weekday);
@@ -145,6 +122,7 @@ export async function saveWeeklyAvailability(
       } else {
         await prisma.barberWeeklyAvailability.create({
           data: {
+            companyId,
             barberId: barber.id,
             unitId,
             weekday: day.weekday,
@@ -170,6 +148,7 @@ export async function saveWeeklyAvailability(
     } else {
       const created = await prisma.barberWeeklyAvailability.create({
         data: {
+          companyId,
           barberId: barber.id,
           unitId,
           weekday: day.weekday,
@@ -194,6 +173,7 @@ export async function saveWeeklyAvailability(
   }
 
   revalidatePath("/barber/availability");
+  revalidatePath("/painel/availability");
   return { success: true };
 }
 
@@ -202,7 +182,7 @@ export async function saveWeeklyAvailability(
  * =======================================================*/
 
 const dailyExceptionSchema = z.object({
-  barberId: z.string().min(1),
+  barberId: z.string().min(1).optional(),
   dateISO: z.string().min(1),
   mode: z.enum(["FULL_DAY", "PARTIAL"]),
   intervals: z
@@ -234,17 +214,16 @@ type IntervalMinutes = { start: number; end: number };
 
 function normalizeIntervals(intervals: IntervalMinutes[]): IntervalMinutes[] {
   if (intervals.length === 0) return [];
-
   const sorted = [...intervals].sort((a, b) => a.start - b.start);
+
   const result: IntervalMinutes[] = [];
   let current = { ...sorted[0] };
 
   for (let i = 1; i < sorted.length; i++) {
     const next = sorted[i];
-
-    if (next.start <= current.end) {
+    if (next.start <= current.end)
       current.end = Math.max(current.end, next.end);
-    } else {
+    else {
       result.push(current);
       current = { ...next };
     }
@@ -270,9 +249,7 @@ function subtractIntervals(
         continue;
       }
 
-      if (block.start <= interval.start && block.end >= interval.end) {
-        continue;
-      }
+      if (block.start <= interval.start && block.end >= interval.end) continue;
 
       if (block.start <= interval.start && block.end < interval.end) {
         nextResult.push({ start: block.end, end: interval.end });
@@ -300,15 +277,16 @@ function subtractIntervals(
 }
 
 export async function createDailyException(input: DailyExceptionInput) {
+  const { barber, unitId, companyId } = await getCurrentBarberContextOrThrow();
   const parsed = dailyExceptionSchema.parse(input);
-  const { barberId, dateISO, mode } = parsed;
 
-  const unitId = await resolveUnitIdDefault();
-
-  const date = new Date(dateISO);
-  if (Number.isNaN(date.getTime())) {
-    return { error: "Data inválida para exceção diária" };
+  if (parsed.barberId && parsed.barberId !== barber.id) {
+    throw new Error("Ação não permitida para outro profissional.");
   }
+
+  const date = new Date(parsed.dateISO);
+  if (Number.isNaN(date.getTime()))
+    return { error: "Data inválida para exceção diária" };
 
   const dayStart = new Date(
     date.getFullYear(),
@@ -324,18 +302,20 @@ export async function createDailyException(input: DailyExceptionInput) {
 
   const existingDaily = await prisma.barberDailyAvailability.findFirst({
     where: {
-      barberId,
-      unitId, // ✅ respeita unidade
+      companyId,
+      barberId: barber.id,
+      unitId,
       date: { gte: dayStart, lt: nextDay },
     },
     include: { intervals: true },
   });
 
-  if (
-    mode === "FULL_DAY" ||
+  const isFullDay =
+    parsed.mode === "FULL_DAY" ||
     !parsed.intervals ||
-    parsed.intervals.length === 0
-  ) {
+    parsed.intervals.length === 0;
+
+  if (isFullDay) {
     if (existingDaily) {
       await prisma.barberDailyTimeInterval.deleteMany({
         where: { dailyAvailabilityId: existingDaily.id },
@@ -348,7 +328,8 @@ export async function createDailyException(input: DailyExceptionInput) {
     } else {
       await prisma.barberDailyAvailability.create({
         data: {
-          barberId,
+          companyId,
+          barberId: barber.id,
           unitId,
           date: dayStart,
           type: "DAY_OFF",
@@ -357,13 +338,15 @@ export async function createDailyException(input: DailyExceptionInput) {
     }
 
     revalidatePath("/barber/availability");
+    revalidatePath("/painel/availability");
     return { success: true };
   }
 
   const weekly = await prisma.barberWeeklyAvailability.findFirst({
     where: {
-      barberId,
-      unitId, // ✅ respeita unidade
+      companyId,
+      barberId: barber.id,
+      unitId,
       weekday,
       isActive: true,
     },
@@ -388,7 +371,8 @@ export async function createDailyException(input: DailyExceptionInput) {
     } else {
       await prisma.barberDailyAvailability.create({
         data: {
-          barberId,
+          companyId,
+          barberId: barber.id,
           unitId,
           date: dayStart,
           type: "DAY_OFF",
@@ -397,6 +381,7 @@ export async function createDailyException(input: DailyExceptionInput) {
     }
 
     revalidatePath("/barber/availability");
+    revalidatePath("/painel/availability");
     return { success: true };
   }
 
@@ -422,7 +407,8 @@ export async function createDailyException(input: DailyExceptionInput) {
     } else {
       await prisma.barberDailyAvailability.create({
         data: {
-          barberId,
+          companyId,
+          barberId: barber.id,
           unitId,
           date: dayStart,
           type: "DAY_OFF",
@@ -431,6 +417,7 @@ export async function createDailyException(input: DailyExceptionInput) {
     }
 
     revalidatePath("/barber/availability");
+    revalidatePath("/painel/availability");
     return { success: true };
   }
 
@@ -454,7 +441,8 @@ export async function createDailyException(input: DailyExceptionInput) {
   } else {
     const createdDaily = await prisma.barberDailyAvailability.create({
       data: {
-        barberId,
+        companyId,
+        barberId: barber.id,
         unitId,
         date: dayStart,
         type: "CUSTOM",
@@ -471,16 +459,19 @@ export async function createDailyException(input: DailyExceptionInput) {
   }
 
   revalidatePath("/barber/availability");
+  revalidatePath("/painel/availability");
   return { success: true };
 }
 
 export async function deleteDailyException(barberId: string, dateISO: string) {
-  const unitId = await resolveUnitIdDefault(); // ✅ garante escopo da unidade
+  const { barber, unitId, companyId } = await getCurrentBarberContextOrThrow();
+
+  if (barberId !== barber.id) {
+    throw new Error("Ação não permitida para outro profissional.");
+  }
 
   const date = new Date(dateISO);
-  if (Number.isNaN(date.getTime())) {
-    return { error: "Data inválida" };
-  }
+  if (Number.isNaN(date.getTime())) return { error: "Data inválida" };
 
   const dayStart = new Date(
     date.getFullYear(),
@@ -495,20 +486,20 @@ export async function deleteDailyException(barberId: string, dateISO: string) {
 
   const existingDaily = await prisma.barberDailyAvailability.findFirst({
     where: {
-      barberId,
-      unitId, // ✅ respeita unidade
+      companyId,
+      barberId: barber.id,
+      unitId,
       date: { gte: dayStart, lt: nextDay },
     },
   });
 
-  if (!existingDaily) {
-    return { success: true };
-  }
+  if (!existingDaily) return { success: true };
 
   await prisma.barberDailyAvailability.delete({
     where: { id: existingDaily.id },
   });
 
   revalidatePath("/barber/availability");
+  revalidatePath("/painel/availability");
   return { success: true };
 }

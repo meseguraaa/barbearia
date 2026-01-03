@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { jwtVerify } from "jose";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +17,14 @@ export const metadata: Metadata = {
 const UNIT_COOKIE_NAME = "admin_unit_context";
 const UNIT_ALL_VALUE = "all";
 
-type LevelKey = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
+// ✅ Multi-tenant cookie (ajuste aqui se no teu projeto for outro nome)
+const COMPANY_COOKIE_NAME = "admin_company_context";
+const COMPANY_COOKIE_FALLBACK = "companyId";
 
+// ✅ cookie de sessão do painel (mesmo que você usa no resto do admin)
+const SESSION_COOKIE_NAME = "painel_session";
+
+type LevelKey = "BRONZE" | "PRATA" | "OURO" | "DIAMANTE";
 const LEVELS: LevelKey[] = ["BRONZE", "PRATA", "OURO", "DIAMANTE"];
 
 function levelLabel(level: LevelKey) {
@@ -34,14 +41,93 @@ function levelLabel(level: LevelKey) {
 }
 
 function ruleTypeLabel(type: string) {
-  // hoje só existe HAS_ACTIVE_PLAN, mas já deixa bonitinho pra crescer
   if (type === "HAS_ACTIVE_PLAN") return "Tem plano ativo";
   return type;
 }
 
+type PainelSessionPayload = {
+  sub: string;
+  role: "CLIENT" | "BARBER" | "ADMIN";
+  email: string;
+  name?: string | null;
+  companyId?: string; // ✅ se existir no token, usamos como fallback
+};
+
+function getJwtSecretKey() {
+  const secret = process.env.PAINEL_JWT_SECRET;
+  if (!secret) {
+    throw new Error("PAINEL_JWT_SECRET não definido no .env");
+  }
+  return new TextEncoder().encode(secret);
+}
+
+async function readSessionPayloadOrNull(): Promise<PainelSessionPayload | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return null;
+
+  try {
+    const { payload } = await jwtVerify(token, getJwtSecretKey());
+    return payload as unknown as PainelSessionPayload;
+  } catch {
+    return null;
+  }
+}
+
+async function requireCompanyId(): Promise<string> {
+  const cookieStore = await cookies();
+
+  // 1) ✅ cookie de contexto selecionado no admin
+  const fromCookie =
+    cookieStore.get(COMPANY_COOKIE_NAME)?.value ??
+    cookieStore.get(COMPANY_COOKIE_FALLBACK)?.value ??
+    "";
+
+  const normalizedCookie = String(fromCookie).trim();
+  if (normalizedCookie) return normalizedCookie;
+
+  // 2) ✅ fallback: token do painel (se tiver companyId no payload)
+  const session = await readSessionPayloadOrNull();
+  const fromToken = String(session?.companyId ?? "").trim();
+  if (fromToken) return fromToken;
+
+  // 3) ✅ fallback final: inferir pela membership (company_members)
+  if (!session?.sub) {
+    throw new Error(
+      "Contexto de empresa ausente (companyId). Faça login novamente e selecione uma empresa.",
+    );
+  }
+
+  const memberships = await prisma.companyMember.findMany({
+    where: {
+      userId: session.sub,
+      isActive: true,
+      company: { isActive: true },
+    },
+    select: { companyId: true },
+    orderBy: { createdAt: "asc" },
+    take: 20,
+  });
+
+  const uniqueCompanyIds = Array.from(
+    new Set(memberships.map((m) => m.companyId).filter(Boolean)),
+  );
+
+  if (uniqueCompanyIds.length === 1) {
+    return uniqueCompanyIds[0]!;
+  }
+
+  // 0 empresas ou múltiplas empresas -> precisa selecionar
+  throw new Error(
+    "Contexto de empresa ausente (companyId). Selecione uma empresa antes de acessar esta tela.",
+  );
+}
+
 export default async function ClientLevelsPage() {
-  // 🔐 Permissão: por enquanto reaproveita a mesma de Clientes
-  await requireAdminPermission("canAccessClients");
+  // ✅ permissão correta para esta tela
+  await requireAdminPermission("canAccessClientLevels");
+
+  const companyId = await requireCompanyId();
 
   const cookieStore = await cookies();
   const selectedUnit =
@@ -49,26 +135,34 @@ export default async function ClientLevelsPage() {
 
   const showAllUnits = selectedUnit === UNIT_ALL_VALUE;
 
-  // Unidades
+  // ✅ Unidades (sempre por companyId)
   const units = await prisma.unit.findMany({
-    where: showAllUnits ? {} : { id: selectedUnit },
+    where: {
+      companyId,
+      ...(showAllUnits ? {} : { id: selectedUnit }),
+    },
     orderBy: { name: "asc" },
     select: { id: true, name: true, isActive: true },
   });
 
-  // Configs
+  // ✅ Configs (sempre por companyId)
   const configs = await prisma.customerLevelConfig.findMany({
-    where: showAllUnits ? {} : { unitId: selectedUnit },
+    where: {
+      companyId,
+      ...(showAllUnits ? {} : { unitId: selectedUnit }),
+    },
     orderBy: [{ unitId: "asc" }, { level: "asc" }],
   });
 
-  // Regras
+  // ✅ Regras (sempre por companyId)
   const rules = await prisma.customerLevelRule.findMany({
-    where: showAllUnits ? {} : { unitId: selectedUnit },
+    where: {
+      companyId,
+      ...(showAllUnits ? {} : { unitId: selectedUnit }),
+    },
     orderBy: [{ unitId: "asc" }, { priority: "desc" }, { createdAt: "asc" }],
   });
 
-  // Mapa por unidade
   const configsByUnit = new Map<string, typeof configs>();
   for (const c of configs) {
     const arr = configsByUnit.get(c.unitId) ?? [];
@@ -85,7 +179,6 @@ export default async function ClientLevelsPage() {
 
   return (
     <div className="space-y-5 max-w-7xl mx-auto">
-      {/* HEADER */}
       <header className="flex flex-col gap-3">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -100,7 +193,6 @@ export default async function ClientLevelsPage() {
         </div>
       </header>
 
-      {/* CONTEÚDO */}
       {units.length === 0 ? (
         <section className="rounded-xl border border-border-primary bg-background-tertiary p-6">
           <p className="text-paragraph-medium text-content-secondary">
@@ -132,13 +224,13 @@ export default async function ClientLevelsPage() {
                 key={u.id}
                 className="rounded-xl border border-border-primary bg-background-tertiary p-4 space-y-4"
               >
-                {/* Unit header */}
                 <div className="flex items-start justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="text-paragraph-medium-size font-semibold text-content-primary">
                         {u.name}
                       </p>
+
                       {u.isActive ? (
                         <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/40">
                           Ativa
@@ -172,7 +264,6 @@ export default async function ClientLevelsPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {/* Rotas futuras (Arquivo 4) */}
                     <Button asChild size="sm" variant="edit2">
                       <Link href={`/admin/client-levels/config?unitId=${u.id}`}>
                         Configuração por nível
@@ -186,7 +277,6 @@ export default async function ClientLevelsPage() {
                   </div>
                 </div>
 
-                {/* Configs por nível */}
                 <div className="rounded-xl border border-border-primary bg-background-secondary p-4 space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     <p className="text-label-small text-content-primary">
@@ -259,7 +349,6 @@ export default async function ClientLevelsPage() {
                   )}
                 </div>
 
-                {/* Regras */}
                 <div className="rounded-xl border border-border-primary bg-background-secondary p-4 space-y-3">
                   <div className="flex items-center justify-between gap-4">
                     <p className="text-label-small text-content-primary">
@@ -301,7 +390,6 @@ export default async function ClientLevelsPage() {
                           </div>
 
                           <div className="shrink-0 flex items-center gap-2">
-                            {/* rota futura */}
                             <Button asChild variant="outline">
                               <Link
                                 href={`/admin/client-levels/rules?unitId=${u.id}`}

@@ -1,3 +1,4 @@
+// src/app/api/mobile/reviews/route.ts
 import { NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 import { z } from "zod";
@@ -6,13 +7,14 @@ import { prisma } from "@/lib/prisma";
 type MobileTokenPayload = {
   sub: string;
   role?: "CLIENT" | "BARBER" | "ADMIN";
+  companyId: string; // ✅ multi-tenant obrigatório
 };
 
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, x-company-id",
   };
 }
 
@@ -28,11 +30,25 @@ async function requireMobileAuth(req: Request): Promise<MobileTokenPayload> {
   if (!token) throw new Error("Token ausente");
 
   const { payload } = await jwtVerify(token, getJwtSecretKey());
-  return payload as any;
+
+  const sub = String((payload as any)?.sub || "").trim();
+  if (!sub) throw new Error("Token inválido");
+
+  const companyId =
+    typeof (payload as any)?.companyId === "string"
+      ? String((payload as any).companyId).trim()
+      : "";
+  if (!companyId) throw new Error("companyId ausente no token");
+
+  return {
+    sub,
+    role: (payload as any).role,
+    companyId,
+  };
 }
 
 export async function OPTIONS() {
-  return NextResponse.json({}, { headers: corsHeaders() });
+  return new NextResponse(null, { status: 204, headers: corsHeaders() });
 }
 
 const schema = z.object({
@@ -44,9 +60,21 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
+  const headers = corsHeaders();
+
   try {
     const payload = await requireMobileAuth(req);
+
+    // ✅ avaliação só CLIENT
+    if (payload.role && payload.role !== "CLIENT") {
+      return NextResponse.json(
+        { ok: false, error: "Sem permissão." },
+        { status: 403, headers },
+      );
+    }
+
     const userId = payload.sub;
+    const companyId = payload.companyId;
 
     const body = await req.json().catch(() => null);
     const parsed = schema.safeParse(body);
@@ -54,7 +82,7 @@ export async function POST(req: Request) {
     if (!parsed.success) {
       return NextResponse.json(
         { ok: false, error: "Dados inválidos ao criar avaliação." },
-        { status: 400, headers: corsHeaders() },
+        { status: 400, headers },
       );
     }
 
@@ -66,46 +94,31 @@ export async function POST(req: Request) {
       isAnonymousForProfessional,
     } = parsed.data;
 
-    const appointment = await prisma.appointment.findUnique({
-      where: { id: appointmentId },
-      include: { review: true },
+    // ✅ tenant-safe: appointment tem que ser do mesmo companyId
+    // já valida: DONE, do cliente, tem barbeiro, e ainda não tem review
+    const appointment = await prisma.appointment.findFirst({
+      where: {
+        id: appointmentId,
+        companyId,
+        clientId: userId,
+        status: "DONE",
+        barberId: { not: null },
+        review: { is: null },
+      },
+      select: {
+        id: true,
+        barberId: true,
+      },
     });
 
     if (!appointment) {
       return NextResponse.json(
-        { ok: false, error: "Atendimento não encontrado." },
-        { status: 404, headers: corsHeaders() },
-      );
-    }
-
-    if (appointment.clientId !== userId) {
-      return NextResponse.json(
         {
           ok: false,
-          error: "Você não pode avaliar um atendimento de outro cliente.",
+          error:
+            "Atendimento não encontrado ou inválido para avaliação (precisa estar concluído).",
         },
-        { status: 403, headers: corsHeaders() },
-      );
-    }
-
-    if (appointment.status !== "DONE") {
-      return NextResponse.json(
-        { ok: false, error: "Só é possível avaliar atendimentos concluídos." },
-        { status: 400, headers: corsHeaders() },
-      );
-    }
-
-    if (!appointment.barberId) {
-      return NextResponse.json(
-        { ok: false, error: "Atendimento sem profissional associado." },
-        { status: 400, headers: corsHeaders() },
-      );
-    }
-
-    if (appointment.review) {
-      return NextResponse.json(
-        { ok: false, error: "Este atendimento já foi avaliado." },
-        { status: 409, headers: corsHeaders() },
+        { status: 404, headers },
       );
     }
 
@@ -113,8 +126,10 @@ export async function POST(req: Request) {
     const uniqueTagIds = Array.from(new Set(tagIds ?? [])).slice(0, 3);
 
     await prisma.$transaction(async (tx) => {
+      // ✅ cria review (tenant-safe)
       const review = await tx.appointmentReview.create({
         data: {
+          companyId, // ✅ existe no schema
           appointmentId: appointment.id,
           clientId: userId,
           barberId: appointment.barberId!,
@@ -122,12 +137,14 @@ export async function POST(req: Request) {
           comment: comment ?? undefined,
           isAnonymousForProfessional,
         },
+        select: { id: true },
       });
 
       if (uniqueTagIds.length > 0) {
-        // usa só tags ativas e existentes
+        // ✅ tenant-safe: tags precisam ser do mesmo companyId e ativas
         const validTags = await tx.reviewTag.findMany({
           where: {
+            companyId, // ✅ existe no schema
             id: { in: uniqueTagIds },
             isActive: true,
           },
@@ -135,33 +152,43 @@ export async function POST(req: Request) {
         });
 
         if (validTags.length > 0) {
+          // ✅ PIVOT NÃO TEM companyId NO SCHEMA -> não enviar
           await tx.appointmentReviewTag.createMany({
             data: validTags.map((tag) => ({
               reviewId: review.id,
               tagId: tag.id,
             })),
+            skipDuplicates: true,
           });
         }
       }
 
-      // depois de avaliar, mata a pendência
-      await tx.appointment.update({
-        where: { id: appointment.id },
+      // ✅ depois de avaliar, marca a pendência (tenant-safe no where)
+      await tx.appointment.updateMany({
+        where: { id: appointment.id, companyId },
         data: { reviewModalShown: true },
       });
-
-      // idempotência de transação
-      await tx.$executeRaw`SELECT 1`;
     });
 
-    return NextResponse.json({ ok: true }, { headers: corsHeaders() });
+    const res = NextResponse.json({ ok: true }, { headers });
+    res.headers.set("x-company-id", companyId);
+    return res;
   } catch (err: any) {
+    const msg = String(err?.message ?? "Erro ao salvar sua avaliação.");
+    const lower = msg.toLowerCase();
+
+    const isAuth =
+      lower.includes("token") ||
+      lower.includes("jwt") ||
+      lower.includes("signature") ||
+      lower.includes("companyid");
+
     return NextResponse.json(
       {
         ok: false,
-        error: err?.message ?? "Erro ao salvar sua avaliação. Tente novamente.",
+        error: isAuth ? "Não autorizado" : "Erro ao salvar avaliação",
       },
-      { status: 500, headers: corsHeaders() },
+      { status: isAuth ? 401 : 500, headers },
     );
   }
 }

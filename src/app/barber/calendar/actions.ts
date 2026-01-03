@@ -1,85 +1,54 @@
+// src/app/barber/calendar/actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
-import { cookies } from "next/headers";
-import { jwtVerify } from "jose";
 import { revalidatePath } from "next/cache";
 import { AppointmentStatus } from "@prisma/client";
+import { getCurrentPainelUser } from "@/lib/painel-session";
 
-const SESSION_COOKIE_NAME = "painel_session";
+async function getCurrentBarberScopeOrThrow(): Promise<{
+  barberId: string;
+  companyId: string;
+}> {
+  const session = await getCurrentPainelUser();
 
-function getJwtSecretKey() {
-  const secret = process.env.PAINEL_JWT_SECRET;
-  if (!secret) {
-    throw new Error("PAINEL_JWT_SECRET não definido no .env");
-  }
-  return new TextEncoder().encode(secret);
-}
+  if (!session) throw new Error("UNAUTHENTICATED");
+  if (session.role !== "BARBER") throw new Error("FORBIDDEN");
+  if (!session.companyId) throw new Error("MISSING_COMPANY");
 
-type PainelSessionPayload = {
-  sub: string;
-  role: "CLIENT" | "BARBER" | "ADMIN";
-  email: string;
-  name?: string | null;
-};
-
-async function getCurrentBarberId() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-
-  if (!token) {
-    throw new Error("UNAUTHENTICATED");
-  }
-
-  let payload: PainelSessionPayload | null = null;
-
-  try {
-    const { payload: raw } = await jwtVerify(token, getJwtSecretKey());
-    payload = raw as PainelSessionPayload;
-  } catch {
-    throw new Error("UNAUTHENTICATED");
-  }
-
-  if (!payload || payload.role !== "BARBER") {
-    throw new Error("FORBIDDEN");
-  }
-
-  const barber = await prisma.barber.findFirst({
-    where: {
-      OR: [{ userId: payload.sub }, { email: payload.email }],
-    },
+  const barber = await prisma.barber.findUnique({
+    where: { userId: session.sub },
+    select: { id: true },
   });
 
-  if (!barber) {
-    throw new Error("BARBER_NOT_LINKED");
-  }
+  if (!barber) throw new Error("BARBER_NOT_LINKED");
 
-  return barber.id;
+  return { barberId: barber.id, companyId: session.companyId };
 }
 
 async function updateAppointmentStatus(
   formData: FormData,
   newStatus: AppointmentStatus,
 ) {
-  const appointmentId = String(formData.get("appointmentId") ?? "");
+  const appointmentId = String(formData.get("appointmentId") ?? "").trim();
+  if (!appointmentId) return;
 
-  if (!appointmentId) {
-    return;
-  }
-
-  let barberId: string;
+  let scope: { barberId: string; companyId: string };
   try {
-    barberId = await getCurrentBarberId();
+    scope = await getCurrentBarberScopeOrThrow();
   } catch (error) {
     console.error("[barber][updateAppointmentStatus] erro de sessão:", error);
     return;
   }
 
-  // Garante que o barbeiro só altera agendamentos dele
+  // ✅ Multi-tenant REAL + segurança:
+  // - só altera agendamento do barbeiro logado
+  // - e da company do token (tenant lock)
   await prisma.appointment.updateMany({
     where: {
       id: appointmentId,
-      barberId,
+      barberId: scope.barberId,
+      companyId: scope.companyId,
     },
     data: {
       status: newStatus,

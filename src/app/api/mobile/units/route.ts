@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 type MobileTokenPayload = {
   sub: string;
   role?: "CLIENT" | "BARBER" | "ADMIN";
+  companyId: string; // ✅ multi-tenant obrigatório
+
   // ⚠️ email/name NÃO estão no JWT do app (signAppJwt só coloca role + sub),
   // mas mantemos aqui opcional pra não quebrar logs/compat.
   email?: string;
@@ -24,6 +26,19 @@ function getJwtSecretKey() {
   const secret = process.env.APP_JWT_SECRET;
   if (!secret) throw new Error("APP_JWT_SECRET não definido no .env");
   return new TextEncoder().encode(secret);
+}
+
+function normalizeSub(payload: any) {
+  const sub = typeof payload?.sub === "string" ? payload.sub.trim() : "";
+  return sub;
+}
+
+function normalizeCompanyId(payload: any) {
+  const companyId =
+    typeof payload?.companyId === "string"
+      ? String(payload.companyId).trim()
+      : "";
+  return companyId;
 }
 
 async function requireMobileAuth(
@@ -49,13 +64,24 @@ async function requireMobileAuth(
     algorithms: ["HS256"],
   });
 
-  // normaliza um pouco (sem mudar shape)
-  const sub = typeof payload.sub === "string" ? payload.sub : "";
-  const role = (payload as any).role as MobileTokenPayload["role"];
+  const sub = normalizeSub(payload);
+  if (!sub) throw new Error("Token inválido");
+
+  const role = (payload as any)?.role as MobileTokenPayload["role"];
+
+  const companyId = normalizeCompanyId(payload);
+  if (!companyId) throw new Error("companyId ausente no token");
 
   return {
     sub,
     role,
+    companyId,
+    // mantém compat (se vier no token de algum ambiente)
+    email:
+      typeof (payload as any)?.email === "string"
+        ? (payload as any).email
+        : undefined,
+    name: (payload as any)?.name ?? null,
   };
 }
 
@@ -91,14 +117,19 @@ export async function GET(req: Request) {
     console.log(`[mobile/units:${reqId}] auth payload:`, {
       sub: payload.sub,
       role: payload.role ?? null,
+      companyId: payload.companyId,
       email: payload.email ?? null,
     });
 
     console.log(`[mobile/units:${reqId}] querying prisma.unit.findMany...`);
 
+    // ✅ multi-tenant REAL: sempre filtra por companyId
     const units = await prisma.unit.findMany({
-      // ✅ mantém compatibilidade: traz true e null (só exclui false)
-      where: { isActive: { not: false } },
+      where: {
+        companyId: payload.companyId,
+        // ✅ mantém compatibilidade: traz true e null (só exclui false)
+        isActive: { not: false },
+      },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     });
@@ -114,7 +145,11 @@ export async function GET(req: Request) {
       {
         ok: true,
         units,
-        auth: { sub: payload.sub, role: payload.role ?? null },
+        auth: {
+          sub: payload.sub,
+          role: payload.role ?? null,
+          companyId: payload.companyId,
+        },
         count: units.length,
       },
       { status: 200, headers: corsHeaders() },
@@ -131,7 +166,7 @@ export async function GET(req: Request) {
     console.error(`[mobile/units:${reqId}] prisma code:`, err?.code);
     console.error(`[mobile/units:${reqId}] prisma meta:`, err?.meta);
 
-    // ✅ token/jwt: devolve 401 (não mascare como 500)
+    // ✅ token/jwt/companyId: devolve 401 (não mascare como 500)
     const lower = msg.toLowerCase();
     if (
       lower.includes("token") ||
@@ -139,7 +174,8 @@ export async function GET(req: Request) {
       lower.includes("signature") ||
       lower.includes("jws") ||
       lower.includes("unauthorized") ||
-      lower.includes("não autorizado")
+      lower.includes("não autorizado") ||
+      lower.includes("companyid")
     ) {
       return NextResponse.json(
         { ok: false, error: "Não autorizado" },

@@ -16,6 +16,9 @@ import { addMinutes, subMinutes, addDays, startOfDay } from "date-fns";
 import { cookies } from "next/headers";
 import { jwtVerify } from "jose";
 
+// ✅ NÍVEL DO CLIENTE (motor on-demand)
+import { ensureCustomerLevelUpToDate } from "@/lib/customer-level-engine";
+
 /* ---------------------------------------------------------
  * Helpers
  * ---------------------------------------------------------*/
@@ -61,6 +64,9 @@ export type AppointmentData = z.infer<typeof appointmentSchema>;
 type RoleForAction = "ADMIN" | "BARBER";
 
 const SESSION_COOKIE_NAME = "painel_session";
+
+// ✅ cookie de contexto do painel (empresa selecionada)
+const ADMIN_COMPANY_CONTEXT_COOKIE = "admin_company_context";
 
 type PainelSessionPayload = {
   sub: string;
@@ -149,6 +155,133 @@ async function getRoleFromPainelSession(): Promise<{
 }
 
 /* ---------------------------------------------------------
+ * ✅ Multi-tenant: resolver companyId do ator (ADMIN/BARBER)
+ * ---------------------------------------------------------*/
+
+// ✅ tenta ler contexto do painel (admin_company_context) e validar membership
+async function getCompanyIdFromAdminContextCookie(args: {
+  actorUserId: string;
+}): Promise<string | null> {
+  try {
+    const cookieStore = await cookies();
+    const companyId = String(
+      cookieStore.get(ADMIN_COMPANY_CONTEXT_COOKIE)?.value ?? "",
+    ).trim();
+
+    if (!companyId) return null;
+
+    const ok = await prisma.companyMember.findFirst({
+      where: { userId: args.actorUserId, companyId, isActive: true } as any,
+      select: { id: true },
+    });
+
+    return ok?.id ? companyId : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveCompanyIdForActorOrThrow(args: {
+  actorRole?: RoleForAction;
+  actorUserId?: string;
+  actorEmail?: string;
+}) {
+  if (args.actorRole !== "ADMIN" && args.actorRole !== "BARBER") {
+    throw new Error("Sem permissão (ator inválido)");
+  }
+  if (!args.actorUserId) {
+    throw new Error("Sessão inválida (sem userId)");
+  }
+
+  // ✅ 1) BARBER: pega empresa pelo registro do barbeiro (mais confiável)
+  if (args.actorRole === "BARBER") {
+    const barber = await prisma.barber.findFirst({
+      where: {
+        OR: [
+          ...(args.actorUserId ? [{ userId: args.actorUserId }] : []),
+          ...(args.actorEmail ? [{ email: args.actorEmail }] : []),
+        ],
+        isActive: true,
+      } as any,
+      select: { companyId: true },
+    });
+
+    const barberCompanyId = String((barber as any)?.companyId ?? "").trim();
+    if (barberCompanyId) return barberCompanyId;
+    // se não achar (barber sem vínculo), cai pros fallbacks abaixo
+  }
+
+  // ✅ 2) ADMIN: tenta contexto do painel (cookie) e valida membership
+  const ctxCompanyId = await getCompanyIdFromAdminContextCookie({
+    actorUserId: args.actorUserId,
+  });
+  if (ctxCompanyId) return ctxCompanyId;
+
+  // ✅ 3) fallback antigo: primeiro membership ativo
+  const membership = await prisma.companyMember.findFirst({
+    where: {
+      userId: args.actorUserId,
+      isActive: true,
+    } as any,
+    orderBy: { createdAt: "asc" },
+    select: { companyId: true },
+  });
+
+  const companyId = String((membership as any)?.companyId ?? "").trim();
+  if (!companyId) {
+    throw new Error(
+      "Admin/Barber sem companyId. Painel é multi-tenant: vincule o usuário a uma empresa.",
+    );
+  }
+
+  return companyId;
+}
+
+async function ensureUnitBelongsToCompanyOrThrow(
+  unitId: string,
+  companyId: string,
+) {
+  const unit = await prisma.unit.findFirst({
+    where: { id: unitId, companyId } as any,
+    select: { id: true, isActive: true },
+  });
+
+  if (!unit) throw new Error("Unidade não encontrada nesta empresa");
+  if ((unit as any).isActive === false) throw new Error("Unidade inativa");
+
+  return unit.id;
+}
+
+/* ---------------------------------------------------------
+ * ✅ Guard: appointment pertence à company
+ * (evita vazar por ID)
+ * ---------------------------------------------------------*/
+async function getAppointmentInCompanyOrThrow(args: {
+  appointmentId: string;
+  companyId: string;
+  select?: any;
+}) {
+  const appt = await prisma.appointment.findFirst({
+    where: { id: args.appointmentId, companyId: args.companyId } as any,
+    select:
+      args.select ??
+      ({
+        id: true,
+        status: true,
+        unitId: true,
+        barberId: true,
+        clientId: true,
+        serviceId: true,
+        scheduleAt: true,
+        servicePriceAtTheTime: true,
+      } as any),
+  });
+
+  if (!appt) throw new Error("Agendamento não encontrado");
+  return appt as any;
+}
+
+/* ---------------------------------------------------------
  * ✅ NOVO: resolver Barber.id quando o ator logado é BARBER
  * (pra gravar auditoria em concludedByBarberId / cancelledByBarberId)
  * ---------------------------------------------------------*/
@@ -156,21 +289,23 @@ async function getBarberIdForActor(args: {
   actorRole?: RoleForAction;
   actorUserId?: string;
   actorEmail?: string;
+  companyId?: string; // ✅ opcional pra evitar pegar barber de outra empresa
 }): Promise<string | null> {
   if (args.actorRole !== "BARBER") return null;
   if (!args.actorUserId && !args.actorEmail) return null;
 
   const barber = await prisma.barber.findFirst({
     where: {
+      ...(args.companyId ? { companyId: args.companyId } : {}),
       OR: [
         ...(args.actorUserId ? [{ userId: args.actorUserId }] : []),
         ...(args.actorEmail ? [{ email: args.actorEmail }] : []),
       ],
-    },
+    } as any,
     select: { id: true },
   });
 
-  return barber?.id ?? null;
+  return (barber as any)?.id ?? null;
 }
 
 /* ---------------------------------------------------------
@@ -252,10 +387,13 @@ function validateNotInPast(scheduleAt: Date): string | null {
 /* ---------------------------------------------------------
  * ✅ REGRA 2 (NOVA): validar horário REAL da UNIDADE (daily/weekly)
  * ---------------------------------------------------------*/
-async function getUnitAvailabilityWindowsOnDate(
-  unitId: string,
-  date: Date,
-): Promise<Array<{ startTime: string; endTime: string }>> {
+async function getUnitAvailabilityWindowsOnDate(args: {
+  unitId: string;
+  companyId: string;
+  date: Date;
+}): Promise<Array<{ startTime: string; endTime: string }>> {
+  const { unitId, companyId, date } = args;
+
   const dayStart = startOfDay(date);
   const nextDay = addDays(dayStart, 1);
 
@@ -263,14 +401,16 @@ async function getUnitAvailabilityWindowsOnDate(
     where: {
       unitId,
       date: { gte: dayStart, lt: nextDay },
-    },
+      unit: { companyId } as any,
+    } as any,
     include: { intervals: true },
   });
 
   if (daily) {
-    if (daily.isClosed) return [];
-    if (daily.intervals && daily.intervals.length > 0) {
-      const sorted = sortIntervals(daily.intervals);
+    if ((daily as any).isClosed) return [];
+    const intervals = (daily as any).intervals ?? [];
+    if (intervals.length > 0) {
+      const sorted = sortIntervals(intervals);
       return sorted.map((i) => ({
         startTime: i.startTime,
         endTime: i.endTime,
@@ -286,23 +426,34 @@ async function getUnitAvailabilityWindowsOnDate(
       unitId,
       weekday,
       isActive: true,
-    },
+      unit: { companyId } as any,
+    } as any,
     include: { intervals: true },
   });
 
-  if (!weekly || !weekly.intervals || weekly.intervals.length === 0) return [];
-  const sortedWeekly = sortIntervals(weekly.intervals);
+  if (
+    !weekly ||
+    !(weekly as any).intervals ||
+    (weekly as any).intervals.length === 0
+  ) {
+    return [];
+  }
+
+  const sortedWeekly = sortIntervals((weekly as any).intervals);
   return sortedWeekly.map((i) => ({
     startTime: i.startTime,
     endTime: i.endTime,
   }));
 }
 
-async function validateWithinUnitHours(
-  unitId: string,
-  scheduleAt: Date,
-  durationMinutes: number,
-): Promise<string | null> {
+async function validateWithinUnitHours(args: {
+  unitId: string;
+  companyId: string;
+  scheduleAt: Date;
+  durationMinutes: number;
+}): Promise<string | null> {
+  const { unitId, companyId, scheduleAt, durationMinutes } = args;
+
   const safeDuration = Math.max(0, durationMinutes || 0);
   const endAt = addMinutes(scheduleAt, safeDuration);
 
@@ -318,7 +469,12 @@ async function validateWithinUnitHours(
   const startMinutes = sh * 60 + sm;
   const endMinutes = eh * 60 + em;
 
-  const windows = await getUnitAvailabilityWindowsOnDate(unitId, scheduleAt);
+  const windows = await getUnitAvailabilityWindowsOnDate({
+    unitId,
+    companyId,
+    date: scheduleAt,
+  });
+
   if (!windows || windows.length === 0) {
     return "A unidade está fechada nesse dia";
   }
@@ -337,14 +493,22 @@ async function validateWithinUnitHours(
 }
 
 /* ---------------------------------------------------------
- * Garantir barbeiro vinculado à unidade
+ * Garantir barbeiro vinculado à unidade (tenant-safe via unit.companyId)
  * ---------------------------------------------------------*/
-async function ensureBarberLinkedToUnit(
-  barberId: string,
-  unitId: string,
-): Promise<string | null> {
+async function ensureBarberLinkedToUnit(args: {
+  barberId: string;
+  unitId: string;
+  companyId: string;
+}): Promise<string | null> {
+  const { barberId, unitId, companyId } = args;
+
   const link = await prisma.barberUnit.findFirst({
-    where: { barberId, unitId, isActive: true },
+    where: {
+      barberId,
+      unitId,
+      isActive: true,
+      unit: { companyId } as any,
+    } as any,
     select: { id: true },
   });
 
@@ -353,14 +517,25 @@ async function ensureBarberLinkedToUnit(
 }
 
 /* ---------------------------------------------------------
- * Garantir que o barbeiro executa o serviço
+ * Garantir que o barbeiro executa o serviço (tenant-safe se Service tiver companyId)
  * ---------------------------------------------------------*/
-async function ensureBarberCanDoService(
-  barberId: string,
-  serviceId: string,
-): Promise<string | null> {
+async function ensureBarberCanDoService(args: {
+  barberId: string;
+  serviceId: string;
+  companyId: string;
+}): Promise<string | null> {
+  const { barberId, serviceId, companyId } = args;
+
   const link = await prisma.serviceProfessional.findFirst({
-    where: { barberId, serviceId },
+    where: {
+      barberId,
+      serviceId,
+      ...(companyId
+        ? {
+            service: { companyId } as any,
+          }
+        : {}),
+    } as any,
     select: { id: true },
   });
 
@@ -382,13 +557,17 @@ function intervalsOverlap(
 
 /* ---------------------------------------------------------
  * Checar conflito de agenda por INTERVALO (ignorando CANCELADOS)
+ * ✅ tenant-safe (companyId)
  * ---------------------------------------------------------*/
-async function ensureAvailability(
-  scheduleAt: Date,
-  barberId: string,
-  durationMinutes: number,
-  excludeId?: string,
-): Promise<string | null> {
+async function ensureAvailability(args: {
+  scheduleAt: Date;
+  barberId: string;
+  durationMinutes: number;
+  companyId: string;
+  excludeId?: string;
+}): Promise<string | null> {
+  const { scheduleAt, barberId, durationMinutes, companyId, excludeId } = args;
+
   const newStart = scheduleAt;
   const newEnd = addMinutes(scheduleAt, Math.max(0, durationMinutes || 0));
 
@@ -397,11 +576,12 @@ async function ensureAvailability(
 
   const candidates = await prisma.appointment.findMany({
     where: {
+      companyId,
       barberId,
       status: { not: "CANCELED" },
       ...(excludeId && { id: { not: excludeId } }),
       scheduleAt: { gte: windowStart, lte: windowEnd },
-    },
+    } as any,
     select: {
       id: true,
       scheduleAt: true,
@@ -413,7 +593,7 @@ async function ensureAvailability(
 
   for (const appt of candidates) {
     const existingStart = appt.scheduleAt;
-    const existingDuration = appt.service?.durationMinutes ?? 0;
+    const existingDuration = (appt as any).service?.durationMinutes ?? 0;
     const existingEnd = addMinutes(
       existingStart,
       Math.max(0, existingDuration),
@@ -428,58 +608,116 @@ async function ensureAvailability(
 }
 
 /* ---------------------------------------------------------
- * Helper: cliente padrão (sem login)
+ * Helper: garantir membership do CLIENT na company
  * ---------------------------------------------------------*/
-async function getDefaultClientId(): Promise<string> {
-  const email = "anon@barbearia.local";
+async function ensureClientMembership(args: {
+  userId: string;
+  companyId: string;
+}) {
+  const { userId, companyId } = args;
+
+  const existing = await prisma.companyMember.findFirst({
+    where: { userId, companyId } as any,
+    select: { id: true, isActive: true },
+  });
+
+  if (existing?.id) {
+    if ((existing as any).isActive === false) {
+      await prisma.companyMember.update({
+        where: { id: existing.id } as any,
+        data: { isActive: true } as any,
+      });
+    }
+    return;
+  }
+
+  await prisma.companyMember.create({
+    data: {
+      userId,
+      companyId,
+      isActive: true,
+      role: "CLIENT" as any,
+    } as any,
+  });
+}
+
+/* ---------------------------------------------------------
+ * Helper: cliente padrão (sem login) por COMPANY
+ * ---------------------------------------------------------*/
+async function getDefaultClientId(companyId: string): Promise<string> {
+  const email = `anon+${companyId}@barbearia.local`;
 
   const client = await prisma.user.upsert({
     where: { email },
     update: {},
     create: { email, name: "Cliente não autenticado", role: "CLIENT" },
+    select: { id: true },
   });
+
+  await ensureClientMembership({ userId: client.id, companyId });
 
   return client.id;
 }
 
 /* ---------------------------------------------------------
- * Descobrir clientId
+ * Descobrir clientId (tenant-safe)
  * ---------------------------------------------------------*/
-async function getClientIdForAppointment(
-  phoneDigits: string,
-  explicitClientId?: string,
-): Promise<string> {
-  // 0) admin mandou clientId? valida e usa
+async function getClientIdForAppointment(args: {
+  phoneDigits: string;
+  companyId: string;
+  explicitClientId?: string;
+}): Promise<string> {
+  const { phoneDigits, companyId, explicitClientId } = args;
+
+  // 0) admin mandou clientId? valida (CLIENT + ativo + pertence à company)
   if (explicitClientId) {
-    const client = await prisma.user.findUnique({
-      where: { id: explicitClientId },
-      select: { id: true, role: true, isActive: true },
+    const client = await prisma.user.findFirst({
+      where: {
+        id: explicitClientId,
+        role: "CLIENT",
+        isActive: true,
+        companyMemberships: {
+          some: { companyId, isActive: true },
+        },
+      } as any,
+      select: { id: true },
     });
 
-    if (client && client.role === "CLIENT" && client.isActive !== false) {
-      return client.id;
-    }
+    if (client?.id) return client.id;
   }
 
   const normalized = normalizePhone(phoneDigits);
 
-  // 1) tenta achar USUÁRIO CLIENT pelo telefone normalizado
+  // 1) tenta achar CLIENT pelo telefone dentro da company
   if (normalized) {
     const clientByPhone = await prisma.user.findFirst({
-      where: { phone: normalized, role: "CLIENT" },
+      where: {
+        phone: normalized,
+        role: "CLIENT",
+        companyMemberships: {
+          some: { companyId, isActive: true },
+        },
+      } as any,
       select: { id: true },
     });
 
-    if (clientByPhone) return clientByPhone.id;
+    if (clientByPhone?.id) return clientByPhone.id;
   }
 
-  // 2) sessão (SÓ CLIENT)
+  // 2) sessão (SÓ CLIENT) + precisa pertencer à company
   try {
     const session = await getServerSession(nextAuthOptions);
     const userId = (session?.user as any)?.id as string | undefined;
     const role = (session?.user as any)?.role as string | undefined;
 
-    if (userId && role === "CLIENT") return userId;
+    if (userId && role === "CLIENT") {
+      const ok = await prisma.companyMember.findFirst({
+        where: { userId, companyId, isActive: true } as any,
+        select: { id: true },
+      });
+
+      if (ok?.id) return userId;
+    }
   } catch (error) {
     console.error(
       "Erro ao obter sessão do NextAuth em getClientIdForAppointment:",
@@ -487,8 +725,8 @@ async function getClientIdForAppointment(
     );
   }
 
-  // 3) fallback
-  return getDefaultClientId();
+  // 3) fallback por company
+  return getDefaultClientId(companyId);
 }
 
 /* ---------------------------------------------------------
@@ -519,11 +757,31 @@ async function withAppointmentMutation<T>(
 
 /* ---------------------------------------------------------
  * ✅ Concluir atendimento (ADMIN/BARBER)
- * ✅ AGORA: grava auditoria (concludedByUserId / concludedByBarberId)
+ * ✅ tenant-safe: appointment.companyId
+ * ✅ auditoria
+ * ✅ NÍVEL DO CLIENTE: atualiza on-demand após concluir
+ *
+ * 🔥 FIX: transação única + OrderItem com companyId (compat)
+ * - evita ficar DONE sem criar pedido
  * ---------------------------------------------------------*/
 const concludeAppointmentSchema = z.object({
   concludedByRole: z.enum(["ADMIN", "BARBER"]).optional(),
 });
+
+// ✅ compat: OrderItem pode ou não ter companyId no schema
+async function createOrderItemCompat(
+  tx: any,
+  data: Record<string, any>,
+  companyId: string,
+) {
+  try {
+    return await tx.orderItem.create({
+      data: { ...data, companyId },
+    });
+  } catch {
+    return await tx.orderItem.create({ data });
+  }
+}
 
 export async function concludeAppointment(
   appointmentId: string,
@@ -551,6 +809,12 @@ export async function concludeAppointment(
     return { error: "Sem permissão para concluir este atendimento" };
   }
 
+  const companyId = await resolveCompanyIdForActorOrThrow({
+    actorRole: auth.role,
+    actorUserId: auth.userId,
+    actorEmail: auth.email,
+  });
+
   const concludedByRole: RoleForAction =
     (parsed.data.concludedByRole as RoleForAction | undefined) ?? auth.role;
 
@@ -560,6 +824,7 @@ export async function concludeAppointment(
     actorRole: auth.role,
     actorUserId: auth.userId,
     actorEmail: auth.email,
+    companyId, // ✅ evita barber de outra empresa
   });
 
   console.log(
@@ -567,18 +832,18 @@ export async function concludeAppointment(
     concludedByRole,
     "appointmentId:",
     appointmentId,
+    "companyId:",
+    companyId,
     "actorUserId:",
     actorUserId,
     "actorBarberId:",
     actorBarberId,
   );
 
-  const existing = await prisma.appointment.findUnique({
-    where: { id: appointmentId },
-    select: {
-      id: true,
-      status: true,
-    },
+  const existing = await getAppointmentInCompanyOrThrow({
+    appointmentId,
+    companyId,
+    select: { id: true, status: true },
   });
 
   if (!existing) return { error: "Agendamento não encontrado" };
@@ -591,37 +856,50 @@ export async function concludeAppointment(
   }
 
   return withAppointmentMutation(async () => {
-    const updateData: Record<string, any> = {
-      status: "DONE",
-      concludedByRole,
+    // 🔥 tudo em UMA transação: se falhar pedido/item, não fica DONE
+    const apptAfter = await prisma.$transaction(async (tx) => {
+      const updateData: Record<string, any> = {
+        status: "DONE",
+        concludedByRole,
 
-      ...(auth.role === "ADMIN" && actorUserId
-        ? { concludedByUserId: actorUserId }
-        : {}),
-      ...(auth.role === "BARBER" && actorBarberId
-        ? { concludedByBarberId: actorBarberId }
-        : {}),
-    };
+        ...(auth.role === "ADMIN" && actorUserId
+          ? { concludedByUserId: actorUserId }
+          : {}),
+        ...(auth.role === "BARBER" && actorBarberId
+          ? { concludedByBarberId: actorBarberId }
+          : {}),
+      };
 
-    const appt = await prisma.appointment.update({
-      where: { id: appointmentId },
-      data: updateData as any,
-      select: {
-        id: true,
-        unitId: true,
-        clientId: true,
-        barberId: true,
-        serviceId: true,
-        servicePriceAtTheTime: true,
-      },
-    });
+      const upd = await tx.appointment.updateMany({
+        where: { id: appointmentId, companyId } as any,
+        data: updateData as any,
+      });
 
-    await prisma.$transaction(async (tx) => {
-      if (!appt.clientId) throw new Error("Appointment sem clientId");
-      if (!appt.serviceId) throw new Error("Appointment sem serviceId");
+      if ((upd as any).count !== 1) {
+        throw new Error("Agendamento não encontrado");
+      }
 
+      const appt = await tx.appointment.findFirst({
+        where: { id: appointmentId, companyId } as any,
+        select: {
+          id: true,
+          companyId: true,
+          unitId: true,
+          clientId: true,
+          barberId: true,
+          serviceId: true,
+          servicePriceAtTheTime: true,
+        } as any,
+      });
+
+      if (!appt) throw new Error("Agendamento não encontrado");
+      if (!(appt as any).clientId) throw new Error("Appointment sem clientId");
+      if (!(appt as any).serviceId)
+        throw new Error("Appointment sem serviceId");
+
+      // cria/atualiza pedido no checkout
       let order = await tx.order.findFirst({
-        where: { appointmentId: appt.id },
+        where: { appointmentId: (appt as any).id, companyId } as any,
         select: { id: true },
       });
 
@@ -629,60 +907,83 @@ export async function concludeAppointment(
         order = await tx.order.create({
           data: {
             status: "PENDING",
-            unitId: appt.unitId,
-            clientId: appt.clientId,
-            barberId: appt.barberId,
-            appointmentId: appt.id,
+            companyId,
+            unitId: (appt as any).unitId,
+            clientId: (appt as any).clientId,
+            barberId: (appt as any).barberId,
+            appointmentId: (appt as any).id,
             totalAmount: new Prisma.Decimal(0),
           } as any,
           select: { id: true },
         });
       } else {
         await tx.order.update({
-          where: { id: order.id },
+          where: { id: order.id } as any,
           data: {
             status: "PENDING",
-            unitId: appt.unitId,
-            clientId: appt.clientId,
-            barberId: appt.barberId,
+            companyId,
+            unitId: (appt as any).unitId,
+            clientId: (appt as any).clientId,
+            barberId: (appt as any).barberId,
           } as any,
         });
       }
 
-      const unitPrice = appt.servicePriceAtTheTime ?? new Prisma.Decimal(0);
+      const unitPrice = ((appt as any).servicePriceAtTheTime ??
+        new Prisma.Decimal(0)) as Prisma.Decimal;
 
       const existingItem = await tx.orderItem.findFirst({
         where: {
           orderId: order.id,
-          serviceId: appt.serviceId,
-        },
+          serviceId: (appt as any).serviceId,
+          ...(companyId ? { companyId } : {}),
+        } as any,
         select: { id: true },
       });
 
       if (!existingItem) {
-        await tx.orderItem.create({
-          data: {
+        await createOrderItemCompat(
+          tx,
+          {
             orderId: order.id,
-            serviceId: appt.serviceId,
+            serviceId: (appt as any).serviceId,
             quantity: 1,
             unitPrice,
             totalPrice: unitPrice,
-          } as any,
-        });
+          },
+          companyId,
+        );
       }
 
       const agg = await tx.orderItem.aggregate({
-        where: { orderId: order.id },
+        where: {
+          orderId: order.id,
+          ...(companyId ? { companyId } : {}),
+        } as any,
         _sum: { totalPrice: true },
       });
 
       await tx.order.update({
-        where: { id: order.id },
+        where: { id: order.id } as any,
         data: {
           totalAmount: agg._sum.totalPrice ?? new Prisma.Decimal(0),
         } as any,
       });
+
+      return appt;
     });
+
+    // ✅ NÍVEL DO CLIENTE (on-demand) fora da transação
+    try {
+      if ((apptAfter as any).clientId && (apptAfter as any).unitId) {
+        await ensureCustomerLevelUpToDate({
+          userId: (apptAfter as any).clientId,
+          unitId: (apptAfter as any).unitId,
+        });
+      }
+    } catch (e) {
+      console.error("[concludeAppointment] level engine error:", e);
+    }
 
     return { ok: true };
   }, "Falha ao concluir o atendimento");
@@ -690,8 +991,9 @@ export async function concludeAppointment(
 
 /* ---------------------------------------------------------
  * ✅ CANCELAR AGENDAMENTO (ADMIN/BARBER)
- * ✅ AGORA: cria BarberCancellationFee quando applyFee=true e taxa > 0
- * ✅ AGORA: grava auditoria (cancelledByUserId / cancelledByBarberId)
+ * ✅ tenant-safe
+ * ✅ taxa
+ * ✅ auditoria
  * ---------------------------------------------------------*/
 const cancelAppointmentSchema = z.object({
   applyFee: z.boolean().optional(),
@@ -715,6 +1017,12 @@ export async function cancelAppointment(
     return { error: "Sem permissão para cancelar este agendamento" };
   }
 
+  const companyId = await resolveCompanyIdForActorOrThrow({
+    actorRole: auth.role,
+    actorUserId: auth.userId,
+    actorEmail: auth.email,
+  });
+
   const cancelledByRole: RoleForAction =
     (parsed.data.cancelledByRole as RoleForAction | undefined) ?? auth.role;
 
@@ -726,10 +1034,12 @@ export async function cancelAppointment(
     actorRole: auth.role,
     actorUserId: auth.userId,
     actorEmail: auth.email,
+    companyId, // ✅ evita barber de outra empresa
   });
 
-  const existing = await prisma.appointment.findUnique({
-    where: { id: appointmentId },
+  const existing = await getAppointmentInCompanyOrThrow({
+    appointmentId,
+    companyId,
     select: {
       id: true,
       status: true,
@@ -738,10 +1048,9 @@ export async function cancelAppointment(
       scheduleAt: true,
       servicePriceAtTheTime: true,
       serviceId: true,
-    },
+    } as any,
   });
 
-  if (!existing) return { error: "Agendamento não encontrado" };
   if ((existing as any).status === "CANCELED") {
     return { error: "Agendamento já está cancelado" };
   }
@@ -750,7 +1059,7 @@ export async function cancelAppointment(
   }
 
   const hasOrder = await prisma.order.findFirst({
-    where: { appointmentId },
+    where: { appointmentId, companyId } as any,
     select: { id: true },
   });
 
@@ -761,14 +1070,14 @@ export async function cancelAppointment(
   let cancelFeePercentage: number | null = null;
   let cancelLimitHours: number | null = null;
 
-  if (existing.serviceId) {
-    const svc = await prisma.service.findUnique({
-      where: { id: existing.serviceId },
+  if ((existing as any).serviceId) {
+    const svc = await prisma.service.findFirst({
+      where: { id: (existing as any).serviceId, companyId } as any,
       select: { cancelFeePercentage: true, cancelLimitHours: true },
     });
 
-    if (svc?.cancelFeePercentage != null) {
-      const pctAny = svc.cancelFeePercentage as any;
+    if ((svc as any)?.cancelFeePercentage != null) {
+      const pctAny = (svc as any).cancelFeePercentage;
       cancelFeePercentage =
         typeof pctAny === "number"
           ? pctAny
@@ -777,12 +1086,13 @@ export async function cancelAppointment(
             : Number(pctAny);
     }
 
-    if (svc?.cancelLimitHours != null) {
-      cancelLimitHours = svc.cancelLimitHours;
+    if ((svc as any)?.cancelLimitHours != null) {
+      cancelLimitHours = (svc as any).cancelLimitHours;
     }
   }
 
-  const price = existing.servicePriceAtTheTime as Prisma.Decimal | null;
+  const price = (existing as any)
+    .servicePriceAtTheTime as Prisma.Decimal | null;
 
   let cancelFeeValue: Prisma.Decimal | null = null;
   let cancelFeeApplied = false;
@@ -796,7 +1106,7 @@ export async function cancelAppointment(
     cancelLimitHours > 0
   ) {
     const now = new Date().getTime();
-    const scheduleTime = new Date(existing.scheduleAt).getTime();
+    const scheduleTime = new Date((existing as any).scheduleAt).getTime();
     const diffHours = (scheduleTime - now) / (1000 * 60 * 60);
 
     const insideWindow = diffHours < cancelLimitHours;
@@ -811,8 +1121,8 @@ export async function cancelAppointment(
 
   return withAppointmentMutation(async () => {
     await prisma.$transaction(async (tx) => {
-      await tx.appointment.update({
-        where: { id: appointmentId },
+      const upd = await tx.appointment.updateMany({
+        where: { id: appointmentId, companyId } as any,
         data: {
           status: "CANCELED",
           cancelledByRole,
@@ -828,16 +1138,21 @@ export async function cancelAppointment(
         } as any,
       });
 
-      if (cancelFeeApplied && cancelFeeValue && existing.barberId) {
+      if ((upd as any).count !== 1) {
+        throw new Error("Agendamento não encontrado");
+      }
+
+      if (cancelFeeApplied && cancelFeeValue && (existing as any).barberId) {
         await tx.barberCancellationFee.upsert({
-          where: { appointmentId },
-          update: { amount: cancelFeeValue },
+          where: { appointmentId } as any,
+          update: { amount: cancelFeeValue } as any,
           create: {
             appointmentId,
-            barberId: existing.barberId,
-            unitId: existing.unitId,
+            barberId: (existing as any).barberId,
+            unitId: (existing as any).unitId,
+            companyId,
             amount: cancelFeeValue,
-          },
+          } as any,
         });
       }
     });
@@ -847,12 +1162,24 @@ export async function cancelAppointment(
 }
 
 /* ---------------------------------------------------------
- * CREATE
+ * CREATE (tenant-safe)
  * ---------------------------------------------------------*/
 export async function createAppointment(data: AppointmentData) {
   const parsed = appointmentSchema.parse(data);
 
+  const auth = await getRoleFromPainelSession();
+  if (auth.role !== "ADMIN" && auth.role !== "BARBER") {
+    return { error: "Sem permissão para criar agendamento" };
+  }
+
+  const companyId = await resolveCompanyIdForActorOrThrow({
+    actorRole: auth.role,
+    actorUserId: auth.userId,
+    actorEmail: auth.email,
+  });
+
   console.log("[createAppointment] parsed:", {
+    companyId,
     unitId: parsed.unitId ?? null,
     serviceId: parsed.serviceId,
     barberId: parsed.barberId,
@@ -867,8 +1194,8 @@ export async function createAppointment(data: AppointmentData) {
   const pastError = validateNotInPast(scheduleAt);
   if (pastError) return { error: pastError };
 
-  const service = await prisma.service.findUnique({
-    where: { id: serviceId },
+  const service = await prisma.service.findFirst({
+    where: { id: serviceId, companyId } as any,
     select: {
       id: true,
       price: true,
@@ -879,60 +1206,66 @@ export async function createAppointment(data: AppointmentData) {
   });
 
   console.log("[createAppointment] service:", {
-    id: service?.id ?? null,
-    isActive: service?.isActive ?? null,
-    durationMinutes: service?.durationMinutes ?? null,
+    id: (service as any)?.id ?? null,
+    isActive: (service as any)?.isActive ?? null,
+    durationMinutes: (service as any)?.durationMinutes ?? null,
   });
 
   if (!service) return { error: "Serviço não encontrado" };
-  if (!service.isActive) return { error: "Serviço inativo" };
+  if (!(service as any).isActive) return { error: "Serviço inativo" };
 
   const unitId = parsed.unitId;
   if (!unitId) return { error: "Unidade é obrigatória para este agendamento" };
 
-  const unit = await prisma.unit.findUnique({
-    where: { id: unitId },
-    select: { id: true, isActive: true },
-  });
+  await ensureUnitBelongsToCompanyOrThrow(unitId, companyId);
 
-  if (!unit) return { error: "Unidade não encontrada" };
-  if (unit.isActive === false) return { error: "Unidade inativa" };
-
-  const unitHoursError = await validateWithinUnitHours(
+  const unitHoursError = await validateWithinUnitHours({
     unitId,
+    companyId,
     scheduleAt,
-    service.durationMinutes ?? 0,
-  );
+    durationMinutes: (service as any).durationMinutes ?? 0,
+  });
   if (unitHoursError) return { error: unitHoursError };
 
   console.log("[createAppointment] ✅ unit ok", {
+    companyId,
     unitId,
-    serviceId: service.id,
+    serviceId: (service as any).id,
     barberId,
   });
 
-  const linkError = await ensureBarberLinkedToUnit(barberId, unitId);
+  const linkError = await ensureBarberLinkedToUnit({
+    barberId,
+    unitId,
+    companyId,
+  });
   if (linkError) return { error: linkError };
 
-  const canDoError = await ensureBarberCanDoService(barberId, serviceId);
+  const canDoError = await ensureBarberCanDoService({
+    barberId,
+    serviceId,
+    companyId,
+  });
   if (canDoError) return { error: canDoError };
 
-  const availabilityError = await ensureAvailability(
+  const availabilityError = await ensureAvailability({
     scheduleAt,
     barberId,
-    service.durationMinutes,
-  );
+    durationMinutes: (service as any).durationMinutes ?? 0,
+    companyId,
+  });
   if (availabilityError) return { error: availabilityError };
 
-  const clientId = await getClientIdForAppointment(
-    parsed.phone,
-    parsed.clientId,
-  );
+  const clientId = await getClientIdForAppointment({
+    phoneDigits: parsed.phone,
+    explicitClientId: parsed.clientId,
+    companyId,
+  });
 
-  let servicePriceAtTheTime = service.price;
-  let barberPercentageAtTheTime = service.barberPercentage;
-  let barberEarningValue = service.price
-    .mul(service.barberPercentage)
+  let servicePriceAtTheTime = (service as any).price as any;
+  let barberPercentageAtTheTime = (service as any).barberPercentage as any;
+  let barberEarningValue = (service as any).price
+    .mul((service as any).barberPercentage)
     .div(new Prisma.Decimal(100));
 
   let clientPlanId: string | null = null;
@@ -940,41 +1273,44 @@ export async function createAppointment(data: AppointmentData) {
   if (clientId) {
     const clientPlan = await prisma.clientPlan.findFirst({
       where: {
+        companyId,
         clientId,
         status: "ACTIVE",
         startDate: { lte: scheduleAt },
         endDate: { gte: scheduleAt },
-      },
+      } as any,
       include: { plan: true },
     });
 
-    if (clientPlan && clientPlan.plan.isActive) {
-      const totalBookings = clientPlan.plan.totalBookings;
+    if (clientPlan && (clientPlan as any).plan?.isActive) {
+      const totalBookings = (clientPlan as any).plan.totalBookings;
 
-      if (clientPlan.usedBookings < totalBookings) {
+      if ((clientPlan as any).usedBookings < totalBookings) {
         const appointmentsUsingPlanCount = await prisma.appointment.count({
           where: {
-            clientPlanId: clientPlan.id,
+            companyId,
+            clientPlanId: (clientPlan as any).id,
             status: { not: "CANCELED" },
-          },
+          } as any,
         });
 
         if (appointmentsUsingPlanCount < totalBookings) {
           const planHasService = await prisma.planService.findFirst({
             where: {
-              planId: clientPlan.planId,
+              planId: (clientPlan as any).planId,
               serviceId,
-            },
+              plan: { companyId } as any,
+            } as any,
           });
 
           if (planHasService) {
-            clientPlanId = clientPlan.id;
+            clientPlanId = (clientPlan as any).id;
 
             const commissionPercentDecimal = new Prisma.Decimal(
-              clientPlan.plan.commissionPercent,
+              (clientPlan as any).plan.commissionPercent,
             );
 
-            const totalCommissionValue = clientPlan.plan.price
+            const totalCommissionValue = (clientPlan as any).plan.price
               .mul(commissionPercentDecimal)
               .div(new Prisma.Decimal(100));
 
@@ -982,9 +1318,9 @@ export async function createAppointment(data: AppointmentData) {
               new Prisma.Decimal(totalBookings),
             );
 
-            servicePriceAtTheTime = clientPlan.plan.price;
-            barberPercentageAtTheTime = commissionPercentDecimal;
-            barberEarningValue = perBooking;
+            servicePriceAtTheTime = (clientPlan as any).plan.price;
+            barberPercentageAtTheTime = commissionPercentDecimal as any;
+            barberEarningValue = perBooking as any;
           }
         }
       }
@@ -994,6 +1330,8 @@ export async function createAppointment(data: AppointmentData) {
   return withAppointmentMutation(async () => {
     await prisma.appointment.create({
       data: {
+        companyId,
+
         clientName: parsed.clientName,
         phone: parsed.phone,
         description: parsed.description,
@@ -1009,23 +1347,42 @@ export async function createAppointment(data: AppointmentData) {
         status: "PENDING",
 
         unitId,
-      },
+      } as any,
     });
+
+    // garante vínculo do cliente com a company (quando for “novo” via telefone, etc)
+    if (clientId) {
+      await ensureClientMembership({ userId: clientId, companyId });
+    }
+
+    return { ok: true };
   }, "Falha ao criar o agendamento");
 }
 
 /* ---------------------------------------------------------
- * UPDATE
+ * UPDATE (tenant-safe)
  * ---------------------------------------------------------*/
 export async function updateAppointment(id: string, data: AppointmentData) {
   const parsed = appointmentSchema.parse(data);
   const { scheduleAt, barberId, serviceId } = parsed;
 
+  const auth = await getRoleFromPainelSession();
+  if (auth.role !== "ADMIN" && auth.role !== "BARBER") {
+    return { error: "Sem permissão para atualizar agendamento" };
+  }
+
+  const companyId = await resolveCompanyIdForActorOrThrow({
+    actorRole: auth.role,
+    actorUserId: auth.userId,
+    actorEmail: auth.email,
+  });
+
   const pastError = validateNotInPast(scheduleAt);
   if (pastError) return { error: pastError };
 
-  const existing = await prisma.appointment.findUnique({
-    where: { id },
+  const existing = await getAppointmentInCompanyOrThrow({
+    appointmentId: id,
+    companyId,
     select: {
       id: true,
       unitId: true,
@@ -1034,19 +1391,17 @@ export async function updateAppointment(id: string, data: AppointmentData) {
       servicePriceAtTheTime: true,
       barberPercentageAtTheTime: true,
       barberEarningValue: true,
-    },
+    } as any,
   });
 
-  if (!existing) return { error: "Agendamento não encontrado" };
+  const appointmentUsesPlan = (existing as any).clientPlanId !== null;
 
-  const appointmentUsesPlan = existing.clientPlanId !== null;
+  let servicePriceAtTheTime = (existing as any).servicePriceAtTheTime;
+  let barberPercentageAtTheTime = (existing as any).barberPercentageAtTheTime;
+  let barberEarningValue = (existing as any).barberEarningValue;
 
-  let servicePriceAtTheTime = existing.servicePriceAtTheTime;
-  let barberPercentageAtTheTime = existing.barberPercentageAtTheTime;
-  let barberEarningValue = existing.barberEarningValue;
-
-  const targetService = await prisma.service.findUnique({
-    where: { id: serviceId },
+  const targetService = await prisma.service.findFirst({
+    where: { id: serviceId, companyId } as any,
     select: {
       id: true,
       price: true,
@@ -1057,61 +1412,66 @@ export async function updateAppointment(id: string, data: AppointmentData) {
   });
 
   if (!targetService) return { error: "Serviço não encontrado" };
-  if (!targetService.isActive) return { error: "Serviço inativo" };
+  if (!(targetService as any).isActive) return { error: "Serviço inativo" };
 
   if (
     !appointmentUsesPlan &&
-    (!existing.serviceId || existing.serviceId !== serviceId)
+    (!(existing as any).serviceId || (existing as any).serviceId !== serviceId)
   ) {
-    servicePriceAtTheTime = targetService.price;
-    barberPercentageAtTheTime = targetService.barberPercentage;
-    barberEarningValue = targetService.price
-      .mul(targetService.barberPercentage)
+    servicePriceAtTheTime = (targetService as any).price;
+    barberPercentageAtTheTime = (targetService as any).barberPercentage;
+    barberEarningValue = (targetService as any).price
+      .mul((targetService as any).barberPercentage)
       .div(new Prisma.Decimal(100));
   }
 
-  const unitId = parsed.unitId ?? existing.unitId;
+  const unitId = parsed.unitId ?? (existing as any).unitId;
   if (!unitId) return { error: "Unidade é obrigatória para este agendamento" };
 
-  const unit = await prisma.unit.findUnique({
-    where: { id: unitId },
-    select: { id: true, isActive: true },
-  });
+  await ensureUnitBelongsToCompanyOrThrow(unitId, companyId);
 
-  if (!unit) return { error: "Unidade não encontrada" };
-  if (unit.isActive === false) return { error: "Unidade inativa" };
-
-  const unitHoursError = await validateWithinUnitHours(
+  const unitHoursError = await validateWithinUnitHours({
     unitId,
+    companyId,
     scheduleAt,
-    targetService.durationMinutes ?? 0,
-  );
+    durationMinutes: (targetService as any).durationMinutes ?? 0,
+  });
   if (unitHoursError) return { error: unitHoursError };
 
   console.log("[updateAppointment] ✅ unit ok", {
+    companyId,
     appointmentId: id,
     unitId,
-    serviceId: targetService.id,
+    serviceId: (targetService as any).id,
     barberId,
   });
 
-  const linkError = await ensureBarberLinkedToUnit(barberId, unitId);
+  const linkError = await ensureBarberLinkedToUnit({
+    barberId,
+    unitId,
+    companyId,
+  });
   if (linkError) return { error: linkError };
 
-  const canDoError = await ensureBarberCanDoService(barberId, serviceId);
+  const canDoError = await ensureBarberCanDoService({
+    barberId,
+    serviceId,
+    companyId,
+  });
   if (canDoError) return { error: canDoError };
 
-  const availabilityError = await ensureAvailability(
+  const availabilityError = await ensureAvailability({
     scheduleAt,
     barberId,
-    targetService.durationMinutes,
-    id,
-  );
+    durationMinutes: (targetService as any).durationMinutes ?? 0,
+    companyId,
+    excludeId: id,
+  });
   if (availabilityError) return { error: availabilityError };
 
   return withAppointmentMutation(async () => {
-    await prisma.appointment.update({
-      where: { id },
+    const upd = await prisma.appointment.updateMany({
+      where: { id, companyId } as any,
       data: {
         clientName: parsed.clientName,
         phone: parsed.phone,
@@ -1125,36 +1485,75 @@ export async function updateAppointment(id: string, data: AppointmentData) {
         barberEarningValue,
 
         unitId,
-      },
+      } as any,
     });
+
+    if ((upd as any).count !== 1) {
+      return { error: "Agendamento não encontrado" };
+    }
+
+    return { ok: true };
   }, "Falha ao atualizar o agendamento");
 }
 
 /* ---------------------------------------------------------
- * DELETE
+ * DELETE (tenant-safe)
  * ---------------------------------------------------------*/
 export async function deleteAppointment(id: string) {
+  const auth = await getRoleFromPainelSession();
+  if (auth.role !== "ADMIN" && auth.role !== "BARBER") {
+    return { error: "Sem permissão para excluir agendamento" };
+  }
+
+  const companyId = await resolveCompanyIdForActorOrThrow({
+    actorRole: auth.role,
+    actorUserId: auth.userId,
+    actorEmail: auth.email,
+  });
+
   return withAppointmentMutation(async () => {
-    await prisma.appointment.delete({
-      where: { id },
+    const del = await prisma.appointment.deleteMany({
+      where: { id, companyId } as any,
     });
+
+    if ((del as any).count !== 1) {
+      return { error: "Agendamento não encontrado" };
+    }
+
+    return { ok: true };
   }, "Falha ao excluir o agendamento");
 }
 
 /* ---------------------------------------------------------
  * DISPONIBILIDADE DO BARBEIRO
+ * (tenant-safe: valida unitId quando vier)
  * ---------------------------------------------------------*/
 export async function getAvailabilityWindowsForBarberOnDateAction(
   barberId: string,
   dateISO: string,
   unitId?: string,
 ) {
+  const auth = await getRoleFromPainelSession();
+  if (auth.role !== "ADMIN" && auth.role !== "BARBER") {
+    throw new Error("Sem permissão");
+  }
+
+  const companyId = await resolveCompanyIdForActorOrThrow({
+    actorRole: auth.role,
+    actorUserId: auth.userId,
+    actorEmail: auth.email,
+  });
+
   const date = new Date(dateISO);
 
   if (Number.isNaN(date.getTime())) {
     throw new Error(
       "Data inválida recebida em getAvailabilityWindowsForBarberOnDateAction",
     );
+  }
+
+  if (unitId) {
+    await ensureUnitBelongsToCompanyOrThrow(unitId, companyId);
   }
 
   const windows = await getAvailabilityWindowsForBarberOnDate(barberId, date, {
@@ -1167,17 +1566,33 @@ export async function getAvailabilityWindowsForBarberOnDateAction(
 /* ---------------------------------------------------------
  * BARBEIROS DISPONÍVEIS PARA UMA DATA (compat)
  * ✅ reforça filtro por BarberUnit quando unitId vier
+ * ✅ tenant-safe: valida unitId e filtra por unit.companyId
  * ---------------------------------------------------------*/
 export async function getAvailableBarbersForDateAction(
   dateISO: string,
   unitId?: string,
 ) {
+  const auth = await getRoleFromPainelSession();
+  if (auth.role !== "ADMIN" && auth.role !== "BARBER") {
+    throw new Error("Sem permissão");
+  }
+
+  const companyId = await resolveCompanyIdForActorOrThrow({
+    actorRole: auth.role,
+    actorUserId: auth.userId,
+    actorEmail: auth.email,
+  });
+
   const date = new Date(dateISO);
 
   if (Number.isNaN(date.getTime())) {
     throw new Error(
       "Data inválida recebida em getAvailableBarbersForDateAction",
     );
+  }
+
+  if (unitId) {
+    await ensureUnitBelongsToCompanyOrThrow(unitId, companyId);
   }
 
   const baseBarbers = await getAvailableBarbersOnDate(date, { unitId });
@@ -1196,11 +1611,20 @@ export async function getAvailableBarbersForDateAction(
               some: {
                 unitId,
                 isActive: true,
+                unit: { companyId } as any,
               },
             },
           }
-        : {}),
-    },
+        : {
+            // sem unitId: pelo menos garante que o barbeiro tem algum vínculo ativo em units da company
+            units: {
+              some: {
+                isActive: true,
+                unit: { companyId } as any,
+              },
+            },
+          }),
+    } as any,
     include: {
       services: {
         select: { serviceId: true },
@@ -1211,7 +1635,10 @@ export async function getAvailableBarbersForDateAction(
   const allowedIds = new Set(prismaBarbers.map((b) => b.id));
 
   const servicesMap = new Map<string, string[]>(
-    prismaBarbers.map((b) => [b.id, b.services.map((s) => s.serviceId)]),
+    prismaBarbers.map((b) => [
+      b.id,
+      (b as any).services.map((s: any) => s.serviceId),
+    ]),
   );
 
   return baseBarbers
@@ -1229,12 +1656,24 @@ export async function getAvailableBarbersForDateAction(
 
 /* ---------------------------------------------------------
  * ✅ NOVO: BARBEIROS DISPONÍVEIS PARA UMA DATA + SERVIÇO + UNIDADE
+ * ✅ tenant-safe: unit.companyId + service.companyId
  * ---------------------------------------------------------*/
 export async function getAvailableBarbersForDateAndServiceAction(
   dateISO: string,
   unitId: string,
   serviceId: string,
 ) {
+  const auth = await getRoleFromPainelSession();
+  if (auth.role !== "ADMIN" && auth.role !== "BARBER") {
+    throw new Error("Sem permissão");
+  }
+
+  const companyId = await resolveCompanyIdForActorOrThrow({
+    actorRole: auth.role,
+    actorUserId: auth.userId,
+    actorEmail: auth.email,
+  });
+
   const date = new Date(dateISO);
 
   if (Number.isNaN(date.getTime())) {
@@ -1246,6 +1685,15 @@ export async function getAvailableBarbersForDateAndServiceAction(
   if (!unitId) return [];
   if (!serviceId) return [];
 
+  await ensureUnitBelongsToCompanyOrThrow(unitId, companyId);
+
+  // garante service na company (se service tiver companyId)
+  const svcOk = await prisma.service.findFirst({
+    where: { id: serviceId, companyId } as any,
+    select: { id: true },
+  });
+  if (!svcOk) return [];
+
   const candidates = await prisma.barber.findMany({
     where: {
       isActive: true,
@@ -1253,6 +1701,7 @@ export async function getAvailableBarbersForDateAndServiceAction(
         some: {
           unitId,
           isActive: true,
+          unit: { companyId } as any,
         },
       },
       services: {
@@ -1260,7 +1709,7 @@ export async function getAvailableBarbersForDateAndServiceAction(
           serviceId,
         },
       },
-    },
+    } as any,
     include: {
       services: { select: { serviceId: true } },
     },
@@ -1269,7 +1718,7 @@ export async function getAvailableBarbersForDateAndServiceAction(
 
   if (candidates.length === 0) return [];
 
-  const available = [];
+  const available: any[] = [];
   for (const barber of candidates) {
     const windows = await getAvailabilityWindowsForBarberOnDate(
       barber.id,
@@ -1291,6 +1740,299 @@ export async function getAvailableBarbersForDateAndServiceAction(
     phone: b.phone ?? "",
     isActive: b.isActive,
     role: "BARBER" as const,
-    serviceIds: b.services.map((s) => s.serviceId),
+    serviceIds: (b as any).services.map((s: any) => s.serviceId),
   }));
+}
+
+/* ---------------------------------------------------------
+ * ✅ NOVO: BUSCA DE CLIENTES (ADMIN/APPOINTMENTS)
+ * - tenant-safe (companyId obrigatório)
+ * - filtra por membership na company
+ * - busca por nome/email/telefone (normalizado)
+ * - retorna no formato do AppointmentForm
+ * ---------------------------------------------------------*/
+const searchClientsSchema = z.object({
+  q: z.string().optional(),
+  take: z.coerce.number().min(1).max(50).optional(),
+});
+
+export async function searchClientsForAdminAppointmentsAction(input?: {
+  q?: string;
+  take?: number;
+}): Promise<Array<{ id: string; name: string; phone: string }>> {
+  const parsed = searchClientsSchema.safeParse(input ?? {});
+  if (!parsed.success) {
+    console.log("[searchClients] ❌ invalid input", input);
+    return [];
+  }
+
+  const auth = await getRoleFromPainelSession();
+  if (auth.role !== "ADMIN" && auth.role !== "BARBER") {
+    console.log("[searchClients] ❌ no permission", {
+      role: auth.role,
+      source: auth.source,
+    });
+    return [];
+  }
+
+  const companyId = await resolveCompanyIdForActorOrThrow({
+    actorRole: auth.role,
+    actorUserId: auth.userId,
+    actorEmail: auth.email,
+  });
+
+  const qRaw = String(parsed.data.q ?? "").trim();
+  const take = parsed.data.take ?? 20;
+
+  const qLower = qRaw.toLowerCase();
+  const qDigits = normalizePhone(qRaw);
+
+  const anonEmail = `anon+${companyId}@barbearia.local`;
+
+  console.log("[searchClients] ▶️ start", {
+    source: auth.source,
+    role: auth.role,
+    userId: auth.userId,
+    companyId,
+    qRaw,
+    take,
+    qDigits,
+  });
+
+  // 🔎 Debug específico pro caso "jose"
+  if (qLower.includes("jose")) {
+    const dbg = await prisma.user.findMany({
+      where: {
+        role: "CLIENT",
+        isActive: true,
+        OR: [
+          { name: { contains: "jose", mode: "insensitive" } },
+          { name: { contains: "José", mode: "insensitive" } },
+        ],
+      } as any,
+      select: { id: true, name: true, email: true, phone: true } as any,
+      take: 20,
+    });
+
+    console.log(
+      "[searchClients] 🧪 debug users(name contains jose) (no tenant filter)",
+      dbg,
+    );
+
+    const dbg2 = await prisma.user.findMany({
+      where: {
+        role: "CLIENT",
+        isActive: true,
+        companyMemberships: { some: { companyId, isActive: true } },
+        OR: [
+          { name: { contains: "jose", mode: "insensitive" } },
+          { name: { contains: "José", mode: "insensitive" } },
+        ],
+      } as any,
+      select: { id: true, name: true, email: true, phone: true } as any,
+      take: 20,
+    });
+
+    console.log(
+      "[searchClients] 🧪 debug users(name contains jose) (WITH membership filter)",
+      dbg2,
+    );
+  }
+
+  // --------------------------------------------
+  // 1) se não tem query: devolve “recentes” via appointments
+  // --------------------------------------------
+  if (!qRaw) {
+    const recent = await prisma.appointment.findMany({
+      where: { companyId } as any,
+      orderBy: { createdAt: "desc" as any },
+      take: Math.min(50, take * 3),
+      select: {
+        clientId: true,
+        clientName: true,
+        phone: true,
+      } as any,
+    });
+
+    console.log("[searchClients] recent appointments:", recent.length);
+
+    const ids = Array.from(
+      new Set(recent.map((r: any) => r.clientId).filter(Boolean)),
+    ) as string[];
+
+    const users = ids.length
+      ? await prisma.user.findMany({
+          where: {
+            id: { in: ids },
+            role: "CLIENT",
+            isActive: true,
+            email: { not: anonEmail },
+            companyMemberships: { some: { companyId, isActive: true } },
+          } as any,
+          select: { id: true, name: true, phone: true } as any,
+        })
+      : [];
+
+    console.log("[searchClients] recent users resolved:", users.length);
+
+    const map = new Map(users.map((u: any) => [u.id, u]));
+
+    const out: Array<{ id: string; name: string; phone: string }> = [];
+    for (const r of recent) {
+      const id = (r as any).clientId as string | null;
+      if (!id) continue;
+      if (out.some((x) => x.id === id)) continue;
+
+      const u = map.get(id);
+      out.push({
+        id,
+        name: (u?.name ?? (r as any).clientName ?? "").trim(),
+        phone: (u?.phone ?? (r as any).phone ?? "").trim(),
+      });
+
+      if (out.length >= take) break;
+    }
+
+    console.log(
+      "[searchClients] ✅ return recent:",
+      out.length,
+      out.slice(0, 5),
+    );
+    return out;
+  }
+
+  // --------------------------------------------
+  // 2) com query: busca users da company + fallback por histórico de appointments
+  // --------------------------------------------
+
+  const usersInCompany = await prisma.user.findMany({
+    where: {
+      role: "CLIENT",
+      isActive: true,
+      email: { not: anonEmail },
+      companyMemberships: { some: { companyId, isActive: true } },
+      OR: [
+        { name: { contains: qRaw, mode: "insensitive" } },
+        { email: { contains: qLower, mode: "insensitive" } },
+        ...(qDigits
+          ? [{ phone: { contains: qDigits } }, { phone: { contains: qRaw } }]
+          : []),
+      ],
+    } as any,
+    orderBy: { name: "asc" },
+    take,
+    select: { id: true, name: true, phone: true } as any,
+  });
+
+  console.log(
+    "[searchClients] usersInCompany:",
+    usersInCompany.length,
+    usersInCompany.slice(0, 5),
+  );
+
+  if (usersInCompany.length >= take) {
+    const out = usersInCompany.map((c: any) => ({
+      id: c.id,
+      name: c.name ?? "",
+      phone: c.phone ?? "",
+    }));
+    console.log(
+      "[searchClients] ✅ return usersInCompany (enough):",
+      out.length,
+    );
+    return out;
+  }
+
+  const apptHits = await prisma.appointment.findMany({
+    where: {
+      companyId,
+      status: { not: "CANCELED" },
+      OR: [
+        { clientName: { contains: qRaw, mode: "insensitive" } as any },
+        ...(qDigits
+          ? [
+              { phone: { contains: qDigits } as any },
+              { phone: { contains: qRaw } as any },
+            ]
+          : []),
+      ],
+    } as any,
+    orderBy: { scheduleAt: "desc" },
+    take: Math.min(100, take * 4),
+    select: {
+      clientId: true,
+      clientName: true,
+      phone: true,
+    } as any,
+  });
+
+  console.log(
+    "[searchClients] apptHits:",
+    apptHits.length,
+    apptHits.slice(0, 5),
+  );
+
+  const foundIds = new Set(usersInCompany.map((u: any) => u.id));
+
+  const extraIds = Array.from(
+    new Set(apptHits.map((a: any) => a.clientId).filter(Boolean)),
+  )
+    .filter((id) => !foundIds.has(id))
+    .slice(0, take);
+
+  console.log(
+    "[searchClients] extraIds:",
+    extraIds.length,
+    extraIds.slice(0, 10),
+  );
+
+  const extraUsers = extraIds.length
+    ? await prisma.user.findMany({
+        where: {
+          id: { in: extraIds },
+          role: "CLIENT",
+          isActive: true,
+          email: { not: anonEmail },
+        } as any,
+        select: { id: true, name: true, phone: true } as any,
+      })
+    : [];
+
+  console.log(
+    "[searchClients] extraUsers:",
+    extraUsers.length,
+    extraUsers.slice(0, 5),
+  );
+
+  const extraMap = new Map(extraUsers.map((u: any) => [u.id, u]));
+
+  const merged: Array<{ id: string; name: string; phone: string }> = [
+    ...usersInCompany.map((c: any) => ({
+      id: c.id,
+      name: c.name ?? "",
+      phone: c.phone ?? "",
+    })),
+  ];
+
+  for (const hit of apptHits) {
+    const id = (hit as any).clientId as string | null;
+    if (!id) continue;
+    if (merged.some((x) => x.id === id)) continue;
+
+    const u = extraMap.get(id);
+    merged.push({
+      id,
+      name: (u?.name ?? (hit as any).clientName ?? "").trim(),
+      phone: (u?.phone ?? (hit as any).phone ?? "").trim(),
+    });
+
+    if (merged.length >= take) break;
+  }
+
+  console.log(
+    "[searchClients] ✅ return merged:",
+    merged.length,
+    merged.slice(0, 10),
+  );
+  return merged;
 }

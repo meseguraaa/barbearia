@@ -370,7 +370,7 @@ export default function CartScreen() {
 
                 <Text style={S.statusText}>
                   {isCompleted
-                    ? "Quando o admin faz o checkout, ele sai da sacolinha e aparece no seu histórico."
+                    ? "Quando fizer o checkout, ele sai da sacolinha e aparece no seu histórico."
                     : "Se precisar, você pode fazer uma nova reserva na lista de produtos."}
                 </Text>
 
@@ -495,7 +495,7 @@ export default function CartScreen() {
   const onPressEntendi = useCallback(() => {
     Alert.alert(
       "Pendente de retirada",
-      "Quando você for buscar, o admin faz o checkout e esse pedido vai direto pro seu histórico.",
+      "Quando você for buscar, faremos o checkout e esse pedido vai direto pro seu histórico.",
       [{ text: "Ok", onPress: goHome }],
     );
   }, [goHome]);

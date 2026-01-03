@@ -203,7 +203,7 @@ export function BarberAppointmentCard({
         </div>
 
         {/* Ações */}
-        <div className="flex flex-wrap justify-end gap-2 md:flex-nowrap md:min-w-[260px]">
+        <div className="flex flex-wrap justify-end gap-2 md:flex-nowrap md:min-w-65">
           {isPending && (
             <>
               <AppointmentForm

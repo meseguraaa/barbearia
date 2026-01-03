@@ -12,6 +12,7 @@ import {
   deleteCustomerLevelRuleAction,
 } from "@/app/admin/client-levels/actions";
 import { CustomerLevel, CustomerLevelRuleType } from "@prisma/client";
+import { jwtVerify } from "jose";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,13 @@ export const metadata: Metadata = {
 
 const UNIT_COOKIE_NAME = "admin_unit_context";
 const UNIT_ALL_VALUE = "all";
+
+// ✅ Multi-tenant cookie
+const COMPANY_COOKIE_NAME = "admin_company_context";
+const COMPANY_COOKIE_FALLBACK = "companyId";
+
+// ✅ sessão do painel
+const SESSION_COOKIE_NAME = "painel_session";
 
 const LEVELS: CustomerLevel[] = ["BRONZE", "PRATA", "OURO", "DIAMANTE"];
 const RULE_TYPES: CustomerLevelRuleType[] = ["HAS_ACTIVE_PLAN"];
@@ -43,12 +51,92 @@ function ruleTypeLabel(type: CustomerLevelRuleType) {
   return type;
 }
 
+type PainelSessionPayload = {
+  sub: string;
+  role: "CLIENT" | "BARBER" | "ADMIN";
+  email: string;
+  name?: string | null;
+  companyId?: string;
+};
+
+function getJwtSecretKey() {
+  const secret = process.env.PAINEL_JWT_SECRET;
+  if (!secret) {
+    throw new Error("PAINEL_JWT_SECRET não definido no .env");
+  }
+  return new TextEncoder().encode(secret);
+}
+
+async function readSessionPayloadOrNull(): Promise<PainelSessionPayload | null> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return null;
+
+  try {
+    const { payload } = await jwtVerify(token, getJwtSecretKey());
+    return payload as unknown as PainelSessionPayload;
+  } catch {
+    return null;
+  }
+}
+
+async function requireCompanyId(): Promise<string> {
+  const cookieStore = await cookies();
+
+  // 1) ✅ cookie de contexto
+  const fromCookie =
+    cookieStore.get(COMPANY_COOKIE_NAME)?.value ??
+    cookieStore.get(COMPANY_COOKIE_FALLBACK)?.value ??
+    "";
+
+  const normalizedCookie = String(fromCookie).trim();
+  if (normalizedCookie) return normalizedCookie;
+
+  // 2) ✅ token do painel (se tiver companyId)
+  const session = await readSessionPayloadOrNull();
+  const fromToken = String(session?.companyId ?? "").trim();
+  if (fromToken) return fromToken;
+
+  // 3) ✅ membership fallback
+  if (!session?.sub) {
+    throw new Error(
+      "Contexto de empresa ausente (companyId). Faça login novamente e selecione uma empresa.",
+    );
+  }
+
+  const memberships = await prisma.companyMember.findMany({
+    where: {
+      userId: session.sub,
+      isActive: true,
+      company: { isActive: true },
+    },
+    select: { companyId: true },
+    orderBy: { createdAt: "asc" },
+    take: 20,
+  });
+
+  const uniqueCompanyIds = Array.from(
+    new Set(memberships.map((m) => m.companyId).filter(Boolean)),
+  );
+
+  if (uniqueCompanyIds.length === 1) {
+    return uniqueCompanyIds[0]!;
+  }
+
+  throw new Error(
+    "Contexto de empresa ausente (companyId). Selecione uma empresa antes de acessar esta tela.",
+  );
+}
+
 export default async function ClientLevelsRulesPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireAdminPermission("canAccessClients");
+  // ✅ permissão correta pra esta tela
+  await requireAdminPermission("canAccessClientLevels");
+
+  const companyId = await requireCompanyId();
 
   const resolved = await searchParams;
 
@@ -72,8 +160,9 @@ export default async function ClientLevelsRulesPage({
         ? cookieUnit
         : null;
 
+  // ✅ units sempre por companyId
   const units = await prisma.unit.findMany({
-    where: { isActive: true },
+    where: { companyId, isActive: true },
     orderBy: { name: "asc" },
     select: { id: true, name: true, isActive: true },
   });
@@ -95,15 +184,18 @@ export default async function ClientLevelsRulesPage({
   }
 
   const unit = units.find((u) => u.id === activeUnitId) ?? null;
+  if (!unit) {
+    throw new Error("Unidade inválida para a empresa atual (companyId).");
+  }
 
+  // ✅ rules sempre por companyId
   const rules = await prisma.customerLevelRule.findMany({
-    where: { unitId: activeUnitId },
+    where: { companyId, unitId: activeUnitId },
     orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
   });
 
   const hasRule = rules.length > 0;
   const isCreateMode = createParam === "1" && !hasRule;
-
   const hasOnlyOneUnit = units.length === 1;
 
   return (
@@ -127,11 +219,10 @@ export default async function ClientLevelsRulesPage({
           </div>
         </div>
 
-        {/* Seletor de unidade + botões */}
         <section className="rounded-xl border border-border-primary bg-background-tertiary p-4">
           {hasOnlyOneUnit ? (
             <div className="flex flex-col md:flex-row md:items-end gap-3">
-              <div className="w-full md:w-[360px]">
+              <div className="w-full md:w-90">
                 <label className="text-[11px] text-content-secondary">
                   Unidade
                 </label>
@@ -157,7 +248,7 @@ export default async function ClientLevelsRulesPage({
               method="GET"
               className="flex flex-col md:flex-row gap-3 md:items-end"
             >
-              <div className="w-full md:w-[360px]">
+              <div className="w-full md:w-90">
                 <label className="text-[11px] text-content-secondary">
                   Unidade
                 </label>
@@ -204,7 +295,6 @@ export default async function ClientLevelsRulesPage({
         </section>
       </header>
 
-      {/* Nova regra */}
       {isCreateMode && (
         <section className="rounded-xl border border-border-primary bg-background-tertiary p-4 space-y-3">
           <div>
@@ -269,7 +359,6 @@ export default async function ClientLevelsRulesPage({
         </section>
       )}
 
-      {/* Lista: 0 ou 1 */}
       <section className="space-y-2">
         {!hasRule && !isCreateMode ? (
           <div className="rounded-xl border border-border-primary bg-background-tertiary px-4 py-6">
@@ -357,7 +446,6 @@ export default async function ClientLevelsRulesPage({
                   </div>
                 </form>
 
-                {/* delete separado (HTML válido) */}
                 <form
                   id={deleteFormId}
                   action={deleteCustomerLevelRuleAction.bind(null, r.id)}

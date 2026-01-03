@@ -14,11 +14,16 @@ function requiredEnv(name: string): string {
   return value;
 }
 
+function getPainelCompanyIdFromEnv(): string | null {
+  const raw = process.env.PAINEL_COMPANY_ID;
+  const companyId = raw?.trim();
+  return companyId && companyId.length > 0 ? companyId : null;
+}
+
 const providers: NextAuthOptions["providers"] = [
   GoogleProvider({
     clientId: requiredEnv("GOOGLE_CLIENT_ID"),
     clientSecret: requiredEnv("GOOGLE_CLIENT_SECRET"),
-
     /**
      * ✅ Resolve "Try signing in with a different account." (OAuthAccountNotLinked)
      * Permite vincular conta por email quando já existe usuário no banco.
@@ -46,6 +51,29 @@ if (hasAppleEnv) {
   );
 }
 
+// Helpers: escolhe "empresa ativa" e o access correto
+function pickActiveCompanyId(input: {
+  companyMemberships?: Array<{ companyId: string }>;
+  adminAccesses?: Array<{ companyId: string }>;
+}): string | null {
+  return (
+    input.companyMemberships?.[0]?.companyId ??
+    input.adminAccesses?.[0]?.companyId ??
+    null
+  );
+}
+
+function pickAdminAccessForCompany(
+  adminAccesses:
+    | Array<{ companyId: string; unitId: string | null }>
+    | undefined,
+  companyId: string | null,
+): { companyId: string; unitId: string | null } | null {
+  if (!companyId) return null;
+  const found = adminAccesses?.find((a) => a.companyId === companyId) ?? null;
+  return found ? { companyId: found.companyId, unitId: found.unitId } : null;
+}
+
 export const nextAuthOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
 
@@ -66,22 +94,64 @@ export const nextAuthOptions: NextAuthOptions = {
      * e salvamos dentro do `token`.
      */
     async jwt({ token, user }) {
+      const painelCompanyId = getPainelCompanyIdFromEnv();
+
       // Quando o usuário acabou de logar, `user` vem preenchido
       if (user) {
         const dbUser = await prisma.user.findUnique({
           where: { id: (user as any).id },
           include: {
-            adminAccess: true,
+            adminAccesses: true,
+            companyMemberships: true,
           },
         });
 
         const baseUser = dbUser ?? (user as any);
 
+        // ✅ multi-tenant do painel: ENV manda quando existe
+        const pickedCompanyId = pickActiveCompanyId({
+          companyMemberships: baseUser.companyMemberships,
+          adminAccesses: baseUser.adminAccesses,
+        });
+
+        const companyId = painelCompanyId ?? pickedCompanyId;
+
+        // Se o painel está single-tenant, só aceitamos companyId que exista na lista do usuário
+        if (painelCompanyId) {
+          const hasMembership = !!baseUser.companyMemberships?.some(
+            (m: any) => String(m.companyId) === painelCompanyId,
+          );
+          const hasAccess = !!baseUser.adminAccesses?.some(
+            (a: any) => String(a.companyId) === painelCompanyId,
+          );
+
+          if (!hasMembership && !hasAccess) {
+            // deixa o login continuar (NextAuth), mas a área admin vai barrar.
+            // Ainda assim, registramos companyId como null para não vazar tenant.
+            (token as any).companyId = null;
+          } else {
+            (token as any).companyId = painelCompanyId;
+          }
+        } else {
+          (token as any).companyId = companyId;
+        }
+
+        const adminAccess = pickAdminAccessForCompany(
+          baseUser.adminAccesses,
+          (token as any).companyId ?? null,
+        );
+
         (token as any).id = baseUser.id;
         (token as any).role = baseUser.role;
         (token as any).phone = baseUser.phone ?? null;
         (token as any).isOwner = !!baseUser.isOwner;
-        (token as any).adminAccess = baseUser.adminAccess ?? null;
+
+        // ✅ compat: mantém "adminAccess" (derivado) porque várias telas usam
+        (token as any).adminAccess = adminAccess;
+
+        // ✅ também mantém a lista completa, se você quiser usar depois
+        (token as any).adminAccesses = baseUser.adminAccesses ?? [];
+        (token as any).companyMemberships = baseUser.companyMemberships ?? [];
 
         return token;
       }
@@ -91,16 +161,46 @@ export const nextAuthOptions: NextAuthOptions = {
         const dbUser = await prisma.user.findUnique({
           where: { email: token.email as string },
           include: {
-            adminAccess: true,
+            adminAccesses: true,
+            companyMemberships: true,
           },
         });
 
         if (dbUser) {
+          const pickedCompanyId = pickActiveCompanyId({
+            companyMemberships: dbUser.companyMemberships,
+            adminAccesses: dbUser.adminAccesses,
+          });
+
+          const companyId = painelCompanyId ?? pickedCompanyId;
+
+          if (painelCompanyId) {
+            const hasMembership = !!dbUser.companyMemberships?.some(
+              (m: any) => String(m.companyId) === painelCompanyId,
+            );
+            const hasAccess = !!dbUser.adminAccesses?.some(
+              (a: any) => String(a.companyId) === painelCompanyId,
+            );
+
+            (token as any).companyId =
+              hasMembership || hasAccess ? painelCompanyId : null;
+          } else {
+            (token as any).companyId = companyId;
+          }
+
+          const adminAccess = pickAdminAccessForCompany(
+            dbUser.adminAccesses,
+            (token as any).companyId ?? null,
+          );
+
           (token as any).id = dbUser.id;
           (token as any).role = dbUser.role;
           (token as any).phone = dbUser.phone ?? null;
           (token as any).isOwner = !!dbUser.isOwner;
-          (token as any).adminAccess = dbUser.adminAccess ?? null;
+
+          (token as any).adminAccess = adminAccess;
+          (token as any).adminAccesses = dbUser.adminAccesses ?? [];
+          (token as any).companyMemberships = dbUser.companyMemberships ?? [];
         }
       }
 
@@ -108,8 +208,7 @@ export const nextAuthOptions: NextAuthOptions = {
     },
 
     /**
-     * SESSION: copia os dados do token para `session.user`,
-     * que é o que a gente usa lá no `requireAdminWithPermissions`.
+     * SESSION: copia os dados do token para `session.user`.
      */
     async session({ session, token }) {
       if (!session.user) return session;
@@ -118,14 +217,23 @@ export const nextAuthOptions: NextAuthOptions = {
       (session.user as any).role = (token as any).role;
       (session.user as any).phone = (token as any).phone ?? null;
       (session.user as any).isOwner = (token as any).isOwner ?? false;
+
+      // ✅ multi-empresa
+      (session.user as any).companyId = (token as any).companyId ?? null;
+
+      // ✅ compat (derivado)
       (session.user as any).adminAccess = (token as any).adminAccess ?? null;
+
+      // ✅ opcional: deixa disponível para telas novas
+      (session.user as any).adminAccesses = (token as any).adminAccesses ?? [];
+      (session.user as any).companyMemberships =
+        (token as any).companyMemberships ?? [];
 
       return session;
     },
 
     /**
      * ✅ Regrinha extra: bloqueia usuário inativo já no login do NextAuth
-     * (evita até chegar no auth-redirect).
      */
     async signIn({ user }) {
       try {

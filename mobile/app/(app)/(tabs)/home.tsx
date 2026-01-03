@@ -1,4 +1,11 @@
-import React, { memo, useCallback, useMemo, useRef, useState } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   View,
   Text,
@@ -93,10 +100,15 @@ async function trackEvent(
   name: string,
   payload: Record<string, any> = {},
   ctx?: AnalyticsContext,
+  companyId?: string | null,
 ) {
   try {
+    // ✅ multi-tenant: analytics também não pode vazar sem tenant
+    if (!companyId) return;
+
     const context = ctx ?? getAnalyticsContext();
 
+    // ✅ envia tenant no header
     await api.post(
       "/api/mobile/analytics/events",
       {
@@ -105,7 +117,7 @@ async function trackEvent(
         context,
         payload,
       },
-      {},
+      { headers: { "x-company-id": companyId } },
     );
   } catch {
     // silencioso: analytics nunca pode quebrar UX
@@ -463,7 +475,18 @@ const HistoryRow = memo(function HistoryRow({
 export default function Home() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { user, meLoading } = useAuth();
+
+  // ✅ multi-tenant: companyId + refreshMe no fluxo da Home
+  const { user, meLoading, companyId, refreshMe } = useAuth();
+
+  // ✅ mantém sempre o companyId mais atual (mata closure velha)
+  const companyIdRef = useRef<string | null>(companyId ?? null);
+  useEffect(() => {
+    companyIdRef.current = companyId ?? null;
+  }, [companyId]);
+
+  // ✅ evita alert repetido
+  const warnedMissingCompanyRef = useRef(false);
 
   const displayName = useMemo(
     () => user?.name || user?.email || "Cliente",
@@ -494,7 +517,7 @@ export default function Home() {
     return s.length > 12 ? `${s.slice(0, 12)}…` : s;
   }, [user]);
 
-  // ✅ ícone por nível (mantém o mesmo que você já tinha)
+  // ✅ ícone por nível
   const userLevelIcon = useMemo(() => {
     const l = String(userLevelLabel ?? "").toLowerCase();
     if (l.includes("diam")) return "diamond";
@@ -503,7 +526,7 @@ export default function Home() {
     return "star";
   }, [userLevelLabel]);
 
-  // ✅ cores copiadas do Admin (bg/text/border)
+  // ✅ cores copiadas do Admin
   const userLevelKey = useMemo(() => normalizeCustomerLevelKey(user), [user]);
 
   const userLevelStyle = useMemo(() => {
@@ -555,8 +578,16 @@ export default function Home() {
   const didReviewRef = useRef(false);
   const [dataReady, setDataReady] = useState(false);
 
+  const resetGate = useCallback(() => {
+    didNextRef.current = false;
+    didHistoryRef.current = false;
+    didProductsRef.current = false;
+    didCartRef.current = false;
+    didReviewRef.current = false;
+    setDataReady(false);
+  }, []);
+
   const recomputeReady = useCallback(() => {
-    if (dataReady) return;
     const ok =
       didNextRef.current &&
       didHistoryRef.current &&
@@ -564,7 +595,7 @@ export default function Home() {
       didCartRef.current &&
       didReviewRef.current;
     if (ok) setDataReady(true);
-  }, [dataReady]);
+  }, []);
 
   const fetchNext = useCallback(async () => {
     if (fetchingRef.current) return;
@@ -578,7 +609,7 @@ export default function Home() {
       );
 
       setNext(res?.next ?? null);
-    } catch (err: any) {
+    } catch {
       setNext(null);
     } finally {
       setNextLoading(false);
@@ -600,8 +631,16 @@ export default function Home() {
         _debug?: any;
       }>("/api/mobile/me/history/preview");
 
+      if (__DEV__) {
+        console.log("[home] history preview", {
+          ok: res?.ok,
+          items: Array.isArray(res?.items) ? res.items.length : 0,
+          _debug: res?._debug,
+        });
+      }
+
       setHistoryPreview(res?.ok && Array.isArray(res?.items) ? res.items : []);
-    } catch (err: any) {
+    } catch {
       setHistoryPreview([]);
     } finally {
       fetchingHistoryRef.current = false;
@@ -683,7 +722,7 @@ export default function Home() {
         .filter((p) => !!p.id);
 
       setProducts(mapped);
-    } catch (err: any) {
+    } catch {
       setProducts([]);
       setBirthdayBadgeLabel(null);
     } finally {
@@ -711,7 +750,7 @@ export default function Home() {
       setPendingCartCount(count);
 
       return { id, count };
-    } catch (err: any) {
+    } catch {
       setPendingCartOrderId(null);
       setPendingCartCount(0);
       return { id: null as string | null, count: 0 };
@@ -752,22 +791,74 @@ export default function Home() {
     }
   }, [recomputeReady]);
 
+  // ✅ marca como “concluído” em caso de abort por tenant ausente, pra não travar skeleton
+  const markAllDoneForGate = useCallback(() => {
+    didNextRef.current = true;
+    didHistoryRef.current = true;
+    didProductsRef.current = true;
+    didCartRef.current = true;
+    didReviewRef.current = true;
+    setDataReady(true);
+  }, []);
+
   useFocusEffect(
     useCallback(() => {
-      // 📌 Home entrou em foco: page_viewed (base do heatmap)
-      trackEvent("page_viewed", { page: "home" });
+      let alive = true;
 
-      fetchNext();
-      fetchHistoryPreview();
-      fetchProductsPreview();
-      fetchPendingCart();
-      fetchPendingReviewCount();
+      resetGate();
+
+      (async () => {
+        // ✅ tenta garantir tenant (1x)
+        if (!companyIdRef.current) {
+          try {
+            await refreshMe();
+          } catch {
+            // ignore
+          }
+        }
+
+        if (!alive) return;
+
+        const cid = companyIdRef.current;
+
+        // ✅ se ainda não existe, não dispara requests (evita 401/500 inúteis)
+        if (!cid) {
+          if (!warnedMissingCompanyRef.current) {
+            warnedMissingCompanyRef.current = true;
+            Alert.alert(
+              "Atenção",
+              "Não foi possível identificar o estabelecimento (companyId). Faça login novamente ou tente atualizar seu perfil.",
+            );
+          }
+
+          // libera a tela (não deixa ScreenGate preso)
+          markAllDoneForGate();
+          return;
+        }
+
+        // 📌 Home entrou em foco: page_viewed (base do heatmap)
+        trackEvent("page_viewed", { page: "home" }, undefined, cid);
+
+        // ✅ sempre tenta buscar (agora com tenant garantido)
+        fetchNext();
+        fetchHistoryPreview();
+        fetchProductsPreview();
+        fetchPendingCart();
+        fetchPendingReviewCount();
+      })();
+
+      return () => {
+        alive = false;
+      };
     }, [
+      refreshMe,
       fetchNext,
       fetchHistoryPreview,
       fetchProductsPreview,
       fetchPendingCart,
       fetchPendingReviewCount,
+      resetGate,
+      markAllDoneForGate,
     ]),
   );
 
@@ -781,27 +872,47 @@ export default function Home() {
   const topBounceHeight = useMemo(() => TOP_OFFSET + 1400, [TOP_OFFSET]);
 
   const goToBooking = useCallback(() => {
-    trackEvent("nav_click", { from: "home", to: "/booking/unit" });
+    const cid = companyIdRef.current;
+    trackEvent(
+      "nav_click",
+      { from: "home", to: "/booking/unit" },
+      undefined,
+      cid,
+    );
     router.push("/booking/unit");
   }, [router]);
 
   const goToHistory = useCallback(() => {
-    trackEvent("nav_click", { from: "home", to: "/client/history" });
+    const cid = companyIdRef.current;
+    trackEvent(
+      "nav_click",
+      { from: "home", to: "/client/history" },
+      undefined,
+      cid,
+    );
     router.push("/client/history");
   }, [router]);
 
   const goToProducts = useCallback(() => {
-    trackEvent("nav_click", { from: "home", to: "/products" });
+    const cid = companyIdRef.current;
+    trackEvent("nav_click", { from: "home", to: "/products" }, undefined, cid);
     router.push("/products");
   }, [router]);
 
   const goToProductDetails = useCallback(
     (id: string) => {
-      trackEvent("nav_click", {
-        from: "home",
-        to: "/(app)/(tabs)/products/[id]",
-        productId: id,
-      });
+      const cid = companyIdRef.current;
+
+      trackEvent(
+        "nav_click",
+        {
+          from: "home",
+          to: "/(app)/(tabs)/products/[id]",
+          productId: id,
+        },
+        undefined,
+        cid,
+      );
 
       router.push({ pathname: "/(app)/(tabs)/products/[id]", params: { id } });
     },
@@ -809,7 +920,13 @@ export default function Home() {
   );
 
   const goCart = useCallback(async () => {
-    trackEvent("nav_click", { from: "home", to: "/client/cart" });
+    const cid = companyIdRef.current;
+    trackEvent(
+      "nav_click",
+      { from: "home", to: "/client/cart" },
+      undefined,
+      cid,
+    );
 
     try {
       const currentId = pendingCartOrderId;
@@ -837,19 +954,32 @@ export default function Home() {
   }, [fetchPendingCart, pendingCartOrderId, router]);
 
   const goNotifications = useCallback(() => {
-    trackEvent("nav_click", { from: "home", to: "/client/notifications" });
+    const cid = companyIdRef.current;
+    trackEvent(
+      "nav_click",
+      { from: "home", to: "/client/notifications" },
+      undefined,
+      cid,
+    );
     router.push("/client/notifications");
   }, [router]);
 
   const onPressReschedule = useCallback(() => {
     if (!next) return;
 
-    trackEvent("nav_click", {
-      from: "home",
-      to: "/booking/unit",
-      action: "reschedule",
-      appointmentId: next.id,
-    });
+    const cid = companyIdRef.current;
+
+    trackEvent(
+      "nav_click",
+      {
+        from: "home",
+        to: "/booking/unit",
+        action: "reschedule",
+        appointmentId: next.id,
+      },
+      undefined,
+      cid,
+    );
 
     router.push({
       pathname: "/booking/unit",
@@ -860,11 +990,18 @@ export default function Home() {
   const cancelApiCall = useCallback(
     async (appointmentId: string) => {
       try {
-        trackEvent("action_click", {
-          from: "home",
-          action: "cancel_appointment",
-          appointmentId,
-        });
+        const cid = companyIdRef.current;
+
+        trackEvent(
+          "action_click",
+          {
+            from: "home",
+            action: "cancel_appointment",
+            appointmentId,
+          },
+          undefined,
+          cid,
+        );
 
         const res = await api.post<{ ok: boolean; error?: string }>(
           `/api/mobile/me/appointments/${appointmentId}/cancel`,
@@ -1132,7 +1269,14 @@ export default function Home() {
   const onPressBirthday = useCallback(() => {
     if (!birthdayBadgeLabel) return;
 
-    trackEvent("action_click", { from: "home", action: "birthday_badge" });
+    const cid = companyIdRef.current;
+
+    trackEvent(
+      "action_click",
+      { from: "home", action: "birthday_badge" },
+      undefined,
+      cid,
+    );
 
     Alert.alert(
       "Parabéns pra você! 🎂 \nAproveite os descontos especiais para aniversariantes.",
@@ -1160,7 +1304,7 @@ export default function Home() {
             </View>
 
             <View style={S.topRightRow}>
-              {/* ✅ aniversário: só aqui, à esquerda do nível (padrão dos ícones) */}
+              {/* ✅ aniversário: só aqui, à esquerda do nível */}
               {birthdayBadgeLabel ? (
                 <Pressable
                   style={S.iconBtn}
@@ -1178,16 +1322,22 @@ export default function Home() {
                 </Pressable>
               ) : null}
 
-              {/* ⭐ Nível do cliente (à esquerda da sacolinha) */}
+              {/* ⭐ Nível do cliente */}
               {userLevelLabel ? (
                 <Pressable
                   style={[S.iconBtn, S.levelBtn, userLevelStyle?.container]}
                   onPress={() => {
-                    trackEvent("action_click", {
-                      from: "home",
-                      action: "level_chip",
-                      level: userLevelLabel,
-                    });
+                    const cid = companyIdRef.current;
+                    trackEvent(
+                      "action_click",
+                      {
+                        from: "home",
+                        action: "level_chip",
+                        level: userLevelLabel,
+                      },
+                      undefined,
+                      cid,
+                    );
                   }}
                   hitSlop={8}
                 >
@@ -1301,10 +1451,7 @@ const S = StyleSheet.create({
     borderColor: UI.colors.cardBorder,
   },
 
-  // ⭐ botão de nível (mesma base do iconBtn, só adiciona mini label)
-  levelBtn: {
-    paddingTop: 7,
-  },
+  levelBtn: { paddingTop: 7 },
   levelMiniText: {
     marginTop: 2,
     fontSize: 9.5,
@@ -1338,7 +1485,6 @@ const S = StyleSheet.create({
     textAlignVertical: "center",
   },
 
-  // ✅ bolinha do aniversário (sutil, mesma pegada do badge)
   birthdayDot: {
     position: "absolute",
     top: -6,
@@ -1444,10 +1590,7 @@ const S = StyleSheet.create({
   },
   actionText: { color: UI.colors.text, fontWeight: "700" },
 
-  emptyApptBox: {
-    padding: 5,
-    gap: 14,
-  },
+  emptyApptBox: { padding: 5, gap: 14 },
 
   emptyApptText: {
     color: UI.colors.text,
@@ -1497,7 +1640,6 @@ const S = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.05)",
   },
 
-  // ⭐ (LEVEL only)
   badgePill: {
     position: "absolute",
     left: 10,
@@ -1537,10 +1679,7 @@ const S = StyleSheet.create({
     letterSpacing: 0.4,
   },
 
-  productBody: {
-    flex: 1,
-    minHeight: 128,
-  },
+  productBody: { flex: 1, minHeight: 128 },
 
   productName: {
     fontSize: 16,
@@ -1562,11 +1701,7 @@ const S = StyleSheet.create({
     marginTop: 6,
   },
 
-  // ✅ stack do preço quando tem desconto
-  priceStack: {
-    marginTop: 6,
-    gap: 2,
-  },
+  priceStack: { marginTop: 6, gap: 2 },
 
   basePriceStriked: {
     fontSize: 13,
@@ -1581,7 +1716,6 @@ const S = StyleSheet.create({
     color: UI.brand.primaryText,
   },
 
-  // ✅ nova linha: Economia: X%
   economyText: {
     marginTop: 1,
     fontSize: 12,
@@ -1589,11 +1723,7 @@ const S = StyleSheet.create({
     color: "rgba(0,0,0,0.58)",
   },
 
-  productFooter: {
-    marginTop: 10,
-    flex: 1,
-    justifyContent: "flex-end",
-  },
+  productFooter: { marginTop: 10, flex: 1, justifyContent: "flex-end" },
 
   btnCenterRow: {
     flexDirection: "row",
@@ -1612,11 +1742,7 @@ const S = StyleSheet.create({
     justifyContent: "center",
   },
 
-  detailsBtnText: {
-    color: "#141414",
-    fontSize: 13,
-    fontWeight: "600",
-  },
+  detailsBtnText: { color: "#141414", fontSize: 13, fontWeight: "600" },
 
   productDivider: {
     position: "absolute",
@@ -1654,11 +1780,7 @@ const S = StyleSheet.create({
     justifyContent: "center",
   },
 
-  allProductsBtnText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "700",
-  },
+  allProductsBtnText: { color: "#FFFFFF", fontSize: 14, fontWeight: "700" },
 
   historyItem: {
     paddingVertical: 16,
