@@ -573,11 +573,19 @@ export async function createClientPlanForClient(formData: FormData) {
     throw new Error("Plano não encontrado.");
   }
 
-  const client = await prisma.user.findFirst({
-    where: { id: clientId, companyId, role: "CLIENT" },
-    select: { id: true },
+  // ✅ FIX: UserWhereInput não tem companyId no seu schema.
+  // Multi-tenant correto aqui é validar via CompanyMember.
+  const clientMember = await prisma.companyMember.findFirst({
+    where: {
+      companyId,
+      userId: clientId,
+      isActive: true,
+      user: { role: "CLIENT" },
+    },
+    select: { userId: true },
   });
-  if (!client) {
+
+  if (!clientMember) {
     throw new Error("Cliente não encontrado.");
   }
 
