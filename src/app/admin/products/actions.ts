@@ -143,7 +143,10 @@ const updateProductSchema = createProductSchema;
 
 // ===== Multi-tenant helper =====
 
-async function requireCompanyContext() {
+async function requireCompanyContext(): Promise<{
+  admin: any;
+  companyId: string;
+}> {
   const admin = (await requireAdminPermission("canAccessProducts")) as any;
   const companyId = String(admin?.companyId ?? "").trim();
   if (!companyId) {
@@ -243,21 +246,22 @@ async function assertProductBelongsToCompany(args: {
  * ✅ B) Lê descontos (%) por nível do form.
  * Campo vazio = 0%.
  *
- * IMPORTANTE:
- * - Para permitir "limpar" desconto antigo, retornamos SEMPRE os 4 níveis.
- *   Assim, 0% vira deleteMany no upsert.
+ * Regras:
+ * - Se o input existe no form: retorna número (0..100)
+ * - Se o input NÃO existe no form: retorna undefined (não mexe)
  */
 function readLevelDiscountsFromForm(
   formData: FormData,
 ): Partial<Record<CustomerLevel, number>> {
-  const getFirst = (keys: string[]) => {
+  const getFirst = (keys: string[]): number | undefined => {
     for (const k of keys) {
-      const v = formData.get(k);
-      if (v === null || v === undefined) continue;
-      return parseOptionalPctIntFromFormValue(v); // vazio => 0
+      // se a chave existe no form (mesmo vazia), a gente considera "intenção"
+      if (formData.has(k)) {
+        const v = formData.get(k);
+        return parseOptionalPctIntFromFormValue(v); // vazio => 0
+      }
     }
-    // se o input não existir no form, tratamos como undefined (não mexe)
-    return undefined as unknown as number;
+    return undefined;
   };
 
   const bronze = getFirst([
@@ -286,13 +290,10 @@ function readLevelDiscountsFromForm(
   ]);
 
   const out: Partial<Record<CustomerLevel, number>> = {};
-
-  // Se o campo existe no form, ele vira número (0..100)
-  // Se o campo não existe, não mexemos (undefined)
-  if (bronze !== (undefined as any)) out.BRONZE = bronze;
-  if (prata !== (undefined as any)) out.PRATA = prata;
-  if (ouro !== (undefined as any)) out.OURO = ouro;
-  if (diamante !== (undefined as any)) out.DIAMANTE = diamante;
+  if (bronze !== undefined) out.BRONZE = bronze;
+  if (prata !== undefined) out.PRATA = prata;
+  if (ouro !== undefined) out.OURO = ouro;
+  if (diamante !== undefined) out.DIAMANTE = diamante;
 
   return out;
 }
@@ -307,6 +308,10 @@ function readLevelDiscountsFromForm(
  *
  * 🔒 MULTI-TENANT:
  * - ProductDiscountByLevel exige companyId -> sempre setar no create
+ *
+ * 🧯 Robustez:
+ * - se o @@unique do prisma mudou (ex.: passou a incluir companyId),
+ *   o upsert pode falhar. A gente tenta e cai num fallback seguro.
  */
 async function upsertProductDiscountsByLevel(args: {
   productId: string;
@@ -315,23 +320,27 @@ async function upsertProductDiscountsByLevel(args: {
 }) {
   const levels: CustomerLevel[] = ["BRONZE", "PRATA", "OURO", "DIAMANTE"];
 
-  const ops = levels
-    .map((level) => {
-      const pct = args.discounts[level];
+  for (const level of levels) {
+    const pct = args.discounts[level];
 
-      if (pct === undefined) return null;
+    if (pct === undefined) continue;
 
-      if (pct <= 0) {
-        return prisma.productDiscountByLevel.deleteMany({
-          where: {
-            productId: args.productId,
-            companyId: args.companyId,
-            level,
-          },
-        });
-      }
+    if (pct <= 0) {
+      await prisma.productDiscountByLevel.deleteMany({
+        where: {
+          productId: args.productId,
+          companyId: args.companyId,
+          level,
+        },
+      });
+      continue;
+    }
 
-      return prisma.productDiscountByLevel.upsert({
+    // tentativa 1: upsert "ideal"
+    try {
+      await prisma.productDiscountByLevel.upsert({
+        // ⚠️ se o unique atual for (companyId, productId, level),
+        // este where pode estar desatualizado no schema antigo.
         where: { productId_level: { productId: args.productId, level } },
         create: {
           companyId: args.companyId,
@@ -341,22 +350,42 @@ async function upsertProductDiscountsByLevel(args: {
         },
         update: { discountPct: pct },
       });
-    })
-    .filter(Boolean) as any[];
+      continue;
+    } catch (e) {
+      // fallback abaixo
+      console.warn("[upsertProductDiscountsByLevel] upsert fallback:", e);
+    }
 
-  if (ops.length === 0) return;
+    // fallback: procura e decide update/create
+    const existing = await prisma.productDiscountByLevel.findFirst({
+      where: {
+        companyId: args.companyId,
+        productId: args.productId,
+        level,
+      },
+      select: { id: true },
+    });
 
-  try {
-    await prisma.$transaction(ops);
-  } catch (e) {
-    console.warn("[upsertProductDiscountsByLevel] skip:", e);
+    if (existing) {
+      await prisma.productDiscountByLevel.update({
+        where: { id: existing.id },
+        data: { discountPct: pct },
+      });
+    } else {
+      await prisma.productDiscountByLevel.create({
+        data: {
+          companyId: args.companyId,
+          productId: args.productId,
+          level,
+          discountPct: pct,
+        },
+      });
+    }
   }
 }
 
 // ✅ buscar pricing completo pra preencher modal de edição
 export async function getProductPricing(productId: string) {
-  "use server";
-
   const { companyId } = await requireCompanyContext();
 
   try {
@@ -474,7 +503,7 @@ export async function createProduct(formData: FormData) {
 
   const levelDiscounts = readLevelDiscountsFromForm(formData);
 
-  const baseData = {
+  const data: Prisma.ProductCreateInput = {
     name,
     imageUrl,
     description,
@@ -487,6 +516,7 @@ export async function createProduct(formData: FormData) {
     birthdayPriceLevel: birthdayBenefitEnabled
       ? (birthdayPriceLevel as CustomerLevel)
       : null,
+    isFeatured: Boolean(isFeaturedParsed),
 
     // ✅ tenant
     company: { connect: { id: companyId } },
@@ -494,10 +524,7 @@ export async function createProduct(formData: FormData) {
   };
 
   const created = await prisma.product.create({
-    data: {
-      ...baseData,
-      isFeatured: Boolean(isFeaturedParsed),
-    } as any,
+    data,
     select: { id: true },
   });
 
@@ -558,7 +585,7 @@ export async function updateProduct(productId: string, formData: FormData) {
   const normalizedPrice = normalizePriceToDecimalString(price);
   const levelDiscounts = readLevelDiscountsFromForm(formData);
 
-  const baseData = {
+  const data: Prisma.ProductUpdateManyMutationInput = {
     name,
     imageUrl,
     description,
@@ -571,14 +598,12 @@ export async function updateProduct(productId: string, formData: FormData) {
     birthdayPriceLevel: birthdayBenefitEnabled
       ? (birthdayPriceLevel as CustomerLevel)
       : null,
+    isFeatured: Boolean(isFeaturedParsed),
   };
 
   const updated = await prisma.product.updateMany({
     where: { id: productId, companyId },
-    data: {
-      ...baseData,
-      isFeatured: Boolean(isFeaturedParsed),
-    } as any,
+    data,
   });
 
   if (updated.count === 0) {
@@ -630,7 +655,7 @@ export async function toggleProductFeatured(productId: string) {
   try {
     const updated = await prisma.product.updateMany({
       where: { id: productId, companyId },
-      data: { isFeatured: !Boolean(product.isFeatured) } as any,
+      data: { isFeatured: !Boolean(product.isFeatured) },
     });
 
     if (updated.count === 0) {
@@ -648,7 +673,6 @@ export async function toggleProductFeatured(productId: string) {
 // ===== Actions usadas diretamente nos <form> ou nos componentes client =====
 
 export async function createProductAction(formData: FormData) {
-  "use server";
   await createProduct(formData);
   redirect("/admin/products");
 }
@@ -657,7 +681,6 @@ export async function updateProductAction(
   productId: string,
   formData: FormData,
 ) {
-  "use server";
   await updateProduct(productId, formData);
   redirect("/admin/products");
 }
@@ -666,7 +689,6 @@ export async function toggleProductStatusAction(
   productId: string,
   _formData: FormData,
 ) {
-  "use server";
   await toggleProductStatus(productId);
 }
 
@@ -674,6 +696,5 @@ export async function toggleProductFeaturedAction(
   productId: string,
   _formData: FormData,
 ) {
-  "use server";
   await toggleProductFeatured(productId);
 }

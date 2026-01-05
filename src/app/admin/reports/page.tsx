@@ -103,8 +103,8 @@ function trend(delta?: number) {
   if (!Number.isFinite(delta)) return { text: "—", tone: "muted" as const };
   if (delta !== undefined && Math.abs(delta) < 0.000001)
     return { text: "0,0%", tone: "muted" as const };
-  const up = delta > 0;
-  const pct = `${Math.abs(delta * 100)
+  const up = (delta ?? 0) > 0;
+  const pct = `${Math.abs((delta ?? 0) * 100)
     .toFixed(1)
     .replace(".", ",")}%`;
   return {
@@ -145,7 +145,14 @@ export default async function AdminReportsPage({
     "canAccessDashboard",
   )) as AdminWithPermissions;
 
-  const companyId = admin.companyId;
+  // ✅ NÃO muda comportamento quando está ok.
+  // Só evita TS/prisma quebra quando companyId vem undefined/null.
+  const companyId = String((admin as any)?.companyId ?? "").trim();
+  if (!companyId) {
+    throw new Error(
+      "Admin sem companyId. Este painel é multi-tenant e exige companyId no contexto do admin.",
+    );
+  }
 
   const sp = await searchParams;
   const monthStr = sp.month ?? format(new Date(), "yyyy-MM");

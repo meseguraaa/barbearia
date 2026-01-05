@@ -1,3 +1,4 @@
+// src/app/api/services/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -30,6 +31,22 @@ async function resolveUnitId(input: unknown): Promise<string> {
   return unit.id;
 }
 
+async function resolveCompanyIdFromUnit(unitId: string): Promise<string> {
+  const unit = await prisma.unit.findFirst({
+    where: { id: unitId },
+    select: { companyId: true },
+  });
+
+  const companyId = String(unit?.companyId ?? "").trim();
+  if (!companyId) {
+    throw new Error(
+      "Unidade inválida ou sem companyId (multi-tenant). Não é possível criar serviço.",
+    );
+  }
+
+  return companyId;
+}
+
 // GET /api/services?active=true|false&unitId=...
 export async function GET(request: Request) {
   try {
@@ -43,6 +60,8 @@ export async function GET(request: Request) {
     // opcional: filtra por unidade se vier
     if (unitIdParam) {
       where.unitId = unitIdParam;
+      // se quiser deixar ainda mais "tenant-safe", dá pra filtrar por companyId aqui também
+      // (mas pra isso a gente teria que buscar unit->companyId; pode ser caro em GET sem necessidade)
     }
 
     const services = await prisma.service.findMany({
@@ -109,6 +128,7 @@ export async function POST(request: Request) {
     }
 
     const unitId = await resolveUnitId(body);
+    const companyId = await resolveCompanyIdFromUnit(unitId);
 
     const service = await prisma.service.create({
       data: {
@@ -119,6 +139,11 @@ export async function POST(request: Request) {
 
         // ✅ obrigatório agora
         unit: { connect: { id: unitId } },
+
+        // ✅ multi-tenant: Prisma está exigindo "company" (ou companyId)
+        company: { connect: { id: companyId } },
+        // Se no seu schema for companyId direto, troque por:
+        // companyId,
       },
     });
 
@@ -126,12 +151,17 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[POST /api/services] Error:", error);
 
-    // se estourar por falta de unidade, devolve 400 com msg útil
+    // se estourar por falta de unidade/tenant, devolve msg útil
     const msg =
-      error instanceof Error && error.message.includes("Nenhuma unidade")
+      error instanceof Error &&
+      (error.message.includes("Nenhuma unidade") ||
+        error.message.includes("companyId") ||
+        error.message.includes("Unidade inválida"))
         ? error.message
         : "Erro ao criar serviço.";
 
+    // aqui é 500 mesmo (erro de infra/consistência), mas se preferir 400 quando for validação:
+    // return NextResponse.json({ message: msg }, { status: 400 });
     return NextResponse.json({ message: msg }, { status: 500 });
   }
 }

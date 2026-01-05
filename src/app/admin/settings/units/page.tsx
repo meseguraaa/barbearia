@@ -87,7 +87,12 @@ async function saveUnitWeeklyHours(formData: FormData) {
   "use server";
 
   const admin = await requireAdminForModule("SETTINGS");
-  const companyId = admin.companyId;
+  const companyId = String((admin as any)?.companyId ?? "").trim();
+  if (!companyId) {
+    throw new Error(
+      "Admin sem companyId. Este painel é multi-tenant e exige companyId no contexto do admin.",
+    );
+  }
 
   const unitId = String(formData.get("unitId") || "");
   if (!unitId) return;
@@ -139,7 +144,12 @@ async function applyDefaultUnitWeeklyHours(formData: FormData) {
   "use server";
 
   const admin = await requireAdminForModule("SETTINGS");
-  const companyId = admin.companyId;
+  const companyId = String((admin as any)?.companyId ?? "").trim();
+  if (!companyId) {
+    throw new Error(
+      "Admin sem companyId. Este painel é multi-tenant e exige companyId no contexto do admin.",
+    );
+  }
 
   const unitId = String(formData.get("unitId") || "");
   if (!unitId) return;
@@ -219,7 +229,12 @@ async function clearUnitWeeklyHours(formData: FormData) {
   "use server";
 
   const admin = await requireAdminForModule("SETTINGS");
-  const companyId = admin.companyId;
+  const companyId = String((admin as any)?.companyId ?? "").trim();
+  if (!companyId) {
+    throw new Error(
+      "Admin sem companyId. Este painel é multi-tenant e exige companyId no contexto do admin.",
+    );
+  }
 
   const unitId = String(formData.get("unitId") || "");
   if (!unitId) return;
@@ -270,12 +285,20 @@ type AdminRow = {
     canAccessClients: boolean;
     canAccessClientLevels: boolean;
     canAccessFinance: boolean;
+
+    // ✅ NOVO: exigido pelo tipo Permissions
+    canAccessReports: boolean;
   };
 };
 
 export default async function SettingsUnitsPage() {
   const admin = await requireAdminForModule("SETTINGS");
-  const companyId = admin.companyId;
+  const companyId = String((admin as any)?.companyId ?? "").trim();
+  if (!companyId) {
+    throw new Error(
+      "Admin sem companyId. Este painel é multi-tenant e exige companyId no contexto do admin.",
+    );
+  }
 
   const [units, members] = await Promise.all([
     prisma.unit.findMany({
@@ -352,6 +375,9 @@ export default async function SettingsUnitsPage() {
         canAccessClients: access?.canAccessClients ?? false,
         canAccessClientLevels: access?.canAccessClientLevels ?? false,
         canAccessFinance: access?.canAccessFinance ?? false,
+
+        // ✅ adiciona sem quebrar nada (se não existir ainda no Prisma, cai no ?? false)
+        canAccessReports: (access as any)?.canAccessReports ?? false,
       },
     };
   });

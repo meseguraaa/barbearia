@@ -90,6 +90,17 @@ async function getUnitIdFromFormOrDefault(
   return unit.id;
 }
 
+async function assertServiceBelongsToCompany(args: {
+  id: string;
+  companyId: string;
+}) {
+  const ok = await prisma.service.findFirst({
+    where: { id: args.id, companyId: args.companyId },
+    select: { id: true },
+  });
+  if (!ok) throw new Error("Serviço não encontrado.");
+}
+
 /* =====================================================================
  * SERVIÇOS
  * ===================================================================== */
@@ -164,28 +175,35 @@ export async function createService(formData: FormData) {
     }
   }
 
-  await prisma.service.create({
-    data: {
-      // ✅ checked create input (evita UncheckedCreateInput)
-      company: { connect: { id: companyId } },
+  await prisma.$transaction(async (tx) => {
+    // ✅ cria o service de forma “checked” (company relation)
+    const service = await tx.service.create({
+      data: {
+        company: { connect: { id: companyId } },
+        unit: { connect: { id: unitId } },
 
-      name,
-      price,
-      durationMinutes,
-      isActive: true,
-      barberPercentage: barberPercentage ?? 0,
-      cancelLimitHours: cancelLimitHours ?? null,
-      cancelFeePercentage: cancelFeePercentage ?? null,
-
-      unit: { connect: { id: unitId } },
-
-      professionals: {
-        create: professionalIds.map((barberId) => ({
-          company: { connect: { id: companyId } },
-          barber: { connect: { id: barberId } },
-        })),
+        name,
+        price,
+        durationMinutes,
+        isActive: true,
+        barberPercentage: barberPercentage ?? 0,
+        cancelLimitHours: cancelLimitHours ?? null,
+        cancelFeePercentage: cancelFeePercentage ?? null,
       },
-    },
+      select: { id: true },
+    });
+
+    // ✅ vincula profissionais pelo pivô (mais estável que nested create)
+    if (professionalIds.length > 0) {
+      await tx.serviceProfessional.createMany({
+        data: professionalIds.map((barberId) => ({
+          companyId,
+          serviceId: service.id,
+          barberId,
+        })),
+        skipDuplicates: true,
+      });
+    }
   });
 
   revalidateAll();
@@ -275,11 +293,7 @@ export async function updateService(id: string, formData: FormData) {
     }
   }
 
-  const exists = await prisma.service.findFirst({
-    where: { id, companyId },
-    select: { id: true },
-  });
-  if (!exists) throw new Error("Serviço não encontrado.");
+  await assertServiceBelongsToCompany({ id, companyId });
 
   if (professionalIds.length > 0) {
     const found = await prisma.barber.findMany({
@@ -312,6 +326,7 @@ export async function updateService(id: string, formData: FormData) {
       throw new Error("Falha ao atualizar o serviço (escopo inválido).");
     }
 
+    // reseta vínculos e recria
     await tx.serviceProfessional.deleteMany({
       where: { serviceId: id, companyId },
     });
@@ -399,6 +414,7 @@ export async function createPlan(formData: FormData) {
       totalBookings,
       isActive: true,
 
+      // ✅ se seu schema tiver pivô planService, é mais estável usar createMany depois
       services: {
         create: serviceIds.map((serviceId) => ({
           company: { connect: { id: companyId } },

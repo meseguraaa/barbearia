@@ -262,9 +262,23 @@ export async function ensureCustomerLevelUpToDate(
 
   // Tudo em transação pra manter consistência (e evitar corrida)
   const result = await prisma.$transaction(async (tx) => {
+    // ✅ resolve companyId a partir da unit (fonte de verdade do tenant)
+    const unit = await tx.unit.findFirst({
+      where: { id: unitId },
+      select: { id: true, companyId: true },
+    });
+
+    if (!unit?.companyId) {
+      throw new Error(
+        "ensureCustomerLevelUpToDate: unit inválida ou sem companyId (multi-tenant).",
+      );
+    }
+
+    const companyId = unit.companyId;
+
     // 1) Garante configs (se não houver, tudo vira BRONZE)
     const configs = await tx.customerLevelConfig.findMany({
-      where: { unitId },
+      where: { unitId, companyId },
       select: {
         level: true,
         minAppointmentsDone: true,
@@ -276,6 +290,7 @@ export async function ensureCustomerLevelUpToDate(
     const [appointmentsDone, ordersCompleted] = await Promise.all([
       tx.appointment.count({
         where: {
+          companyId,
           unitId,
           clientId: userId,
           status: AppointmentStatus.DONE,
@@ -287,6 +302,7 @@ export async function ensureCustomerLevelUpToDate(
       }),
       tx.order.count({
         where: {
+          companyId,
           unitId,
           clientId: userId,
           status: OrderStatus.COMPLETED,
@@ -300,7 +316,7 @@ export async function ensureCustomerLevelUpToDate(
 
     // 3) Regras especiais (prioridade desc)
     const rules = await tx.customerLevelRule.findMany({
-      where: { unitId, isEnabled: true },
+      where: { unitId, companyId, isEnabled: true },
       orderBy: [{ priority: "desc" }, { createdAt: "asc" }],
       select: { type: true, targetLevel: true, priority: true },
     });
@@ -337,6 +353,7 @@ export async function ensureCustomerLevelUpToDate(
     const period = await tx.customerLevelPeriod.upsert({
       where: { unitId_userId_periodKey: { unitId, userId, periodKey } },
       create: {
+        companyId, // ✅ FIX: obrigatório
         unitId,
         userId,
         periodKey,
@@ -346,6 +363,7 @@ export async function ensureCustomerLevelUpToDate(
         computedAt: now,
       },
       update: {
+        companyId, // ✅ mantém coerência (e evita divergência)
         appointmentsDone,
         ordersCompleted,
         earnedLevel,
@@ -361,18 +379,10 @@ export async function ensureCustomerLevelUpToDate(
     });
 
     // 6) Upsert do state
-    // Regra de defasagem M -> M+1:
-    // - earnedLevel do mês anterior vira levelEarnedLastPeriod
-    // - e podemos promover para levelCurrent, com levelEffectiveFrom = primeiro dia do mês atual em SP
-    //
-    // Aqui, como estamos sendo chamados em "now", assumimos que o mês atual já começou.
-    // Então: sempre que recalcular periodKey do mês anterior, promovemos levelCurrent para esse earned.
-    //
-    // Se você quiser "só promove no dia 01" e manter até lá, podemos refinar depois.
+    const zonedNow = getZonedParts(now, SAO_PAULO_TZ);
     const effectiveFrom = zonedMidnightToUTC(
-      // mês atual em SP
-      getZonedParts(now, SAO_PAULO_TZ).year,
-      getZonedParts(now, SAO_PAULO_TZ).month,
+      zonedNow.year,
+      zonedNow.month,
       1,
       SAO_PAULO_TZ,
     );
@@ -380,6 +390,7 @@ export async function ensureCustomerLevelUpToDate(
     const state = await tx.customerLevelState.upsert({
       where: { unitId_userId: { unitId, userId } },
       create: {
+        companyId, // ✅ FIX: obrigatório
         unitId,
         userId,
         levelCurrent: earnedLevel,
@@ -387,6 +398,7 @@ export async function ensureCustomerLevelUpToDate(
         levelEffectiveFrom: effectiveFrom,
       },
       update: {
+        companyId, // ✅ mantém coerência (e evita divergência)
         levelCurrent: earnedLevel,
         levelEarnedLastPeriod: earnedLevel,
         levelEffectiveFrom: effectiveFrom,
@@ -414,6 +426,7 @@ export async function ensureCustomerLevelUpToDate(
               rangeUTC: { startUtc, endUtc },
               rules,
               configsCount: configs.length,
+              companyId,
             }
           : undefined,
     };

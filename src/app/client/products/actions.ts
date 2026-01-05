@@ -1,3 +1,4 @@
+// src/app/client/products/actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
@@ -35,6 +36,7 @@ export async function createProductSale(data: unknown) {
       where: { id: productId, isActive: true },
       select: {
         id: true,
+        companyId: true, // ✅ necessário (multi-tenant)
         stockQuantity: true,
         price: true,
         pickupDeadlineDays: true,
@@ -44,6 +46,12 @@ export async function createProductSale(data: unknown) {
 
     if (!product) {
       throw new Error("Produto não encontrado ou inativo.");
+    }
+
+    if (!product.companyId) {
+      throw new Error(
+        "Produto sem companyId (multi-tenant). Não é possível criar o pedido.",
+      );
     }
 
     if (!product.unitId) {
@@ -74,6 +82,7 @@ export async function createProductSale(data: unknown) {
     // 🔹 Cria o PEDIDO com status PENDING_CHECKIN (intenção de compra)
     const order = await tx.order.create({
       data: {
+        companyId: product.companyId, // ✅ multi-tenant
         clientId: clientId ?? null,
         appointmentId: null,
         barberId: null,
@@ -81,12 +90,13 @@ export async function createProductSale(data: unknown) {
         reservedUntil,
         totalAmount: totalPrice,
 
-        // ✅ fix do TS + regra multi-unidade
+        // ✅ regra multi-unidade
         unitId: product.unitId,
 
         items: {
           create: [
             {
+              companyId: product.companyId, // ✅ FIX do erro TS2741
               productId: product.id,
               quantity,
               unitPrice,

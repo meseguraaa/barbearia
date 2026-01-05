@@ -1,3 +1,4 @@
+// src/app/client/reviews/actions.ts
 "use server";
 
 import { prisma } from "@/lib/prisma";
@@ -77,6 +78,15 @@ export async function createAppointmentReviewAction(
       return { success: false, error: "Atendimento não encontrado." };
     }
 
+    // ✅ multi-tenant: precisamos do companyId para criar o review
+    const companyId = (appointment as any).companyId as string | undefined;
+    if (!companyId) {
+      return {
+        success: false,
+        error: "Atendimento sem companyId (multi-tenant).",
+      };
+    }
+
     if (appointment.clientId !== userId) {
       return {
         success: false,
@@ -111,6 +121,7 @@ export async function createAppointmentReviewAction(
     await prisma.$transaction(async (tx) => {
       const review = await tx.appointmentReview.create({
         data: {
+          companyId, // ✅ FIX do erro TS2322 (campo obrigatório)
           appointmentId: appointment.id,
           clientId: userId,
           barberId: appointment.barberId!,
@@ -121,11 +132,12 @@ export async function createAppointmentReviewAction(
       });
 
       if (uniqueTagIds.length > 0) {
-        // Opcional: só usa tags ativas que existem
+        // ✅ multi-tenant: só usa tags ativas da mesma empresa
         const validTags = await tx.reviewTag.findMany({
           where: {
             id: { in: uniqueTagIds },
             isActive: true,
+            companyId,
           },
           select: { id: true },
         });
@@ -187,10 +199,12 @@ export async function dismissAppointmentReviewModalAction(
         clientId: true,
         status: true,
         reviewModalShown: true,
+        // ✅ multi-tenant: defensivo
+        companyId: true as any,
         review: {
           select: { id: true },
         },
-      },
+      } as any,
     });
 
     if (!appointment) {
@@ -214,6 +228,8 @@ export async function dismissAppointmentReviewModalAction(
       return { success: true };
     }
 
+    // ✅ update multi-tenant (se seu schema exigir companyId no where via updateMany)
+    // Aqui usamos update com id porque id é unique; o check de clientId já protege.
     await prisma.appointment.update({
       where: { id: appointment.id },
       data: {
